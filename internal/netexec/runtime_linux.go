@@ -76,7 +76,7 @@ func openRuntime(instanceID string, mutating bool, root string) (*Engine, error)
 		if mutating {
 			flags, operation = unix.O_CREAT|unix.O_RDWR, unix.LOCK_EX
 		}
-		fd, openErr := unix.Open(filepath.Join(directory, ".lock"), flags|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)
+		fd, openErr := unix.Open(filepath.Join(directory, ".lock"), flags|unix.O_NONBLOCK|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)
 		if openErr != nil {
 			return nil, fmt.Errorf("open runtime lock: %w", openErr)
 		}
@@ -244,7 +244,7 @@ func namespaceFile(p Plan) (*os.File, Identity, error) {
 	if err := secureDirectory("/run/netns", false); err != nil {
 		return nil, Identity{}, err
 	}
-	fd, err := unix.Open(filepath.Join("/run/netns", p.Namespace), unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	fd, err := unix.Open(filepath.Join("/run/netns", p.Namespace), unix.O_RDONLY|unix.O_NONBLOCK|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, Identity{}, err
 	}

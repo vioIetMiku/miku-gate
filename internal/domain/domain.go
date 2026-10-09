@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const Version = "0.1.0-dev.2"
+const Version = "0.1.0-dev.3"
 
 var ErrNotFound = errors.New("not found")
 var ErrConflict = errors.New("conflict")

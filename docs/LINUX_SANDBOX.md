@@ -111,7 +111,24 @@ sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin MIKU_GATE_NETNS_TEST=1 \
 
 测试仅非递归清理自己确认的记录/目录；异常记录会保留并报错，不通配符扫删 namespace。实验根目录 /run/miku-gate-netexec-tests 可能保留为空目录。
 
-另提供手动触发的 GitHub Actions 工作流 Linux isolation lab (manual)，只在临时 Ubuntu runner 中安装实验依赖。它不自动连接 VPS，也不在普通 PR 测试中隐式执行特权实验。
+另提供手动触发的 GitHub Actions 工作流 Linux isolation lab (manual)，只在临时 Ubuntu runner 中安装实验依赖。它不自动连接 VPS，也不在普通 PR 测试中隐式执行特权实验。dev.2 的首轮实际结果见 [验证记录](validation/2026-10-09-linux-quarantine.md)。
+
+从 dev.3 开始补充活跃进程、重启/锁、异常文件对象检查；CI 使用 systemd 临时 scope 约束 CPU、内存和 tasks，并由测试读回 cgroup v2 文件验证有效限制。它不安装常驻服务，scope 在测试结束后收集。
+
+在具备 systemd/cgroup v2 的独立 Linux 测试机，可显式执行同样的低资源实验（需 time 程序）。不支持这些限制时应报错，不把无配额运行当成低资源通过：
+
+```bash
+sudo systemd-run --quiet --scope --collect \
+  --property=CPUQuota=100% --property=MemoryMax=512M \
+  --property=MemorySwapMax=0 --property=TasksMax=64 \
+  /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C \
+    MIKU_GATE_NETNS_TEST=1 MIKU_GATE_LAB_BUDGET=1 \
+    GOMAXPROCS=1 GOMEMLIMIT=256MiB \
+    /usr/bin/time -v "$PWD/.cache/netexec-linux.test" \
+      -test.v -test.parallel 1 -test.run '^TestLinuxLab' -test.timeout 3m
+```
+
+GOMEMLIMIT 是 GC 软目标，不是硬上限；硬上限由 cgroup 提供。输出包括实际配额和 memory.peak。该实验不运行控制台或 OpenVPN，所以其内存观测不代表完整网关的容量。
 
 这些实验仍**不覆盖** OpenVPN 握手、隧道 DNS、断线业务流量、真实出口 IP 或代理协议与隧道的集成。完成隔离验收后才进入这些阶段。
 

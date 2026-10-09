@@ -3,24 +3,66 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: linux-isolation-lab-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   isolation:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
       - name: Install isolated-lab dependencies on the disposable runner
         run: |
           sudo apt-get update
-          sudo apt-get install -y iproute2 nftables util-linux iputils-ping
+          sudo apt-get install -y iproute2 nftables util-linux iputils-ping time
       - name: Build tests without privilege
         run: |
           mkdir -p .cache
           go test -c -o .cache/netexec-linux.test ./internal/netexec
-      - name: Run real-kernel isolated IPv4 and IPv6 tests
+      - name: Record non-sensitive test environment
+        shell: bash
         run: |
-          sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin MIKU_GATE_NETNS_TEST=1 \
-            "$PWD/.cache/netexec-linux.test" -test.v -test.run '^TestLinuxLab' -test.timeout 3m
+          set -euo pipefail
+          {
+            printf 'Source: '; git rev-parse HEAD
+            uname -srm
+            cat /etc/os-release
+            go version
+            ip -Version
+            nft --version
+            nsenter --version
+            systemd --version | head -n 1
+            printf '\nThis disposable runner is NOT the user VPS.\n'
+          } | tee .cache/linux-lab-environment.txt
+      - name: Run real kernel tests under a single-CPU and 512MiB cgroup budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemd-run --quiet --scope --collect \
+            --unit="miku-gate-lab-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --property=CPUQuota=100% \
+            --property=MemoryMax=512M \
+            --property=MemorySwapMax=0 \
+            --property=TasksMax=64 \
+            /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C \
+              MIKU_GATE_NETNS_TEST=1 MIKU_GATE_LAB_BUDGET=1 \
+              GOMAXPROCS=1 GOMEMLIMIT=256MiB \
+              /usr/bin/time -v "$PWD/.cache/netexec-linux.test" \
+                -test.v -test.parallel 1 -test.run '^TestLinuxLab' -test.timeout 3m \
+            2>&1 | tee .cache/linux-lab-result.txt
+      - name: Save environment and kernel-test evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-isolation-evidence
+          path: |
+            .cache/linux-lab-environment.txt
+            .cache/linux-lab-result.txt
+          if-no-files-found: warn
+          retention-days: 14

@@ -33,7 +33,8 @@ func (d *diskRecords) Load(name string) (record, bool, error) {
 	if err != nil {
 		return record{}, false, err
 	}
-	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	// A corrupt FIFO must not block before secureFile can reject its type.
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NONBLOCK|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		return record{}, false, nil
 	}

@@ -50,4 +50,4 @@ Go 的线程、子进程和 namespace 归属必须显式控制，特别验证新
 
 ## 当前环境限制
 
-当前工作区是 Windows，检查发现 WSL 尚未安装。可在此开发和交叉编译，但不能声称已完成 Linux namespace / TUN / nftables 运行验证。用户已授权 Linux VPS 用于测试，但本机 SSH 尚未确认该机主机公钥，未跳过校验、未登录或修改服务器。完成可信主机指纹核对后再执行 Linux 验收；不默认安装会改变系统组件或要求重启的 WSL。
+当前工作区是 Windows，检查发现 WSL 尚未安装。可在此开发和交叉编译，本机仍不能直接运行 Linux 内核测试。dev.2 已在 GitHub 临时 Ubuntu runner 完成 namespace / nftables 隔离验收；未验证 TUN、OpenVPN 或业务数据面，详见 [验证记录](validation/2026-10-09-linux-quarantine.md)。用户已授权 Linux VPS 用于测试，但本机 SSH 尚未确认该机主机公钥，未跳过校验、未登录或修改服务器。完成可信主机指纹核对后再执行 Linux 验收；不默认安装会改变系统组件或要求重启的 WSL。

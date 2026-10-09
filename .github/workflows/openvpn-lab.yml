@@ -38,9 +38,7 @@ jobs:
             ip -Version
             nft --version
             nsenter --version
-            printf '
-Only disconnected laboratory namespaces are used; no public VPN targets or user VPS.
-'
+            echo 'Only disconnected laboratory namespaces are used; no public VPN targets or user VPS.'
           } | tee .cache/openvpn-environment.txt
       - name: Verify controlled TLS tunnel, bound DNS and fail-closed traffic
         shell: bash

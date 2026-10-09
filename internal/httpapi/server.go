@@ -18,6 +18,7 @@ import (
 
 	"mikugate/internal/diagnostics"
 	"mikugate/internal/domain"
+	"mikugate/internal/netexec"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
 	"mikugate/internal/vpngate"
@@ -74,6 +75,7 @@ func New(s *store.Store, assets fs.FS) (http.Handler, error) {
 	mux.HandleFunc("POST /api/exits", a.auth(a.createExit))
 	mux.HandleFunc("PATCH /api/exits/{id}", a.auth(a.updateExit))
 	mux.HandleFunc("DELETE /api/exits/{id}", a.auth(a.deleteExit))
+	mux.HandleFunc("GET /api/exits/{id}/network-plan", a.auth(a.networkPlan))
 	mux.HandleFunc("POST /api/exits/{id}/start", a.auth(a.startExit))
 	mux.HandleFunc("POST /api/exits/{id}/stop", a.auth(a.stopExit))
 	mux.HandleFunc("POST /api/exits/{id}/credentials", a.auth(a.rotateCredentials))
@@ -417,4 +419,32 @@ func (a *Server) storeError(w http.ResponseWriter, err error) {
 	default:
 		a.internal(w, err)
 	}
+}
+
+// networkPlan only renders a deterministic plan. It never opens the privileged
+// helper, modifies exit state, or uses an operating-system command.
+func (a *Server) networkPlan(w http.ResponseWriter, r *http.Request, session domain.Session) {
+	exits, err := a.store.ListExits()
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
+	for _, exit := range exits {
+		if exit.ID != r.PathValue("id") {
+			continue
+		}
+		instanceID, err := a.store.InstanceID()
+		if err != nil {
+			a.internal(w, err)
+			return
+		}
+		plan, err := netexec.BuildPlan(instanceID, exit.ID)
+		if err != nil {
+			a.internal(w, err)
+			return
+		}
+		write(w, http.StatusOK, plan)
+		return
+	}
+	a.storeError(w, domain.ErrNotFound)
 }

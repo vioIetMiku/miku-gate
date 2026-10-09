@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { request as httpRequest } from 'node:http';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +28,7 @@ try {
   }
   function check(actual, expected, message) { assert.equal(actual, expected, message); checks++; }
   check((await request('/api/exits')).status, 401, 'anonymous API requests must fail');
+  check((await request('/api/exits/missing_exit/network-plan')).status, 401, 'anonymous network plans must fail');
   let r = await request('/'); check(r.status, 200, 'embedded frontend must be served');
   const html = await r.text(); const asset = html.match(/src="(\/assets\/[^\"]+)"/); assert.ok(asset, 'built JS asset should exist');
   check((await request(asset[1])).status, 200, 'embedded JS asset must be served');
@@ -40,7 +41,18 @@ try {
   r = await request('/api/exits', 'POST', { name: '日本测试', country: 'JP', policy: 'any' }); check(r.status, 201, 'create exit configuration');
   const created = await r.json(); assert.ok(created.password); const id = created.exit.id; const port = created.exit.port;
   r = await request('/api/exits'); const exits = await r.text(); check(exits.includes(created.password), false, 'one-time secret must not reappear');
-  check((await request(`/api/exits/${id}/start`, 'POST')).status, 409, 'unimplemented executor must not fake success');
+  r = await request(`/api/exits/${id}/network-plan`); check(r.status, 200, 'authenticated network-plan preview');
+  const networkPlan = await r.json();
+  check(networkPlan.stage, 'quarantine-only', 'plan must not imply a running tunnel');
+  check(networkPlan.proxy_enabled || networkPlan.tunnel_enabled || networkPlan.host_routes_changed || networkPlan.host_firewall_changed, false, 'plan has no data path or host routing changes');
+  const planArgs = [`--instance=${networkPlan.instance_id}`, `--exit=${id}`];
+  const cliPlan = JSON.parse(execFileSync(binary, ['sandbox', 'plan', ...planArgs], { encoding: 'utf8', windowsHide: true }));
+  check(cliPlan.namespace, networkPlan.namespace, 'CLI and web use the same namespace identity');
+  check(cliPlan.nft_ruleset, networkPlan.nft_ruleset, 'CLI and web use the same guard policy');
+  const denied = spawnSync(binary, ['sandbox', 'prepare', ...planArgs], { encoding: 'utf8', windowsHide: true });
+  check(denied.status, 1, 'privileged mutation requires explicit --apply');
+  check((await request('/api/exits').then(r => r.json()))[0].status, 'stopped', 'preview leaves exit state unchanged');
+  check((await request(`/api/exits/${id}/start`, 'POST')).status, 409, 'data plane must remain gated');
   check((await request('/api/overview').then(r => r.json())).active_count, 0, 'no real tunnel may be reported');
   check((await request(`/api/exits/${id}`, 'PATCH', { name: '韩国测试', country: 'KR', policy: 'residential_strict' })).status, 204, 'edit configuration');
   check((await request('/api/exits').then(r => r.json()))[0].port, port, 'editing must preserve entrance port');
@@ -49,6 +61,7 @@ try {
   check((await request('/api/diagnostics').then(r => r.json())).executor_available, false, 'diagnostics are honest');
   check((await request(`/api/exits/${id}`, 'DELETE')).status, 204, 'delete isolated test configuration');
   check((await request('/api/exits').then(r => r.json())).length, 0, 'configuration deleted');
+  check((await request(`/api/exits/${id}/network-plan`)).status, 404, 'deleted exit cannot retain a plan');
   check((await request('/api/events').then(r => r.json())).length >= 6, true, 'audit trail persisted');
   check((await request('/api/auth/logout', 'POST')).status, 204, 'logout');
   check((await request('/api/exits')).status, 401, 'revoked session rejected');

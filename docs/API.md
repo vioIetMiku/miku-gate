@@ -1,6 +1,6 @@
 # 当前 API：控制面开发原型
 
-版本：`0.1.0-dev.1`。默认基址为 `http://127.0.0.1:3939/api`。所有数据面启动操作目前明确失败，不提供真实代理地址或活动隧道。
+版本：`0.1.0-dev.2`。默认基址为 `http://127.0.0.1:3939/api`。所有数据面启动操作目前明确失败，不提供真实代理地址或活动隧道。
 
 ## 认证与请求规则
 
@@ -26,6 +26,7 @@
 | POST | `/exits` | 已登录 + CSRF | 201，`exit`、一次性 `password` 与说明 |
 | PATCH | `/exits/{id}` | 已登录 + CSRF | 204，更新名称、国家与策略 |
 | DELETE | `/exits/{id}` | 已登录 + CSRF | 204，删除出口配置，保留事件 |
+| GET | `/exits/{id}/network-plan` | 已登录 | 200，只读隔离计划；不创建沙箱或代理 |
 | POST | `/exits/{id}/start` | 已登录 + CSRF | 当前固定返回 409，保存 blocked 状态和原因 |
 | POST | `/exits/{id}/stop` | 已登录 + CSRF | 204，保存 stopped 状态 |
 | POST | `/exits/{id}/credentials` | 已登录 + CSRF | 200，一次性新 `password` |
@@ -57,6 +58,18 @@
 - PATCH 提交名称、国家和策略，不允许提交非零端口；更新不改变原端口和凭据。
 
 出口字段包括：`id`、`name`、`country`、`policy`、`port`、`listen`、`username`、`status`、`reason`、`created_at`。当前合法状态仅有 `stopped` 与 `blocked`。
+
+## 预览出口的隔离计划
+
+GET /exits/{id}/network-plan 返回稳定的 instance_id、exit_id、namespace、nft_table、owner、nft_ruleset、changes 和 warnings。stage 为 quarantine-only；host_routes_changed、host_firewall_changed、tunnel_enabled、proxy_enabled 均为 false。
+
+- 必须登录；不存在的出口返回 404。与所有读取接口一样，Host/Origin 检查仍适用。
+- 该接口不执行 OS 命令、不创建文件、不写审计、不改变出口状态；响应不是运行时快照。
+- CLI 的 sandbox plan 使用同样两个 ID 时得到相同资源名和规则。
+- 特权 prepare/cleanup 没有 HTTP 接口，Web 服务不接收任意命令、root 路径或脚本。
+- 删除出口配置不会自动清理通过独立 CLI 手动创建的沙箱，请先按 [Linux 沙箱手册](LINUX_SANDBOX.md) 回收。
+
+诊断新增 sandbox_plan_available 和 sandbox_helper_supported；后者只说明当前平台是否为 Linux，不说明 root 能力、依赖可信性、沙箱存在或隔离测试通过。实际沙箱状态只能由独立特权 inspect 查询。
 
 ## 节点与统计的含义
 

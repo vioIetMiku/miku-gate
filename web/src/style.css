@@ -1024,6 +1024,10 @@ dialog::backdrop {
   backdrop-filter: blur(3px);
 }
 .modal-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1640,4 +1644,63 @@ label input:disabled {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.network-plan {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.network-plan-heading {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.network-plan-heading h3 {
+  font-size: 14px;
+}
+.network-plan-heading p {
+  font-size: 12px;
+  margin-top: 5px;
+}
+.network-plan-content {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.network-plan .credential-list code {
+  overflow-wrap: anywhere;
+}
+.network-plan-steps {
+  margin: 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 10px;
+  line-height: 1.65;
+  font-size: 12px;
+}
+.network-plan details {
+  min-width: 0;
+}
+.network-plan summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--accent-dark);
+}
+.network-plan pre {
+  max-width: 100%;
+  overflow: auto;
+  padding: 12px;
+  background: var(--chip);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  line-height: 1.6;
+}
+.network-plan-error {
+  color: var(--red);
+  font-size: 12px;
 }

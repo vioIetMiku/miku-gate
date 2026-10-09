@@ -17,6 +17,7 @@ Miku Gate 的当前控制面、数据模型、接口、代理前端和测试为�
 | 用途 | 依赖 |
 | --- | --- |
 | SQLite | `modernc.org/sqlite`，纯 Go 驱动，避免本机 C 编译器依赖 |
+| Linux 系统调用 | `golang.org/x/sys/unix`（既有锁定依赖，现直接用于能力、锁和 namespace 文件校验） |
 | 密码哈希 | `golang.org/x/crypto/argon2` |
 | Web UI | React、React DOM |
 | 图标 | `@phosphor-icons/react` |
@@ -26,6 +27,12 @@ Miku Gate 的当前控制面、数据模型、接口、代理前端和测试为�
 | 格式校验 | Prettier |
 
 当前并不捆绑 OpenVPN 或 Xray 二进制；那些运行时属于后续执行器阶段。引入时需另外处理许可证、版本固定、校验与升级策略。
+
+## Linux 隔离助手的外部程序
+
+实验性 CLI 使用系统的 ip、nft、nsenter，不捆绑、不自动安装；完整内核实验另需 ping。仅通过验证后的绝对路径启动，清空继承环境中的动态加载/代理设置。包及系统行为仍应按目标发行版验证。
+
+本轮未引入新的 Go/npm 包，也未安装新的全局工具、skill 或插件。
 
 ## 本工作区工具安装记录
 

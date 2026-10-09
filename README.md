@@ -1,10 +1,12 @@
 # Miku Gate
 
-**本地优先的多出口代理控制台。当前版本：`0.1.0-dev.1`。**
+**本地优先的多出口代理控制台。当前版本：`0.1.0-dev.2`。**
 
 > 当前可运行的是控制面开发原型，不是可用于上网的 VPN 网关。
 >
-> 已有真实的账号认证、SQLite 持久化、出口配置 API 和 React 管理界面；Linux 网络执行器尚未实现，因此没有活动隧道、没有代理监听，也没有经过验证的断线防泄漏保护。点击“启动”会明确返回 `409 executor_unavailable`，不会伪造连接成功。
+> 已有真实的账号认证、SQLite 持久化、出口配置 API 和 React 管理界面；已加入实验性的独立 Linux 全阻断沙箱助手，但尚未接通 VPN 数据面，因此没有活动隧道、没有代理监听，也没有经过验证的隧道断线防泄漏保护。点击“启动”会明确返回 `409 executor_unavailable`，不会伪造连接成功。
+
+> 升级提示：dev.2 增加稳定实例 ID，数据库 schema 升为 2。升级前停止旧服务并备份数据目录；dev.1 不能直接读取升级后的数据库。
 
 ## 已经能做什么
 
@@ -16,11 +18,13 @@
 - 手动获取 VPN Gate 官方 HTTPS 列表，进行大小限制、CSV 解析、OpenVPN 指令白名单校验。
 - 节点源失败保留原缓存，候选不被自动标记为已连接、住宅或可信。
 - 系统环境只读诊断；深浅主题、中文界面、桌面与移动布局。
+- 出口隔离计划预览；稳定的实例 / 出口资源标识；计划不执行系统命令。
+- 独立 Linux sandbox plan / inspect / prepare / cleanup 命令：仅全阻断隔离实验，显式 --apply、归属校验和失败回滚；实际 Linux 验证状态见进度文档。
 - 独立的 HTTP CONNECT / HTTP 转发 / SOCKS5 TCP 协议库及测试，**尚未连接到任何真实监听器**。
 
 ## 尚未实现
 
-- Linux namespace、TUN、nftables 和受限特权执行器。
+- 特权 IPC / 长驻协调器、TUN、OpenVPN 与现有代理核心的集成。
 - 真正的 VPN 建连、隧道 DNS、内核断线保护、自动换线。
 - 节点实测、住宅类型情报、严格住宅策略的运行时执行。
 - SOCKS5 UDP、Xray、节点订阅、热备和多服务器管理。
@@ -102,7 +106,7 @@ npm --prefix web run format:check
 node scripts/smoke.mjs
 ```
 
-`smoke.mjs` 必须在构建后执行。它启动真实 Go HTTP 服务，使用隔离临时数据库，检查登录、CSRF、出口 CRUD、凭据、拒绝假启动、审计与退出；结束时关闭自己启动的服务。不访问公共 VPN 节点，不修改网络设置。
+`smoke.mjs` 必须在构建后执行。它启动真实 Go HTTP 服务，使用隔离临时数据库，检查登录、CSRF、出口 CRUD、凭据、网络计划与 CLI 一致性、显式执行闸门、拒绝假启动、审计与退出；结束时关闭自己启动的服务。不访问公共 VPN 节点，不修改网络设置。
 
 浏览器回归：
 
@@ -117,6 +121,10 @@ npm --prefix web run test:e2e
 - 截图中的节点配置是测试数据，不是真实连接或真实性能结果。
 
 当前验证结果及未完成项目见 [开发进度](docs/PROGRESS.md)。交叉编译成功不代表 Linux 运行、TUN 或防泄漏验证成功。
+
+## Linux 隔离实验
+
+新功能仅创建无外部链路的全阻断 namespace，不建立隧道或代理。先在出口详情查看计划；普通 go test 不会运行特权内核实验。使用条件、手动命令、清理边界与可选的 IPv4/IPv6 实验见 [Linux 沙箱手册](docs/LINUX_SANDBOX.md)。
 
 ## 默认安全边界
 
@@ -140,6 +148,7 @@ internal/httpapi/   认证、CSRF、API、嵌入式前端服务
 internal/vpngate/   官方列表获取、CSV 与配置校验
 internal/egress/    IPv4 公网目标策略的纯函数
 internal/proxy/     独立、未接线的 HTTP / SOCKS5 TCP 核心
+internal/netexec/   隔离计划、Linux 全阻断沙箱、归属与故障实验
 internal/diagnostics/ 只读环境检查
 web/                React / TypeScript 界面与前端测试
 scripts/            构建、真实 HTTP smoke 与浏览器测试辅助
@@ -147,8 +156,9 @@ scripts/            构建、真实 HTTP smoke 与浏览器测试辅助
 
 ## 下一步
 
-优先实现受限 Linux 网络执行器和可重复的本地 OpenVPN 测试拓扑，验证 fail-closed、DNS 与重启边界，再接通现在已经存在的代理核心和管理 API。
+先运行真实 Linux 隔离实验，随后补齐特权 IPC、受控 OpenVPN 测试拓扑与 namespace 内的 DNS / 拨号器；验证隧道断线与重启边界后，再接通代理核心和管理 API。
 
+- [阶段任务与验收清单 · Issue #1](https://github.com/vioIetMiku/miku-gate/issues/1)
 - [完整产品规划](docs/PRODUCT_PLAN.md)
 - [当前 API](docs/API.md)
 - [验证与开发状态](docs/PROGRESS.md)

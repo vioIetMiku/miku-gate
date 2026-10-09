@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"mikugate/internal/domain"
+	"mikugate/internal/netexec"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
 )
@@ -48,6 +49,9 @@ func TestAuthenticatedLifecycle(t *testing.T) {
 	if w := request("GET", "/api/exits", "", "", ""); w.Code != 401 {
 		t.Fatalf("unprotected exits: %d", w.Code)
 	}
+	if w := request("GET", "/api/exits/missing_exit/network-plan", "", "", ""); w.Code != 401 {
+		t.Fatal("anonymous network plan exposed")
+	}
 	w := request("POST", "/api/auth/login", `{"username":"admin","password":"safe-password"}`, "", "")
 	if w.Code != 200 {
 		t.Fatal(w.Body.String())
@@ -84,6 +88,27 @@ func TestAuthenticatedLifecycle(t *testing.T) {
 	w = request("GET", "/api/exits", "", "", "")
 	if strings.Contains(w.Body.String(), created.Password) || strings.Contains(w.Body.String(), "password_hash") {
 		t.Fatal("secret leak")
+	}
+	eventsBefore, _ := s.Events()
+	w = request("GET", "/api/exits/"+created.Exit.ID+"/network-plan", "", "", "")
+	var plan netexec.Plan
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &plan) != nil || plan.Namespace == "" || plan.ProxyEnabled || plan.TunnelEnabled || plan.HostRoutesChanged || plan.HostFirewallChanged {
+		t.Fatal("unsafe or invalid network preview", w.Body.String())
+	}
+	instanceID, _ := s.InstanceID()
+	if plan.InstanceID != instanceID || plan.ExitID != created.Exit.ID {
+		t.Fatal("plan not bound to persisted instance/exit identity")
+	}
+	eventsAfter, _ := s.Events()
+	exitsAfter, _ := s.ListExits()
+	if len(eventsBefore) != len(eventsAfter) || exitsAfter[0].Status != "stopped" {
+		t.Fatal("read-only plan mutated state")
+	}
+	if strings.Contains(w.Body.String(), created.Password) {
+		t.Fatal("plan leaked credentials")
+	}
+	if w = request("GET", "/api/exits/missing_exit/network-plan", "", "", ""); w.Code != 404 {
+		t.Fatal("missing exit received a plan")
 	}
 	if w = request("POST", "/api/exits/"+created.Exit.ID+"/start", "", csrf, ""); w.Code != 409 {
 		t.Fatal("fake start succeeded")

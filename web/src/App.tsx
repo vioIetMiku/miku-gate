@@ -1,3 +1,4 @@
+import { NetworkPlanView } from './NetworkPlanView';
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   ArrowClockwise,
@@ -1170,9 +1171,13 @@ export default function App() {
                       <Check size={17} />
                       官方节点列表解析与校验
                     </li>
+                    <li>
+                      <Check size={17} />
+                      隔离计划预览与独立 Linux 沙箱助手
+                    </li>
                     <li className="muted">
                       <Clock size={17} />
-                      Linux 隧道与断线保护：待实现
+                      Linux 真实隧道与防泄漏验收：待完成
                     </li>
                     <li className="muted">
                       <Clock size={17} />
@@ -1266,6 +1271,7 @@ export default function App() {
                 <dd>{timestamp(detail.created_at)}</dd>
               </div>
             </dl>
+            <NetworkPlanView key={detail.id} exitID={detail.id} />
             <div className="detail-actions">
               <button
                 className="button"
@@ -1314,7 +1320,10 @@ export default function App() {
         >
           <div className="modal-form">
             <p>
-              将删除 <strong>{deleting.name}</strong> 的入口、策略和凭据。操作记录会保留。
+              将删除 <strong>{deleting.name}</strong> 的入口预留、策略和凭据配置。操作记录会保留。
+            </p>
+            <p className="muted">
+              独立 CLI 创建的隔离沙箱不会自动回收；请先执行 sandbox cleanup，再删除配置。
             </p>
             <div className="modal-actions">
               <button className="button" disabled={actionBusy} onClick={() => setDeleting(null)}>

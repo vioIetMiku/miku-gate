@@ -1,6 +1,17 @@
 # 网络执行器：下一阶段实施契约
 
-> 本文为待实现设计。当前代码不创建 namespace、TUN、代理监听或防火墙规则。
+> 更新于 2026-10-09。dev.2 已实现独立的 quarantine-only CLI：仅创建不联网的 namespace 和其内部全阻断 nftables 规则。没有 TUN、OpenVPN、业务 DNS、代理监听或特权 IPC；完整数据面仍为下述实施契约。
+
+## 当前已实现的隔离底座
+
+- 稳定实例 / 出口 ID 派生资源名；认证后的只读计划 API 与 CLI 共用计划。
+- root CLI 与普通用户 Web 服务分离；CLI 不接受任意命令、配置文件路径或 shell。
+- 独立 namespace 内全丢弃 IPv4/IPv6；不创建外部链路，不改宿主路由或规则。
+- 原子归属记录、flock、NSFS 文件描述符与 inode 校验、结构化 nft JSON 核验。
+- 幂等准备、显式清理、未知归属保留、独立超时回滚和 32 个沙箱预算。
+- 单元故障注入与可显式启用的双 namespace Linux 实验；实际执行结果见 PROGRESS.md。
+
+操作说明见 [LINUX_SANDBOX.md](LINUX_SANDBOX.md)。这些内容不代表后续建连闭环已完成。
 
 ## 不得绕过的能力闸门
 
@@ -39,4 +50,4 @@ Go 的线程、子进程和 namespace 归属必须显式控制，特别验证新
 
 ## 当前环境限制
 
-当前工作区是 Windows，检查发现 WSL 尚未安装。可在此开发和交叉编译，但不能声称已完成 Linux namespace / TUN / nftables 运行验证。下一阶段需要用户提供或明确授权一个可用 Linux 测试环境；不默认安装会改变系统组件或要求重启的 WSL。
+当前工作区是 Windows，检查发现 WSL 尚未安装。可在此开发和交叉编译，但不能声称已完成 Linux namespace / TUN / nftables 运行验证。用户已授权 Linux VPS 用于测试，但本机 SSH 尚未确认该机主机公钥，未跳过校验、未登录或修改服务器。完成可信主机指纹核对后再执行 Linux 验收；不默认安装会改变系统组件或要求重启的 WSL。

@@ -1,0 +1,26 @@
+name: Linux isolation lab (manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install isolated-lab dependencies on the disposable runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iproute2 nftables util-linux iputils-ping
+      - name: Build tests without privilege
+        run: |
+          mkdir -p .cache
+          go test -c -o .cache/netexec-linux.test ./internal/netexec
+      - name: Run real-kernel isolated IPv4 and IPv6 tests
+        run: |
+          sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin MIKU_GATE_NETNS_TEST=1 \
+            "$PWD/.cache/netexec-linux.test" -test.v -test.run '^TestLinuxLab' -test.timeout 3m

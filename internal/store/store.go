@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -51,8 +52,8 @@ func (s *Store) migrate() error {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 1 {
-		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 1，拒绝降级打开", version)
+	if version > 2 {
+		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 2，拒绝降级打开", version)
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -62,17 +63,43 @@ func (s *Store) migrate() error {
 	_, err = tx.Exec(`
  CREATE TABLE IF NOT EXISTS schema_version(version INTEGER PRIMARY KEY);
  INSERT OR IGNORE INTO schema_version VALUES(1);
+ INSERT OR IGNORE INTO schema_version VALUES(2);
+ CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS accounts(username TEXT PRIMARY KEY,password_hash TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,username TEXT NOT NULL REFERENCES accounts(username),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS exits(id TEXT PRIMARY KEY,name TEXT NOT NULL,country TEXT NOT NULL,policy TEXT NOT NULL,port INTEGER NOT NULL UNIQUE,listen TEXT NOT NULL,username TEXT NOT NULL,password_hash TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS nodes(id TEXT PRIMARY KEY,hostname TEXT NOT NULL,ip TEXT NOT NULL,country TEXT NOT NULL,country_name TEXT NOT NULL,ping INTEGER NOT NULL,speed INTEGER NOT NULL,sessions INTEGER NOT NULL,source TEXT NOT NULL,fetched_at TEXT NOT NULL,config TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,level TEXT NOT NULL,kind TEXT NOT NULL,message TEXT NOT NULL,exit_id TEXT NOT NULL,created_at TEXT NOT NULL);
- PRAGMA user_version=1;
+ PRAGMA user_version=2;
  `)
 	if err != nil {
 		return err
 	}
+	var instanceID string
+	err = tx.QueryRow("SELECT value FROM metadata WHERE key='instance_id'").Scan(&instanceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		if version >= 2 {
+			return errors.New("数据库缺少实例 ID；拒绝自动生成新资源身份")
+		}
+		instanceID, err = security.Token(16)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec("INSERT INTO metadata(key,value) VALUES('instance_id',?)", instanceID); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	if !regexp.MustCompile(`^[A-Za-z0-9_-]{22}$`).MatchString(instanceID) {
+		return errors.New("数据库中的实例 ID 无效；拒绝自动替换资源身份")
+	}
 	return tx.Commit()
+}
+func (s *Store) InstanceID() (string, error) {
+	var id string
+	err := s.db.QueryRow("SELECT value FROM metadata WHERE key='instance_id'").Scan(&id)
+	return id, err
 }
 func (s *Store) Initialized() (bool, error) {
 	var n int

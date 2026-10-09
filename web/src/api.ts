@@ -47,6 +47,8 @@ export type Event = {
 };
 export type Diagnostics = {
   platform: string;
+  sandbox_plan_available: boolean;
+  sandbox_helper_supported: boolean;
   executor_available: boolean;
   checks: { id: string; name: string; status: string; detail: string }[];
 };
@@ -129,3 +131,20 @@ export function filterExits(exits: Exit[], query: string, country: string) {
       `${e.name} ${e.country} ${countries[e.country] ?? ''} ${e.port}`.toLowerCase().includes(q),
   );
 }
+
+export type NetworkPlan = {
+  schema: number;
+  instance_id: string;
+  exit_id: string;
+  stage: string;
+  namespace: string;
+  nft_table: string;
+  owner: string;
+  nft_ruleset: string;
+  host_routes_changed: boolean;
+  host_firewall_changed: boolean;
+  tunnel_enabled: boolean;
+  proxy_enabled: boolean;
+  changes: { scope: string; action: string; description: string }[];
+  warnings: string[];
+};

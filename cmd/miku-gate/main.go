@@ -33,12 +33,15 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | serve | doctor | version\n当前为控制台开发版本，不建立 VPN 隧道。")
+		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | serve | doctor | version | sandbox\n当前为控制台开发版本，不建立 VPN 隧道。")
 		return nil
 	}
 	if os.Args[1] == "version" {
 		fmt.Println(domain.Version)
 		return nil
+	}
+	if os.Args[1] == "sandbox" {
+		return runSandbox(os.Args[2:], os.Stdout)
 	}
 	if os.Args[1] == "doctor" {
 		enc := json.NewEncoder(os.Stdout)

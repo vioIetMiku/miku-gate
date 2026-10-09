@@ -127,3 +127,90 @@ func TestRejectFutureDatabase(t *testing.T) {
 		t.Fatal("newer schema opened by older executable")
 	}
 }
+
+func TestInstanceIdentityMigrationAndPersistence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v1.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, _, err := s.CreateExit(domain.ExitInput{Name: "迁移出口", Country: "JP"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Reconstruct the v1 schema: the only v2 addition is metadata + version 2.
+	if _, err = s.db.Exec("DROP TABLE metadata; DELETE FROM schema_version WHERE version=2; PRAGMA user_version=1"); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.InstanceID()
+	if err != nil || len(first) != 22 {
+		t.Fatal("missing stable instance identity", err)
+	}
+	var version int
+	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 2 {
+		t.Fatal("migration not committed", err)
+	}
+	exits, err := s.ListExits()
+	if err != nil || len(exits) != 1 || exits[0].ID != e.ID || exits[0].Port != e.Port {
+		t.Fatal("migration changed exit configuration", err)
+	}
+	s.Close()
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	again, err := s.InstanceID()
+	if err != nil || again != first {
+		t.Fatal("instance ID changed after restart", err)
+	}
+	other, err := Open(filepath.Join(t.TempDir(), "other.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	different, _ := other.InstanceID()
+	if different == first {
+		t.Fatal("separate installations share an identity")
+	}
+}
+func TestCorruptInstanceIdentityIsNotSilentlyReplaced(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bad-identity.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.Exec("UPDATE metadata SET value='../not-safe' WHERE key='instance_id'"); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if opened, err := Open(path); err == nil {
+		opened.Close()
+		t.Fatal("invalid resource identity accepted or replaced")
+	}
+}
+
+func TestMissingV2InstanceIdentityIsNotRegenerated(t *testing.T) {
+	for _, statement := range []string{"DELETE FROM metadata WHERE key='instance_id'", "DROP TABLE metadata"} {
+		t.Run(statement, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "missing-identity.db")
+			s, err := Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = s.db.Exec(statement); err != nil {
+				t.Fatal(err)
+			}
+			s.Close()
+			if reopened, err := Open(path); err == nil {
+				reopened.Close()
+				t.Fatal("silently replaced missing v2 resource identity")
+			}
+		})
+	}
+}

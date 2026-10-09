@@ -5,7 +5,7 @@
 - dev.2 Release 已发布，并完成临时 Ubuntu runner 的首轮真实隔离验证。
 - 避免损坏的 FIFO 归属文件、锁文件或 namespace 占位对象在类型校验前造成阻塞，仍严格拒绝非预期对象。
 - 补充真实 Linux 活跃进程、锁/重启、文件类型/权限测试和有效 cgroup 配额检查。
-- 手动实验限定单核 CPU 配额、512MiB 内存、零 swap、64 tasks，并留存环境/结果证据。
+- 手动实验限定单核 CPU 配额、512MiB 内存、零 swap、64 tasks，并留存环境/结果证据；7项主测试及6个文件子用例已在临时 Ubuntu runner 实際通过。
 - 仍未接通 OpenVPN、DNS 或代理出站；已发布 dev.2 的标签和压缩包不变。
 
 

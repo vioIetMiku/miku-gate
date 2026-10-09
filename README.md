@@ -21,7 +21,7 @@
 - 节点源失败保留原缓存，候选不被自动标记为已连接、住宅或可信。
 - 系统环境只读诊断；深浅主题、中文界面、桌面与移动布局。
 - 出口隔离计划预览；稳定的实例 / 出口资源标识；计划不执行系统命令。
-- 独立 Linux sandbox plan / inspect / prepare / cleanup 命令：仅全阻断隔离实验，显式 --apply、归属校验和失败回滚；dev.2 已通过临时 Ubuntu runner 的真实隔离实验；不是 VPN 或 VPS 验收，见 [验证记录](docs/validation/2026-10-09-linux-quarantine.md)。
+- 独立 Linux sandbox plan / inspect / prepare / cleanup 命令：仅全阻断隔离实验，显式 --apply、归属校验和失败回滚；dev.2 首轮与 dev.3 低资源边界实验已通过临时 Ubuntu runner 验证；不是 VPN 或 VPS 验收，见 [验证记录](docs/validation/2026-10-09-linux-quarantine.md)。
 - 独立的 HTTP CONNECT / HTTP 转发 / SOCKS5 TCP 协议库及测试，**尚未连接到任何真实监听器**。
 
 ## 尚未实现

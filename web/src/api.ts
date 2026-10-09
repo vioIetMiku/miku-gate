@@ -148,3 +148,20 @@ export type NetworkPlan = {
   changes: { scope: string; action: string; description: string }[];
   warnings: string[];
 };
+
+export type ExecutorStatus = {
+  configured: boolean;
+  reachable: boolean;
+  mode: string;
+  vpn_available: boolean;
+  proxy_available: boolean;
+  message: string;
+};
+export type SandboxState = {
+  plan: NetworkPlan;
+  phase: string;
+  quarantine_verified: boolean;
+  tunnel_ready: boolean;
+  proxy_listening: boolean;
+  reason: string;
+};

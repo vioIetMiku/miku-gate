@@ -1,6 +1,6 @@
 # Miku Gate
 
-**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.3`。**
+**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.4`。**
 
 > 当前可运行的是控制面开发原型，不是可用于上网的 VPN 网关。
 >
@@ -26,7 +26,7 @@
 
 ## 尚未实现
 
-- 特权 IPC / 长驻协调器、TUN、OpenVPN 与现有代理核心的集成。
+- 长驻 VPN 协调器、TUN、OpenVPN 与现有代理核心的集成（隔离 IPC 已实现）。
 - 真正的 VPN 建连、隧道 DNS、内核断线保护、自动换线。
 - 节点实测、住宅类型情报、严格住宅策略的运行时执行。
 - SOCKS5 UDP、Xray、节点订阅、热备和多服务器管理。
@@ -124,6 +124,12 @@ npm --prefix web run test:e2e
 
 当前验证结果及未完成项目见 [开发进度](docs/PROGRESS.md)。交叉编译成功不代表 Linux 运行、TUN 或防泄漏验证成功。
 
+## 可选的本机隔离 IPC
+
+dev.4 新增固定实例、指定非 root UID 的 Unix socket 助手。需管理员显式授权，并给普通用户控制台添加 --sandbox-ipc；默认不开启。界面区分计划与实际隔离，变更需二次确认，原有 VPN 启动闸门不解除。
+
+完整命令、身份边界和故障处理见 [隔离 IPC 手册](docs/EXECUTOR_IPC.md)。已经发布的 dev.2 压缩包不包含这部分新功能。
+
 ## Linux 隔离实验
 
 新功能仅创建无外部链路的全阻断 namespace，不建立隧道或代理。先在出口详情查看计划；普通 go test 不会运行特权内核实验。使用条件、手动命令、清理边界与可选的 IPv4/IPv6 实验见 [Linux 沙箱手册](docs/LINUX_SANDBOX.md)。
@@ -151,6 +157,7 @@ internal/vpngate/   官方列表获取、CSV 与配置校验
 internal/egress/    IPv4 公网目标策略的纯函数
 internal/proxy/     独立、未接线的 HTTP / SOCKS5 TCP 核心
 internal/netexec/   隔离计划、Linux 全阻断沙箱、归属与故障实验
+internal/executoripc/ 指定 UID 的本机 IPC、端点归属和跨权限测试
 internal/diagnostics/ 只读环境检查
 web/                React / TypeScript 界面与前端测试
 scripts/            构建、真实 HTTP smoke 与浏览器测试辅助

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,7 @@ import (
 
 	"mikugate/internal/diagnostics"
 	"mikugate/internal/domain"
+	"mikugate/internal/executoripc"
 	"mikugate/internal/netexec"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
@@ -28,7 +30,14 @@ type attempt struct {
 	count int
 	until time.Time
 }
+type SandboxClient interface {
+	executoripc.Runtime
+	Capabilities(context.Context) (executoripc.Capabilities, error)
+}
+type Options struct{ Sandbox SandboxClient }
 type Server struct {
+	sandbox     SandboxClient
+	sandboxSlot chan struct{}
 	store       *store.Store
 	assets      fs.FS
 	dummyHash   string
@@ -41,11 +50,14 @@ type Server struct {
 }
 
 func New(s *store.Store, assets fs.FS) (http.Handler, error) {
+	return NewWithOptions(s, assets, Options{})
+}
+func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler, error) {
 	dummy, err := security.HashPassword("not-an-account-" + time.Now().String())
 	if err != nil {
 		return nil, err
 	}
-	a := &Server{store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	a := &Server{sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]any{"version": domain.Version, "status": "control-plane-only"})
@@ -75,6 +87,10 @@ func New(s *store.Store, assets fs.FS) (http.Handler, error) {
 	mux.HandleFunc("POST /api/exits", a.auth(a.createExit))
 	mux.HandleFunc("PATCH /api/exits/{id}", a.auth(a.updateExit))
 	mux.HandleFunc("DELETE /api/exits/{id}", a.auth(a.deleteExit))
+	mux.HandleFunc("GET /api/executor", a.auth(a.executorStatus))
+	mux.HandleFunc("GET /api/exits/{id}/sandbox", a.auth(a.sandboxInspect))
+	mux.HandleFunc("POST /api/exits/{id}/sandbox/prepare", a.auth(a.sandboxPrepare))
+	mux.HandleFunc("POST /api/exits/{id}/sandbox/cleanup", a.auth(a.sandboxCleanup))
 	mux.HandleFunc("GET /api/exits/{id}/network-plan", a.auth(a.networkPlan))
 	mux.HandleFunc("POST /api/exits/{id}/start", a.auth(a.startExit))
 	mux.HandleFunc("POST /api/exits/{id}/stop", a.auth(a.stopExit))
@@ -243,7 +259,7 @@ func (a *Server) overview(w http.ResponseWriter, r *http.Request, s domain.Sessi
 	for _, e := range exits {
 		countries[e.Country] = true
 	}
-	write(w, 200, map[string]any{"version": domain.Version, "mode": "control-plane-only", "exit_count": len(exits), "active_count": 0, "country_count": len(countries), "node_count": len(nodes), "executor_available": false, "protection_verified": false, "message": "控制台与配置管理可用；网络执行器尚未接入，没有活动代理或隧道。"})
+	write(w, 200, map[string]any{"version": domain.Version, "mode": "control-plane-only", "exit_count": len(exits), "active_count": 0, "country_count": len(countries), "node_count": len(nodes), "executor_available": false, "protection_verified": false, "message": "控制台与配置管理可用；VPN 数据面尚未接入，没有活动代理或隧道。"})
 }
 func (a *Server) createExit(w http.ResponseWriter, r *http.Request, s domain.Session) {
 	var in domain.ExitInput
@@ -281,6 +297,24 @@ func (a *Server) updateExit(w http.ResponseWriter, r *http.Request, s domain.Ses
 	w.WriteHeader(204)
 }
 func (a *Server) deleteExit(w http.ResponseWriter, r *http.Request, s domain.Session) {
+	if !a.acquireSandbox(w) {
+		return
+	}
+	defer func() { <-a.sandboxSlot }()
+	if a.sandbox != nil {
+		if !a.requireExit(w, r.PathValue("id")) {
+			return
+		}
+		actual, err := a.sandbox.Inspect(r.Context(), r.PathValue("id"))
+		if err != nil {
+			a.sandboxError(w, err)
+			return
+		}
+		if actual.Phase != "absent" {
+			fail(w, 409, "sandbox_cleanup_required", "请先清理并确认本出口隔离沙箱不存在；未删除配置。")
+			return
+		}
+	}
 	if err := a.store.DeleteExit(r.PathValue("id")); err != nil {
 		a.storeError(w, err)
 		return
@@ -288,7 +322,7 @@ func (a *Server) deleteExit(w http.ResponseWriter, r *http.Request, s domain.Ses
 	w.WriteHeader(204)
 }
 func (a *Server) startExit(w http.ResponseWriter, r *http.Request, s domain.Session) {
-	reason := "启动已阻止：网络执行器尚未接入，未建立隧道、未监听代理端口。"
+	reason := "启动已阻止：VPN 数据面尚未接入，未建立隧道、未监听代理端口。"
 	if err := a.store.SetStatus(r.PathValue("id"), "blocked", reason); err != nil {
 		a.storeError(w, err)
 		return

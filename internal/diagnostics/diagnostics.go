@@ -42,6 +42,6 @@ func Inspect() Report {
 		}
 	}
 	r.Checks = append(r.Checks, Check{"sandbox-plan", "隔离计划预览", "ok", "已提供只读网络计划；独立 Linux sandbox 命令仅创建全阻断隔离环境，尚未建立隧道。"})
-	r.Checks = append(r.Checks, Check{"executor", "特权网络执行器", "unavailable", "已有独立的隔离实验助手，但未接入 OpenVPN、业务 DNS 与代理拨号器；控制台启动仍被阻止。本诊断不读取或认证特权沙箱状态。"})
+	r.Checks = append(r.Checks, Check{"executor", "特权网络执行器", "unavailable", "已有隔离助手和可选的 UID 授权本机 IPC，尚无 OpenVPN、业务 DNS 与代理拨号器；真实出口启动仍被阻止。本诊断不认证沙箱状态，请单独查询实际执行器。"})
 	return r
 }

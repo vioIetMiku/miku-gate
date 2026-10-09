@@ -35,6 +35,9 @@ test('本机控制台：登录、配置、阻止假启动、移动布局和会�
   expect(plan.stage).toBe('quarantine-only');
   expect(plan.proxy_enabled || plan.tunnel_enabled).toBe(false);
   await expect(page.getByText(plan.namespace, { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '检查执行器', exact: true }).click();
+  await expect(page.getByText(/未启用隔离 IPC/)).toBeVisible();
+  await expect(page.getByRole('button', { name: '创建隔离沙箱', exact: true })).toHaveCount(0);
   await page.getByText('查看拟安装的 nftables 规则', { exact: true }).click();
   await expect(page.getByLabel('nftables 隔离规则')).toContainText('policy drop');
   await expect(page.getByRole('button', { name: '关闭对话框', exact: true })).toBeInViewport();

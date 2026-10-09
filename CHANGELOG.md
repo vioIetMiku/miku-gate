@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-dev.4 — 2026-10-09 · 开发中
+
+- 新增默认关闭、固定实例与指定 UID 的 Unix socket IPC，双向 SO_PEERCRED 身份校验和保守的端点恢复。
+- 新增 executor serve/info、instance 查询及 sandbox --ipc；仍只有隔离操作，无 VPN 数据面。
+- Web 可显式接入隔离 IPC；鉴权/CSRF、二次确认、审计与删除互锁，区分纯计划和实际隔离状态。
+- 限制帧大小、连接数和操作并发，超时与断开取消，拒绝任意命令/路径和虚假的隧道能力。
+- 新增协议/API/跨 UID/真实 HTTP到内核测试；结果见开发记录。已发布 dev.2 标签及资产不变。
+
+
 ## 0.1.0-dev.3 — 2026-10-09 · 开发中
 
 - dev.2 Release 已发布，并完成临时 Ubuntu runner 的首轮真实隔离验证。

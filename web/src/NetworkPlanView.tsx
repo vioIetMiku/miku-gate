@@ -1,3 +1,4 @@
+import { SandboxRuntimeView } from './SandboxRuntimeView';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowClockwise, CircleNotch, Info, ShieldWarning } from '@phosphor-icons/react';
 import { api, type NetworkPlan } from './api';
@@ -102,10 +103,11 @@ export function NetworkPlanView({ exitID }: { exitID: string }) {
           <div className="notice">
             <Info size={20} />
             <p>
-              仅 Linux 管理员可通过独立 sandbox CLI 手动执行，prepare / cleanup 必须显式使用
-              --apply。Web 控制台不能调用特权操作。
+              默认只读。管理员显式授权本机 UID 并以 --sandbox-ipc 启动控制台后，才可通过有限 IPC
+              操作隔离沙箱；真实 VPN 启动仍关闭。
             </p>
           </div>
+          <SandboxRuntimeView key={exitID} exitID={exitID} />
         </div>
       )}
     </section>

@@ -1,6 +1,6 @@
 # 网络执行器：下一阶段实施契约
 
-> 更新于 2026-10-09。dev.2 已实现独立的 quarantine-only CLI：仅创建不联网的 namespace 和其内部全阻断 nftables 规则。没有 TUN、OpenVPN、业务 DNS、代理监听或特权 IPC；完整数据面仍为下述实施契约。
+> 更新于 2026-10-09。dev.2 已实现独立的 quarantine-only CLI：仅创建不联网的 namespace 和其内部全阻断 nftables 规则。dev.4 已增加固定实例、指定 UID 的隔离 IPC（默认关闭），仍没有 TUN、OpenVPN、业务 DNS 或代理监听；完整数据面仍为下述实施契约。
 
 ## 当前已实现的隔离底座
 
@@ -11,7 +11,7 @@
 - 幂等准备、显式清理、未知归属保留、独立超时回滚和 32 个沙箱预算。
 - 单元故障注入与可显式启用的双 namespace Linux 实验；实际执行结果见 PROGRESS.md。
 
-操作说明见 [LINUX_SANDBOX.md](LINUX_SANDBOX.md)。这些内容不代表后续建连闭环已完成。
+操作说明见 [LINUX_SANDBOX.md](LINUX_SANDBOX.md) 与 [EXECUTOR_IPC.md](EXECUTOR_IPC.md)。这些内容不代表后续建连闭环已完成。
 
 ## 不得绕过的能力闸门
 

@@ -1,6 +1,6 @@
 # 当前 API：控制面开发原型
 
-当前开发版本：`0.1.0-dev.3`，接口保持与 dev.2 兼容。默认基址为 `http://127.0.0.1:3939/api`。所有数据面启动操作目前明确失败，不提供真实代理地址或活动隧道。
+当前开发版本：`0.1.0-dev.4`，接口保持与 dev.2 兼容。默认基址为 `http://127.0.0.1:3939/api`。所有数据面启动操作目前明确失败，不提供真实代理地址或活动隧道。
 
 ## 认证与请求规则
 
@@ -26,6 +26,10 @@
 | POST | `/exits` | 已登录 + CSRF | 201，`exit`、一次性 `password` 与说明 |
 | PATCH | `/exits/{id}` | 已登录 + CSRF | 204，更新名称、国家与策略 |
 | DELETE | `/exits/{id}` | 已登录 + CSRF | 204，删除出口配置，保留事件 |
+| GET | `/executor` | 已登录 | 200，是否显式配置、是否可达及 sandbox-only 能力 |
+| GET | `/exits/{id}/sandbox` | 已登录 + 显式配置 IPC | 200，真实隔离快照；不代表 VPN 在线 |
+| POST | `/exits/{id}/sandbox/prepare` | 已登录 + CSRF + confirm:true + IPC | 200，限定为创建全阻断沙箱 |
+| POST | `/exits/{id}/sandbox/cleanup` | 已登录 + CSRF + confirm:true + IPC | 200，仅回收可证明归属且未占用的沙箱 |
 | GET | `/exits/{id}/network-plan` | 已登录 | 200，只读隔离计划；不创建沙箱或代理 |
 | POST | `/exits/{id}/start` | 已登录 + CSRF | 当前固定返回 409，保存 blocked 状态和原因 |
 | POST | `/exits/{id}/stop` | 已登录 + CSRF | 204，保存 stopped 状态 |
@@ -66,10 +70,10 @@ GET /exits/{id}/network-plan 返回稳定的 instance_id、exit_id、namespace�
 - 必须登录；不存在的出口返回 404。与所有读取接口一样，Host/Origin 检查仍适用。
 - 该接口不执行 OS 命令、不创建文件、不写审计、不改变出口状态；响应不是运行时快照。
 - CLI 的 sandbox plan 使用同样两个 ID 时得到相同资源名和规则。
-- 特权 prepare/cleanup 没有 HTTP 接口，Web 服务不接收任意命令、root 路径或脚本。
-- 删除出口配置不会自动清理通过独立 CLI 手动创建的沙箱，请先按 [Linux 沙箱手册](LINUX_SANDBOX.md) 回收。
+- dev.4 提供默认关闭的独立 sandbox/prepare 与 sandbox/cleanup HTTP 路由，需显式启用 IPC、会话、CSRF 和 {"confirm":true}。纯 network-plan 仍不执行命令。Web 不接收任意命令、root 路径或脚本。
+- 删除配置不自动清理沙箱。启用 IPC 时先读取 absent 才可删除；不可达、未清理等状态返回错误。未启用时仍需手工回收。详见 [IPC 手册](EXECUTOR_IPC.md)。
 
-诊断新增 sandbox_plan_available 和 sandbox_helper_supported；后者只说明当前平台是否为 Linux，不说明 root 能力、依赖可信性、沙箱存在或隔离测试通过。实际沙箱状态只能由独立特权 inspect 查询。
+诊断新增 sandbox_plan_available 和 sandbox_helper_supported；后者只说明当前平台是否为 Linux，不说明 root 能力、依赖可信性、沙箱存在或隔离测试通过。实际沙箱状态由独立执行器核验，可通过直接 inspect 或显式启用的 IPC 查询。GET /executor 的 reachable 不等于隔离已验证；vpn_available 和 proxy_available 保持 false。
 
 ## 节点与统计的含义
 
@@ -86,7 +90,7 @@ GET /exits/{id}/network-plan 返回稳定的 instance_id、exit_id、namespace�
 ```json
 {
   "code": "executor_unavailable",
-  "message": "启动已阻止：网络执行器尚未接入，未建立隧道、未监听代理端口。"
+  "message": "启动已阻止：VPN 数据面尚未接入，未建立隧道、未监听代理端口。"
 }
 ```
 
@@ -104,3 +108,9 @@ GET /exits/{id}/network-plan 返回稳定的 instance_id、exit_id、namespace�
 | 503 | 未构建前端资源 |
 
 此 API 尚处于开发阶段；未来启用数据面时需要增加作业模型、能力协商和运行时状态，不能仅把 start 的 409 改成 200。
+
+## 隔离 IPC 错误与并发
+
+IPC 未启用返回 503 sandbox_ipc_disabled；无法验证/连接返回 503 sandbox_ipc_unavailable；缺少确认返回400。忙碌、归属冲突、未清理和资源预算通常返回409，无法核验/操作失败返回502，执行器报告取消/超时返回504。错误不包含原始子进程输出。
+
+所有变更无自动重试；连接中断后先 GET sandbox 查询实际状态。控制台内的 sandbox prepare/cleanup/delete 共用互锁；不会协调同 UID 另行运行的独立 CLI。正常 start 仍返回409 executor_unavailable。

@@ -74,7 +74,7 @@ func BuildPlan(instanceID, exitID string) (Plan, error) {
 		},
 		Warnings: []string{
 			"这只是隔离沙箱，不是 VPN 连接；不启动 OpenVPN，不监听代理端口。",
-			"计划预览不会执行命令。Linux 的 prepare/cleanup 操作必须由管理员显式传入 --apply。",
+			"计划预览不会执行命令。直接 CLI 的 prepare/cleanup 需 --apply；可选 IPC 需要管理员授权 UID 和调用方显式确认。",
 			"不修改宿主默认路由、全局防火墙、IP forwarding、DNS 或现有服务。",
 			"沙箱阻断校验不等于真实隧道的防泄漏验收；控制台启动闸门仍关闭。",
 		},

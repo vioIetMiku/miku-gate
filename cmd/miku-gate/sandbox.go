@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"mikugate/internal/executoripc"
 	"mikugate/internal/netexec"
 )
 
@@ -27,6 +28,7 @@ func runSandbox(args []string, output io.Writer) error {
 	flags.SetOutput(output)
 	instanceID := flags.String("instance", "", "本实例的持久化 ID（见网络计划预览）")
 	exitID := flags.String("exit", "", "出口的稳定 ID")
+	ipc := flags.Bool("ipc", false, "通过显式授权的本机执行器调用，不在控制台进程提权")
 	apply := flags.Bool("apply", false, "明确执行隔离沙箱变更；不建立 VPN 或代理")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
@@ -48,13 +50,26 @@ func runSandbox(args []string, output io.Writer) error {
 	enc := json.NewEncoder(output)
 	enc.SetIndent("", "  ")
 	if operation == "plan" {
+		if *ipc {
+			return errors.New("plan 是纯预览，不接受 --ipc")
+		}
 		return enc.Encode(plan)
 	}
-	engine, err := netexec.Open(*instanceID, mutating)
-	if err != nil {
-		return err
+	var engine executoripc.Runtime
+	if *ipc {
+		client, err := executoripc.NewClient(*instanceID)
+		if err != nil {
+			return err
+		}
+		engine = client
+	} else {
+		direct, err := netexec.Open(*instanceID, mutating)
+		if err != nil {
+			return err
+		}
+		defer direct.Close()
+		engine = direct
 	}
-	defer engine.Close()
 	signals, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithTimeout(signals, 30*time.Second)

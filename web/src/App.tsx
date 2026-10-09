@@ -656,7 +656,7 @@ export default function App() {
             <span className="status-dot amber" />
             <div>
               <strong>控制台开发版</strong>
-              <p>网络执行器尚未接入</p>
+              <p>VPN 数据面尚未接入</p>
             </div>
           </div>
           <button className="account" onClick={() => void logout()} disabled={actionBusy}>
@@ -789,7 +789,7 @@ export default function App() {
                       {
                         label: '活动隧道',
                         value: overview?.active_count,
-                        note: '执行器尚未接入',
+                        note: 'VPN 数据面未接入',
                         icon: WaveSine,
                       },
                       {
@@ -1218,7 +1218,7 @@ export default function App() {
               Miku Gate <b>·</b> 让连接更有条理
             </span>
             <span>
-              控制台开发版 <b>·</b> 无活动网络执行器
+              控制台开发版 <b>·</b> 无活动 VPN 数据面
             </span>
           </footer>
         </main>
@@ -1323,7 +1323,8 @@ export default function App() {
               将删除 <strong>{deleting.name}</strong> 的入口预留、策略和凭据配置。操作记录会保留。
             </p>
             <p className="muted">
-              独立 CLI 创建的隔离沙箱不会自动回收；请先执行 sandbox cleanup，再删除配置。
+              隔离沙箱不会自动回收；请先显式清理。启用 IPC
+              时会检查实际状态，无法确认已清理则拒绝删除；未启用时请先用独立 CLI 清理。
             </p>
             <div className="modal-actions">
               <button className="button" disabled={actionBusy} onClick={() => setDeleting(null)}>

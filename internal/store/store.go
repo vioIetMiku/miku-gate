@@ -221,7 +221,7 @@ func (s *Store) CreateExit(in domain.ExitInput) (domain.Exit, string, error) {
 			return domain.Exit{}, "", domain.ErrConflict
 		}
 	}
-	e := domain.Exit{ID: id, Name: in.Name, Country: in.Country, Policy: in.Policy, Port: port, Listen: "127.0.0.1", Username: "mg_" + id[:8], Status: "stopped", Reason: "配置已保存；网络执行器尚未接入，未监听代理端口。", CreatedAt: time.Now().UTC()}
+	e := domain.Exit{ID: id, Name: in.Name, Country: in.Country, Policy: in.Policy, Port: port, Listen: "127.0.0.1", Username: "mg_" + id[:8], Status: "stopped", Reason: "配置已保存；未建立 VPN 或监听代理，隔离状态需单独查询。", CreatedAt: time.Now().UTC()}
 	_, err = tx.Exec(`INSERT INTO exits VALUES(?,?,?,?,?,?,?,?,?,?,?)`, e.ID, e.Name, e.Country, e.Policy, e.Port, e.Listen, e.Username, hash, e.Status, e.Reason, e.CreatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return domain.Exit{}, "", constraint(err)

@@ -25,6 +25,7 @@ jobs:
         run: |
           mkdir -p .cache
           go test -c -o .cache/netexec-linux.test ./internal/netexec
+          go test -c -o .cache/executoripc-linux.test ./internal/executoripc
       - name: Record non-sensitive test environment
         shell: bash
         run: |
@@ -56,6 +57,19 @@ jobs:
               /usr/bin/time -v "$PWD/.cache/netexec-linux.test" \
                 -test.v -test.parallel 1 -test.run '^TestLinuxLab' -test.timeout 3m \
             2>&1 | tee .cache/linux-lab-result.txt
+      - name: Run cross-UID IPC and actual HTTP-to-kernel tests under the same budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemd-run --quiet --scope --collect \
+            --unit="miku-gate-ipc-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --property=CPUQuota=100% --property=MemoryMax=512M \
+            --property=MemorySwapMax=0 --property=TasksMax=64 \
+            /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C \
+              MIKU_GATE_NETNS_TEST=1 GOMAXPROCS=1 GOMEMLIMIT=256MiB \
+              /usr/bin/time -v "$PWD/.cache/executoripc-linux.test" \
+                -test.v -test.parallel 1 -test.run '^TestLinuxIPC' -test.timeout 3m \
+            2>&1 | tee .cache/linux-ipc-result.txt
       - name: Save environment and kernel-test evidence only
         if: always()
         uses: actions/upload-artifact@v4
@@ -64,5 +78,6 @@ jobs:
           path: |
             .cache/linux-lab-environment.txt
             .cache/linux-lab-result.txt
+            .cache/linux-ipc-result.txt
           if-no-files-found: warn
           retention-days: 14

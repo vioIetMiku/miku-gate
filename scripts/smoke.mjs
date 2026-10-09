@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { request as httpRequest } from 'node:http';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,6 +47,12 @@ try {
   check(networkPlan.proxy_enabled || networkPlan.tunnel_enabled || networkPlan.host_routes_changed || networkPlan.host_firewall_changed, false, 'plan has no data path or host routing changes');
   const planArgs = [`--instance=${networkPlan.instance_id}`, `--exit=${id}`];
   const cliPlan = JSON.parse(execFileSync(binary, ['sandbox', 'plan', ...planArgs], { encoding: 'utf8', windowsHide: true }));
+  const instanceID = execFileSync(binary, ['instance', '--data', data], { encoding: 'utf8', windowsHide: true }).trim();
+  check(instanceID, networkPlan.instance_id, 'instance CLI matches the authenticated plan');
+  const missingData = join(data, 'missing-instance');
+  const missingInstance = spawnSync(binary, ['instance', '--data', missingData], { encoding: 'utf8', windowsHide: true });
+  check(missingInstance.status, 1, 'instance lookup does not silently initialize missing data');
+  check(existsSync(missingData), false, 'failed instance lookup creates no directory');
   check(cliPlan.namespace, networkPlan.namespace, 'CLI and web use the same namespace identity');
   check(cliPlan.nft_ruleset, networkPlan.nft_ruleset, 'CLI and web use the same guard policy');
   const denied = spawnSync(binary, ['sandbox', 'prepare', ...planArgs], { encoding: 'utf8', windowsHide: true });
@@ -58,6 +64,10 @@ try {
   check((await request('/api/exits').then(r => r.json()))[0].port, port, 'editing must preserve entrance port');
   check((await request(`/api/exits/${id}/credentials`, 'POST')).status, 200, 'credential rotation');
   check((await request(`/api/exits/${id}/stop`, 'POST')).status, 204, 'stop configuration');
+  check((await request('/api/executor').then(r => r.json())).configured, false, 'sandbox IPC is opt-in');
+  check((await request(`/api/exits/${id}/sandbox`)).status, 503, 'no implicit privileged sandbox inspection');
+  check((await request(`/api/exits/${id}/sandbox/prepare`, 'POST', { confirm: true })).status, 503, 'no implicit privileged preparation');
+  check((await request(`/api/exits/${id}/sandbox/prepare`, 'POST', {})).status, 400, 'sandbox action requires confirmation');
   check((await request('/api/diagnostics').then(r => r.json())).executor_available, false, 'diagnostics are honest');
   check((await request(`/api/exits/${id}`, 'DELETE')).status, 204, 'delete isolated test configuration');
   check((await request('/api/exits').then(r => r.json())).length, 0, 'configuration deleted');

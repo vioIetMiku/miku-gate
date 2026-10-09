@@ -8,7 +8,7 @@
 
 > 升级提示：dev.6 数据库 schema 升为 3，上游凭据用独立的数据库同名 `.key` 文件加密。升级前停止旧服务并备份完整数据目录（数据库、WAL及密钥）；旧版本不能直接打开升级后的数据库。丢失密钥时不重新生成冒充恢复。
 
-已发布压缩包：[v0.1.0-dev.2 预发布](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.2)。main 分支继续开发，不替换该标签或已发布资产。
+已发布压缩包：[v0.1.0-dev.6 代理上游预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.6)。提供Linux amd64/arm64、Windows amd64及校验文件；[实际VPS/发行验收](docs/validation/2026-10-10-proxy-runtime.md)。旧dev.2标签与资产保留，main继续完整网关开发。
 
 ## 如何使用本机代理上游
 

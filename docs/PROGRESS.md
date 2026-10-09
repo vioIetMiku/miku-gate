@@ -1,10 +1,10 @@
 # 开发进度与验证记录
 
-更新：2026-10-10。当前代码版本：0.1.0-dev.6（开发中）；已发布快照：v0.1.0-dev.2。**当前支持本机认证代理上游；完整OpenVPN/Xray/sing-box/域名安装目标仍未完成。**
+更新：2026-10-10。当前代码版本：0.1.0-dev.6（开发中）；已发布快照：v0.1.0-dev.6（dev.2保留）。**当前支持本机认证代理上游；完整OpenVPN/Xray/sing-box/域名安装目标仍未完成。**
 
 ## 完整目标与真实代理运行时开发
 
-完整终态见 [DELIVERY_PLAN.md](DELIVERY_PLAN.md)，不以私有实验或此阶段组件替代整个项目。dev.6已加入加密的代理上游配置、SOCKS5/HTTP/HTTPS驱动、经同一上游的DoH与数字IP拨号，以及监听停止/凭据边界回归。真实私有TCP/TLS测试通过；运行时、API与界面已接线。本机完整Go回归、48项真实HTTP/CLI smoke、9项前端单元及Chrome表单/失败/移动旅程通过，协议/运行时各有独立正反对照。目标VPS新路径与dev.6发行仍待完成；OpenVPN start仍被阻止。详见 [UPSTREAM_PROXY.md](UPSTREAM_PROXY.md)。
+完整终态见 [DELIVERY_PLAN.md](DELIVERY_PLAN.md)，不以私有实验或此阶段组件替代整个项目。dev.6已加入加密的代理上游配置、SOCKS5/HTTP/HTTPS驱动、经同一上游的DoH与数字IP拨号，以及监听停止/凭据边界回归。真实私有TCP/TLS测试通过；运行时、API与界面已接线。本机完整Go回归、48项真实HTTP/CLI smoke、9项前端单元及Chrome表单/失败/移动旅程通过，协议/运行时各有独立正反对照。正式CLI默认工厂现已在目标VPS通过真实TLS/DoH/代理传输、上游断开、停止和崩溃重启测试；dev.6三平台压缩包已发布，见[验收记录](validation/2026-10-10-proxy-runtime.md)。生产OpenVPN start仍被阻止。详见 [UPSTREAM_PROXY.md](UPSTREAM_PROXY.md)。
 
 ## 目标 VPS 受控验收已完成
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-dev.6 — 2026-10-10 · 开发中，未发布
+## 0.1.0-dev.6 — 2026-10-10 · 已发布预览
 
 - 登记完整交付矩阵：VPS安装确认、域名/IP、既有面板和Xray/sing-box、TLS/REALITY入口、真实出口与质量信息均保留。
 - 加入SOCKS5、HTTP CONNECT、HTTPS CONNECT上游驱动；业务DNS通过同一上游访问固定DoH服务，再对全部候选IP执行公网策略，不使用宿主业务解析或直连后备。
@@ -9,7 +9,8 @@
 - 代理监听生命周期等待已有连接退出，保留TCP半关闭语义，普通HTTP请求不向目标透传后续代理认证。
 - 已接入真实运行时、启动/停止/健康探测API与上游设置界面；验证成功才监听，失败不直连，运行中配置/凭据/删除互锁。
 - 加入单数据目录控制锁和只读instance查询，停止等待已接受连接退出；状态不从保存配置伪造。
-- 本机Go回归、48项HTTP/CLI smoke、9项前端测试和真实Chrome旅程通过。OpenVPN/Xray/sing-box/域名/安装仍待后续；不替换dev.2资产。
+- 本机Go回归、48项HTTP/CLI smoke、9项前端测试和真实Chrome旅程通过；正式CLI默认工厂在VPS完成真实业务TLS、DoH、上游失效和崩溃恢复，单核/384MiB限额、宿主不变。
+- 已发布三平台归档和SHA256SUMS，Linux amd64二进制与VPS验收一致；Windows解压后smoke通过，arm64未真机执行。OpenVPN/Xray/sing-box/域名/安装仍待后续；不替换dev.2资产。
 
 ## 0.1.0-dev.5 — 2026-10-09 · 开发中
 

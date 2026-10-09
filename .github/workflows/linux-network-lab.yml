@@ -53,7 +53,7 @@ jobs:
             --property=TasksMax=64 \
             /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C \
               MIKU_GATE_NETNS_TEST=1 MIKU_GATE_LAB_BUDGET=1 \
-              GOMAXPROCS=1 GOMEMLIMIT=256MiB \
+              MIKU_GATE_LAB_EXEC_ROOT=/usr/local/lib/miku-gate-lab-exec GOMAXPROCS=1 GOMEMLIMIT=256MiB \
               /usr/bin/time -v "$PWD/.cache/netexec-linux.test" \
                 -test.v -test.parallel 1 -test.run '^TestLinuxLab' -test.timeout 3m \
             2>&1 | tee .cache/linux-lab-result.txt
@@ -66,7 +66,7 @@ jobs:
             --property=CPUQuota=100% --property=MemoryMax=512M \
             --property=MemorySwapMax=0 --property=TasksMax=64 \
             /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C \
-              MIKU_GATE_NETNS_TEST=1 GOMAXPROCS=1 GOMEMLIMIT=256MiB \
+              MIKU_GATE_NETNS_TEST=1 MIKU_GATE_LAB_EXEC_ROOT=/usr/local/lib/miku-gate-lab-exec GOMAXPROCS=1 GOMEMLIMIT=256MiB \
               /usr/bin/time -v "$PWD/.cache/executoripc-linux.test" \
                 -test.v -test.parallel 1 -test.run '^TestLinuxIPC' -test.timeout 3m \
             2>&1 | tee .cache/linux-ipc-result.txt

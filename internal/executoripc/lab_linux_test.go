@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"mikugate/internal/labexec"
 	"mikugate/internal/netexec"
 )
 
@@ -120,47 +121,6 @@ func startLabDaemon(t *testing.T, instance string) (func(), string) {
 	t.Cleanup(stop)
 	return stop, socket
 }
-func copyHelper(t *testing.T, instance string) string {
-	t.Helper()
-	root := "/run/miku-gate-ipc-tests"
-	if err := createDirectory(root, 0755); err != nil {
-		t.Fatal(err)
-	}
-	directory := filepath.Join(root, instance)
-	if err := os.Mkdir(directory, 0755); err != nil {
-		t.Fatal(err)
-	}
-	executable, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	source, err := os.Open(executable)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer source.Close()
-	path := filepath.Join(directory, "ipc-client.test")
-	target, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = io.Copy(target, source); err != nil {
-		target.Close()
-		t.Fatal(err)
-	}
-	if err = target.Close(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := os.Remove(path); err != nil {
-			t.Error(err)
-		}
-		if err := os.Remove(directory); err != nil {
-			t.Error(err)
-		}
-	})
-	return path
-}
 func helperCommand(t *testing.T, binary, instance, mode string, uid uint32) *exec.Cmd {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 40*time.Second)
@@ -186,7 +146,7 @@ func runHelper(t *testing.T, binary, instance, mode string, uid uint32) {
 func TestLinuxIPCPeerCredentialsLifecycle(t *testing.T) {
 	instance := requireLab(t)
 	t.Cleanup(func() { removeEmptyLease(t, instance); removeEmptyEngine(t, instance) })
-	binary := copyHelper(t, instance)
+	binary := labexec.CopySelf(t)
 	stop, socket := startLabDaemon(t, instance)
 	identity, err := checkSocket(socket)
 	if err != nil || identity.Inode == 0 {
@@ -261,7 +221,7 @@ func TestLinuxIPCStaleSocketOwnership(t *testing.T) {
 }
 func TestLinuxIPCClientRejectsNonRootPeer(t *testing.T) {
 	instance := requireLab(t)
-	binary := copyHelper(t, instance)
+	binary := labexec.CopySelf(t)
 	socket, _ := SocketPath(instance)
 	directory := filepath.Dir(socket)
 	if err := createDirectory(SocketRoot, 0755); err != nil {
@@ -274,7 +234,7 @@ func TestLinuxIPCClientRejectsNonRootPeer(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := os.Remove(socket); err != nil {
+		if err := os.Remove(socket); err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Error(err)
 		}
 		if err := os.Remove(directory); err != nil {

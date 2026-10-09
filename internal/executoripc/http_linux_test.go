@@ -24,6 +24,7 @@ import (
 
 	"mikugate/internal/executoripc"
 	"mikugate/internal/httpapi"
+	"mikugate/internal/labexec"
 	"mikugate/internal/netexec"
 	"mikugate/internal/store"
 )
@@ -56,26 +57,6 @@ func TestLinuxIPCHTTPControlPlane(t *testing.T) {
 	if err := os.Chown(data, 65534, 65534); err != nil {
 		t.Fatal(err)
 	}
-	executable, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	source, err := os.Open(executable)
-	if err != nil {
-		t.Fatal(err)
-	}
-	binary := filepath.Join(directory, "http-client.test")
-	dest, err := os.OpenFile(binary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0755)
-	if err != nil {
-		source.Close()
-		t.Fatal(err)
-	}
-	_, copyErr := io.Copy(dest, source)
-	source.Close()
-	dest.Close()
-	if copyErr != nil {
-		t.Fatal(copyErr)
-	}
 	t.Cleanup(func() {
 		// Remove only these explicitly test-created files; never recursively delete
 		// an unknown runtime directory or use a wildcard on namespace objects.
@@ -87,13 +68,12 @@ func TestLinuxIPCHTTPControlPlane(t *testing.T) {
 		if err := os.Remove(data); err != nil {
 			t.Error(err)
 		}
-		if err := os.Remove(binary); err != nil {
-			t.Error(err)
-		}
 		if err := os.Remove(directory); err != nil {
 			t.Error(err)
 		}
 	})
+	binary := labexec.CopySelf(t)
+	var err error
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binary, "-test.run=^TestHTTPIPCChild$", "-test.v", "-test.timeout=45s")

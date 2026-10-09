@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/netip"
 	"os"
 	"os/exec"
@@ -20,6 +19,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"mikugate/internal/labexec"
 )
 
 const transportServer = "198.18.48.1"
@@ -35,12 +36,12 @@ type labNamespace struct {
 	identity NamespaceID
 }
 type vpnLab struct {
-	t                                   *testing.T
-	ctx                                 context.Context
-	directory, binary, ip, nft, nsenter string
-	client, server                      labNamespace
-	table                               string
-	host                                NamespaceID
+	t                        *testing.T
+	ctx                      context.Context
+	binary, ip, nft, nsenter string
+	client, server           labNamespace
+	table                    string
+	host                     NamespaceID
 }
 
 func newVPNLab(t *testing.T) *vpnLab {
@@ -59,17 +60,9 @@ func newVPNLab(t *testing.T) *vpnLab {
 		t.Fatal(err)
 	}
 	id := hex.EncodeToString(nonce[:])
-	root := "/run/miku-gate-openvpn-tests"
-	if err := os.Mkdir(root, 0700); err != nil && !errors.Is(err, os.ErrExist) {
-		t.Fatal(err)
-	}
-	directory := filepath.Join(root, id)
-	if err := os.Mkdir(directory, 0700); err != nil {
-		t.Fatal(err)
-	}
 	ctx, cancel := context.WithTimeout(t.Context(), 75*time.Second)
 	t.Cleanup(cancel)
-	l := &vpnLab{t: t, ctx: ctx, directory: directory, table: "mgv_" + id[:12]}
+	l := &vpnLab{t: t, ctx: ctx, table: "mgv_" + id[:12]}
 	var err error
 	if l.host, err = CurrentNamespace(); err != nil {
 		t.Fatal(err)
@@ -83,34 +76,7 @@ func newVPNLab(t *testing.T) *vpnLab {
 	if l.nsenter, err = trustedTool("nsenter"); err != nil {
 		t.Fatal(err)
 	}
-	executable, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	source, err := os.Open(executable)
-	if err != nil {
-		t.Fatal(err)
-	}
-	l.binary = filepath.Join(directory, "worker.test")
-	destination, err := os.OpenFile(l.binary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0755)
-	if err != nil {
-		source.Close()
-		t.Fatal(err)
-	}
-	_, copyErr := io.Copy(destination, source)
-	source.Close()
-	destination.Close()
-	if copyErr != nil {
-		t.Fatal(copyErr)
-	}
-	t.Cleanup(func() {
-		if err := os.Remove(l.binary); err != nil {
-			t.Error(err)
-		}
-		if err := os.Remove(directory); err != nil {
-			t.Error(err)
-		}
-	})
+	l.binary = labexec.CopySelf(t)
 	create := func(name string) labNamespace {
 		l.hostCommand(l.ip, "netns", "add", name)
 		fd, err := unix.Open(filepath.Join("/run/netns", name), unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)

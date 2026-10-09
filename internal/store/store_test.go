@@ -139,7 +139,7 @@ func TestInstanceIdentityMigrationAndPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Reconstruct the v1 schema: the only v2 addition is metadata + version 2.
-	if _, err = s.db.Exec("DROP TABLE metadata; DELETE FROM schema_version WHERE version=2; PRAGMA user_version=1"); err != nil {
+	if _, err = s.db.Exec("DROP TABLE metadata; DELETE FROM schema_version WHERE version>=2; PRAGMA user_version=1"); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -152,7 +152,7 @@ func TestInstanceIdentityMigrationAndPersistence(t *testing.T) {
 		t.Fatal("missing stable instance identity", err)
 	}
 	var version int
-	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 2 {
+	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
 		t.Fatal("migration not committed", err)
 	}
 	exits, err := s.ListExits()

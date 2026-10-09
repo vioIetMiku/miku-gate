@@ -6,9 +6,9 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
-	"strings"
 	"time"
 
+	"mikugate/internal/dnswire"
 	"mikugate/internal/egress"
 )
 
@@ -56,22 +56,7 @@ func newWorkerDialer(options DialOptions, policy func(string) error) (*Dialer, e
 	}
 	return d, nil
 }
-func validHostname(host string) bool {
-	if len(host) == 0 || len(host) > 253 {
-		return false
-	}
-	for _, label := range strings.Split(strings.TrimSuffix(host, "."), ".") {
-		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return false
-		}
-		for _, c := range label {
-			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
-				return false
-			}
-		}
-	}
-	return true
-}
+func validHostname(host string) bool { return dnswire.ValidHostname(host) }
 
 // DialContext satisfies the existing proxy dialer API, but is not wired to an
 // entrance listener. DNS results are checked as a set before any TCP dial, and

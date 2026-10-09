@@ -1,12 +1,12 @@
 # Miku Gate
 
-**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.5`。**
+**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.6`。**
 
 > 当前可运行的是控制面开发原型，不是可用于上网的 VPN 网关。
 >
 > 已有真实的账号认证、SQLite 持久化、出口配置 API 和 React 管理界面；已加入实验性的独立 Linux 全阻断沙箱助手，但尚未接通 VPN 数据面，因此没有活动隧道、没有代理监听，也没有经过验证的隧道断线防泄漏保护。点击“启动”会明确返回 `409 executor_unavailable`，不会伪造连接成功。
 
-> 升级提示：dev.2 增加稳定实例 ID，数据库 schema 升为 2。升级前停止旧服务并备份数据目录；dev.1 不能直接读取升级后的数据库。
+> 升级提示：dev.6 数据库 schema 升为 3，上游凭据用独立的数据库同名 `.key` 文件加密。升级前停止旧服务并备份完整数据目录（数据库、WAL及密钥）；旧版本不能直接打开升级后的数据库。丢失密钥时不重新生成冒充恢复。
 
 已发布压缩包：[v0.1.0-dev.2 预发布](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.2)。main 分支继续开发，不替换该标签或已发布资产。
 
@@ -22,7 +22,7 @@
 - 系统环境只读诊断；深浅主题、中文界面、桌面与移动布局。
 - 出口隔离计划预览；稳定的实例 / 出口资源标识；计划不执行系统命令。
 - 独立 Linux sandbox plan / inspect / prepare / cleanup 命令：仅全阻断隔离实验，显式 --apply、归属校验和失败回滚；dev.2 首轮与 dev.3 低资源边界实验已通过临时 Ubuntu runner 验证；该早期记录不是VPN/VPS验收，见 [验证记录](docs/validation/2026-10-09-linux-quarantine.md)；后续目标VPS受控复核见 [独立记录](docs/validation/2026-10-09-vps-lab.md)。
-- 独立的 HTTP CONNECT / HTTP 转发 / SOCKS5 TCP 协议库及测试，**尚未连接到任何真实监听器**。
+- 独立的 HTTP CONNECT / HTTP 转发 / SOCKS5 TCP 协议库及测试，已在私有测试监听上接通HTTP/SOCKS/HTTPS上游与隧道外DoH，**生产Web启动路径仍待接线**。
 
 ## 尚未实现
 
@@ -179,3 +179,5 @@ scripts/            构建、真实 HTTP smoke 与浏览器测试辅助
 - [依赖与来源说明](docs/DEPENDENCIES.md)
 
 当前实现为独立编写，没有把三个参考仓库的源码直接拼接进来。分发许可证尚未选定，不应将此开发快照当成已经完成许可审查的对外发行版。
+
+完整终态要求与验收矩阵见 [DELIVERY_PLAN.md](docs/DELIVERY_PLAN.md)。正在开发的代理上游与密钥边界见 [UPSTREAM_PROXY.md](docs/UPSTREAM_PROXY.md)。

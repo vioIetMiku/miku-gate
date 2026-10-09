@@ -9,15 +9,22 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
 
 	"mikugate/internal/domain"
+	"mikugate/internal/secretstore"
 	"mikugate/internal/security"
 )
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db      *sql.DB
+	path    string
+	vaultMu sync.Mutex
+	vault   *secretstore.Vault
+}
 
 func Open(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -39,10 +46,21 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	s := &Store{db: db}
+	s := &Store{db: db, path: path}
 	if err = s.migrate(); err != nil {
 		db.Close()
 		return nil, err
+	}
+	var protected int
+	if err := db.QueryRow("SELECT count(*) FROM upstreams").Scan(&protected); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if protected > 0 {
+		if _, err := s.secretVault(); err != nil {
+			db.Close()
+			return nil, err
+		}
 	}
 	return s, nil
 }
@@ -52,8 +70,8 @@ func (s *Store) migrate() error {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 2 {
-		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 2，拒绝降级打开", version)
+	if version > 3 {
+		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 3，拒绝降级打开", version)
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -64,13 +82,15 @@ func (s *Store) migrate() error {
  CREATE TABLE IF NOT EXISTS schema_version(version INTEGER PRIMARY KEY);
  INSERT OR IGNORE INTO schema_version VALUES(1);
  INSERT OR IGNORE INTO schema_version VALUES(2);
+ INSERT OR IGNORE INTO schema_version VALUES(3);
  CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS accounts(username TEXT PRIMARY KEY,password_hash TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,username TEXT NOT NULL REFERENCES accounts(username),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS exits(id TEXT PRIMARY KEY,name TEXT NOT NULL,country TEXT NOT NULL,policy TEXT NOT NULL,port INTEGER NOT NULL UNIQUE,listen TEXT NOT NULL,username TEXT NOT NULL,password_hash TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS nodes(id TEXT PRIMARY KEY,hostname TEXT NOT NULL,ip TEXT NOT NULL,country TEXT NOT NULL,country_name TEXT NOT NULL,ping INTEGER NOT NULL,speed INTEGER NOT NULL,sessions INTEGER NOT NULL,source TEXT NOT NULL,fetched_at TEXT NOT NULL,config TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,level TEXT NOT NULL,kind TEXT NOT NULL,message TEXT NOT NULL,exit_id TEXT NOT NULL,created_at TEXT NOT NULL);
- PRAGMA user_version=2;
+ CREATE TABLE IF NOT EXISTS upstreams(exit_id TEXT PRIMARY KEY REFERENCES exits(id) ON DELETE CASCADE,kind TEXT NOT NULL,sealed BLOB NOT NULL,updated_at TEXT NOT NULL);
+ PRAGMA user_version=3;
  `)
 	if err != nil {
 		return err

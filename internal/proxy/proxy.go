@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,6 +29,12 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	if s.Dial == nil || s.Authenticate == nil {
 		return errors.New("verified dialer and authentication are required")
 	}
+	if ln == nil {
+		return errors.New("listener is required")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	var workers sync.WaitGroup
+	defer func() { cancel(); ln.Close(); workers.Wait() }()
 	limit := s.MaxConnections
 	if limit < 1 {
 		limit = 128
@@ -45,7 +52,8 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		}
 		select {
 		case slots <- struct{}{}:
-			go func() { defer func() { <-slots }(); s.Handle(ctx, conn) }()
+			workers.Add(1)
+			go func() { defer workers.Done(); defer func() { <-slots }(); s.Handle(ctx, conn) }()
 		default:
 			conn.Close()
 		}
@@ -221,6 +229,8 @@ func (s *Server) http(ctx context.Context, c net.Conn, r *bufio.Reader) {
 		return
 	}
 	defer up.Close()
+	stopUp := context.AfterFunc(ctx, func() { up.Close() })
+	defer stopUp()
 	if req.Method == http.MethodConnect {
 		io.WriteString(c, "HTTP/1.1 200 Connection Established\r\n\r\n")
 		relay(ctx, c, reqReader, up)
@@ -233,25 +243,61 @@ func (s *Server) http(ctx context.Context, c net.Conn, r *bufio.Reader) {
 	req.RequestURI = ""
 	req.URL.Scheme = ""
 	req.URL.Host = ""
+	c.SetDeadline(time.Now().Add(5 * time.Minute))
 	up.SetDeadline(time.Now().Add(5 * time.Minute))
 	if err = req.Write(up); err != nil {
 		return
 	}
-	relay(ctx, c, r, up)
+	// One ordinary HTTP request per authenticated connection. Do not forward
+	// pipelined bytes (and a second Proxy-Authorization header) to the target.
+	_, _ = io.Copy(c, up)
 }
 func httpError(c net.Conn, status int, text string) {
 	fmt.Fprintf(c, "HTTP/1.1 %d %s\r\nConnection: close\r\nContent-Length: 0\r\n\r\n", status, text)
 }
+
+type activityReader struct {
+	io.Reader
+	touch func()
+}
+
+func (r activityReader) Read(p []byte) (int, error) { r.touch(); return r.Reader.Read(p) }
+
+type activityWriter struct {
+	io.Writer
+	touch func()
+}
+
+func (w activityWriter) Write(p []byte) (int, error) { w.touch(); return w.Writer.Write(p) }
 func relay(ctx context.Context, client net.Conn, reader io.Reader, up net.Conn) {
-	client.SetDeadline(time.Now().Add(5 * time.Minute))
-	up.SetDeadline(time.Now().Add(5 * time.Minute))
+	touch := func() {
+		deadline := time.Now().Add(5 * time.Minute)
+		client.SetDeadline(deadline)
+		up.SetDeadline(deadline)
+	}
+	touch()
 	stop := context.AfterFunc(ctx, func() { client.Close(); up.Close() })
 	defer stop()
 	done := make(chan struct{}, 2)
-	go func() { io.Copy(up, reader); done <- struct{}{} }()
-	go func() { io.Copy(client, up); done <- struct{}{} }()
+	copyStream := func(dst net.Conn, src io.Reader) {
+		_, err := io.CopyBuffer(activityWriter{Writer: dst, touch: touch}, activityReader{Reader: src, touch: touch}, make([]byte, 32*1024))
+		if err == nil {
+			if half, ok := dst.(interface{ CloseWrite() error }); ok {
+				err = half.CloseWrite()
+			} else {
+				err = io.ErrClosedPipe
+			}
+		}
+		if err != nil {
+			client.Close()
+			up.Close()
+		}
+		done <- struct{}{}
+	}
+	go copyStream(up, reader)
+	go copyStream(client, up)
+	<-done
 	<-done
 	client.Close()
 	up.Close()
-	<-done
 }

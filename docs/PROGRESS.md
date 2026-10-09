@@ -4,7 +4,7 @@
 
 ## dev.7：真实VPN Gate格式兼容与节点检查
 
-官方当前100条配置均为AES-128-CBC/HMAC-SHA1；3个样本使用强ISRG服务器CA和精确固定的公开共享客户端身份，旧严格解析器无法支持。已新增显式兼容选项、预期服务器名称必需、共享身份指纹例外和只读节点配置检查；不放宽默认AEAD、TLS服务器验证或脚本/压缩限制。详见 [兼容政策](VPNGATE_COMPATIBILITY.md)。新增CBC/TLS/DNS/断线真实实验尚待本轮执行结果，公共VPN连接和生产worker仍未完成，dev.6资产不替换。
+官方当前100条配置均为AES-128-CBC/HMAC-SHA1；3个样本使用强ISRG服务器CA和精确固定的公开共享客户端身份，旧严格解析器无法支持。已新增显式兼容选项、预期服务器名称必需、共享身份指纹例外和只读节点配置检查；不放宽默认AEAD、TLS服务器验证或脚本/压缩限制。详见 [兼容政策](VPNGATE_COMPATIBILITY.md)。三个官方缓存样本的静态识别，以及AEAD/CBC两条原生OpenVPN/TLS/DNS/断线旅程已在目标VPS通过；单核/384MiB，8.691秒、cgroup峰值28.12MiB，宿主不变。详见[实测证据](validation/2026-10-10-vpngate-compatibility.md)。旧共享身份仍未用于公共服务器握手，公共VPN连接和生产worker未完成，dev.6资产不替换。
 
 ## 完整目标与真实代理运行时开发
 

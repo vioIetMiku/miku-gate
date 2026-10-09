@@ -21,7 +21,7 @@
 - 节点源失败保留原缓存，候选不被自动标记为已连接、住宅或可信。
 - 系统环境只读诊断；深浅主题、中文界面、桌面与移动布局。
 - 出口隔离计划预览；稳定的实例 / 出口资源标识；计划不执行系统命令。
-- 独立 Linux sandbox plan / inspect / prepare / cleanup 命令：仅全阻断隔离实验，显式 --apply、归属校验和失败回滚；dev.2 首轮与 dev.3 低资源边界实验已通过临时 Ubuntu runner 验证；不是 VPN 或 VPS 验收，见 [验证记录](docs/validation/2026-10-09-linux-quarantine.md)。
+- 独立 Linux sandbox plan / inspect / prepare / cleanup 命令：仅全阻断隔离实验，显式 --apply、归属校验和失败回滚；dev.2 首轮与 dev.3 低资源边界实验已通过临时 Ubuntu runner 验证；该早期记录不是VPN/VPS验收，见 [验证记录](docs/validation/2026-10-09-linux-quarantine.md)；后续目标VPS受控复核见 [独立记录](docs/validation/2026-10-09-vps-lab.md)。
 - 独立的 HTTP CONNECT / HTTP 转发 / SOCKS5 TCP 协议库及测试，**尚未连接到任何真实监听器**。
 
 ## 尚未实现
@@ -126,7 +126,7 @@ npm --prefix web run test:e2e
 
 ## 受控 OpenVPN 实验
 
-dev.5 新增规范化配置、接口绑定DNS/TCP拨号器和全隔离的真OpenVPN测试拓扑，尚未接入Web启动或公网代理监听。见 [受控实验手册](docs/CONTROLLED_OPENVPN.md)。真实mTLS、DNS/TCP和断线阻断已通过 [受控Linux验收](docs/validation/2026-10-09-controlled-openvpn.md)，不是实际VPS或公网代理验证。
+dev.5 新增规范化配置、接口绑定DNS/TCP拨号器和全隔离的真OpenVPN测试拓扑，尚未接入Web启动或公网代理监听。见 [受控实验手册](docs/CONTROLLED_OPENVPN.md)。真实mTLS、DNS/TCP和断线阻断已通过 [受控Linux验收](docs/validation/2026-10-09-controlled-openvpn.md)；随后在用户授权VPS以单核/384MiB限额完成 [三组受控复核](docs/validation/2026-10-09-vps-lab.md)，并修复`/run` noexec兼容问题。两者都不是生产公网代理验收，操作配方见 [VPS实测手册](docs/VPS_LAB.md)。
 
 ## 可选的本机隔离 IPC
 

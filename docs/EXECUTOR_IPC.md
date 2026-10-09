@@ -100,3 +100,5 @@ GOMEMLIMIT 是 GC 软目标，不是内存硬上限。1GB VPS 上仍需验证整
 5. **真实普通用户 HTTP 控制面 → 本机 IPC → root → 内核**完整流程，含 CSRF、确认、删除互锁及 VPN 启动仍被阻止。
 
 CI 的 65534 只是临时测试 UID，不创建真实账号或登录令牌；环境是临时 Ubuntu runner，不是用户 VPS。真实测试的结果和提交 SHA 必须单独记录，不能用本机交叉编译替代。
+
+目标VPS后续也已实际完成跨UID及HTTP链路复核，来源456e863；"/run" noexec问题通过分离测试可执行目录解决，未更改挂载策略。见 [VPS验收记录](validation/2026-10-09-vps-lab.md) 和 [操作配方](VPS_LAB.md)。这不改变本协议sandbox-only的范围。

@@ -1,8 +1,8 @@
 # 受控 OpenVPN 最小闭环
 
-> dev.5 的开发实验，不是可直接对外使用的网关。新代码尚未接入 Web 的 start、隔离 IPC 或真实入口监听。对应Linux实测已在提交04292ec完成，见 [验收记录](validation/2026-10-09-controlled-openvpn.md)。编译成功不等于实验通过，也不代表用户VPS或公共节点已验收。
+> dev.5 的开发实验，不是可直接对外使用的网关。新代码尚未接入 Web 的 start、隔离 IPC 或真实入口监听。对应Linux实测已在提交04292ec完成，见 [验收记录](validation/2026-10-09-controlled-openvpn.md)。后续目标VPS三组受控复核已在提交456e863通过，见 [VPS独立记录](validation/2026-10-09-vps-lab.md)；两者都不代表生产代理或公共节点已验收。
 >
-> 本轮仅在临时 Linux 实验环境使用自己生成的证书和 OpenVPN 服务，不连接公共志愿者节点或用户 VPS，不改宿主默认路由、防火墙、DNS或现有服务。
+> 最初在临时Linux环境验证，随后在用户授权VPS复核；始终使用自己生成的证书和私有OpenVPN服务，不连接公共志愿者节点，不改宿主默认路由、防火墙、DNS或现有服务。
 
 ## 本轮构件
 
@@ -69,12 +69,12 @@ sudo systemd-run --quiet --scope --collect \
   --property=CPUQuota=100% --property=MemoryMax=512M \
   --property=MemorySwapMax=0 --property=TasksMax=64 \
   /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C \
-    MIKU_GATE_OPENVPN_TEST=1 GOMAXPROCS=1 GOMEMLIMIT=256MiB \
+    MIKU_GATE_OPENVPN_TEST=1 MIKU_GATE_LAB_EXEC_ROOT=/usr/local/lib/miku-gate-lab-exec GOMAXPROCS=1 GOMEMLIMIT=256MiB \
     /usr/bin/time -v "$PWD/.cache/openvpn-linux.test" \
       -test.v -test.parallel 1 -test.run '^TestLinuxOpenVPN' -test.timeout 3m
 ```
 
-普通go test不运行此root实验。GitHub手动工作流Controlled OpenVPN lab (manual)执行同样步骤，只保存环境和断言结果，证书、配置memfd和测试数据库不作为产物上传。OpenVPN握手进程此时仍在受控测试中以root运行；生产接线前还要完成最小权限、目录/进程隔离和生命周期协调，不能直接拿此测试启动器部署公共节点。
+`/run`为noexec时保留挂载策略，把测试程序放入上述受校验的固定可执行根；具体权限与清理规则见 [VPS_LAB.md](VPS_LAB.md)。普通go test不运行此root实验。GitHub手动工作流Controlled OpenVPN lab (manual)执行同样步骤，只保存环境和断言结果，证书、配置memfd和测试数据库不作为产物上传。OpenVPN握手进程此时仍在受控测试中以root运行；生产接线前还要完成最小权限、目录/进程隔离和生命周期协调，不能直接拿此测试启动器部署公共节点。
 
 ## 后续接线条件
 

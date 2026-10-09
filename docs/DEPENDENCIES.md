@@ -18,6 +18,7 @@ Miku Gate 的当前控制面、数据模型、接口、代理前端和测试为�
 | --- | --- |
 | SQLite | `modernc.org/sqlite`，纯 Go 驱动，避免本机 C 编译器依赖 |
 | Linux 系统调用 | `golang.org/x/sys/unix`（既有锁定依赖，现直接用于能力、锁和 namespace 文件校验） |
+| 指定resolver的DNS报文解析 | `golang.org/x/net/dns/dnsmessage`，v0.60.0；不调用宿主解析器 |
 | 密码哈希 | `golang.org/x/crypto/argon2` |
 | Web UI | React、React DOM |
 | 图标 | `@phosphor-icons/react` |
@@ -51,3 +52,9 @@ Miku Gate 的当前控制面、数据模型、接口、代理前端和测试为�
 - 以上均为忽略项，不应提交到 Git、上传日志平台或作为普通截图附件分享。
 
 `.gitignore` 不是权限边界，不能保护取得宿主文件访问权限的人。外部分发前还需审查源码/二进制依赖许可证并提供必要 notices。
+
+## dev.5 依赖与实验程序
+
+新增直接使用golang.org/x/net v0.60.0。官方Go模块源连接超时后，按批准使用goproxy.cn获取，sum.golang.org校验保留；go.mod/go.sum固定版本与哈希。仅使用其中的DNS报文编解码器，不引入常驻服务。
+
+受控实验使用目标Ubuntu发行版提供的OpenVPN 2.6，未把OpenVPN二进制捆绑进已发布压缩包。TLS身份在运行时生成，只供两个断开的实验namespace使用。实验服务端/进程仍需生产权限分离与分发审查，不能视为已交付的网关。

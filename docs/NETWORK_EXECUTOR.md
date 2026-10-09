@@ -13,6 +13,10 @@
 
 操作说明见 [LINUX_SANDBOX.md](LINUX_SANDBOX.md) 与 [EXECUTOR_IPC.md](EXECUTOR_IPC.md)。这些内容不代表后续建连闭环已完成。
 
+## 受控隧道构件
+
+dev.5 在 internal/tunnel 新增规范化OpenVPN配置、sealed memfd启动器、独立namespace worker的绑定接口DNS/TCP拨号器及私有测试拓扑。当前只由测试驱动，不在现有隔离IPC中新增任意配置或隧道启动请求；参见 [CONTROLLED_OPENVPN.md](CONTROLLED_OPENVPN.md)。
+
 ## 不得绕过的能力闸门
 
 当前 `/api/exits/{id}/start` 明确返回不可用。解除闸门必须同时具备可工作的执行器、受控 Linux 端到端测试、失败注入测试，以及 API 中对真实实际状态的报告。

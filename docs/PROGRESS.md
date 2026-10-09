@@ -1,8 +1,15 @@
 # 开发进度与验证记录
 
-日期：2026-10-09。当前代码版本：0.1.0-dev.4（开发中）；已发布快照：v0.1.0-dev.2。**这是控制面 + 实验性隔离底座，尚不是能代理上网的 VPN 网关。**
+日期：2026-10-09。当前代码版本：0.1.0-dev.5（开发中）；已发布快照：v0.1.0-dev.2。**这是控制面 + 实验性隔离底座，尚不是能代理上网的 VPN 网关。**
 
-## 本轮 IPC 开发
+## 本轮受控 OpenVPN 开发
+
+- 已加入运行配置规范化、TLS材料校验、sealed memfd子进程和独立worker的接口绑定DNS/TCP构件，未接入现有Web/IPC启动路径。
+- 增加受控OpenVPN实验：错误证书名称负向对照、推送路由/DNS过滤、TCP/DNS正向通信、私网与混合DNS拒绝、超时与断线阻断。
+- 本机单元测试和Linux交叉编译通过；手动真实Linux测试尚待该提交执行，结果不借用先前IPC证据。
+- 生产普通用户Web控制台仍不提供可用VPN代理。VPS与已发布dev.2资产均未改动。
+
+## 先前 IPC 开发
 
 - 已实现限定操作、固定实例、指定非 root UID 的 Unix socket IPC；默认关闭、双向 peer credential 与 root 路径校验。
 - 已实现 executor serve/info、instance 查询、sandbox --ipc，以及显式接入的 Web 状态/确认操作/审计/删除互锁。
@@ -15,7 +22,7 @@
 | 模块 | 当前状态 | 实际范围 |
 | --- | --- | --- |
 | 上一版备份 | 已推送 | GitHub 私有仓库 [vioIetMiku/miku-gate](https://github.com/vioIetMiku/miku-gate)，v0.1.0-dev.1 保留指向 b8e68b3 |
-| 发布与开发 | dev.2 已发布，dev.3 开发中 | [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.2) 提供三个平台压缩包和校验文件；[Issue #1](https://github.com/vioIetMiku/miku-gate/issues/1) 跟踪后续，已发布资产不被替换 |
+| 发布与开发 | dev.2 已发布，main 持续开发 | [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.2) 提供三个平台压缩包和校验文件；[Issue #1](https://github.com/vioIetMiku/miku-gate/issues/1) 跟踪后续，已发布资产不被替换 |
 | 稳定实例身份 | 已实现并回归 | SQLite schema v2；从 v1 迁移保留出口 ID/端口，重启保持实例 ID，损坏或丢失的 v2 身份拒绝自动替换 |
 | 网络计划 | 已实现并回归 | 认证后只读 API、CLI、出口详情预览共用计划；不执行命令，不创建文件，不改变出口状态 |
 | Linux 隔离助手 | dev.2 真实 Linux 隔离实验通过 | 独立 root CLI；仅不联网的 namespace + 内部 inet 全阻断规则；临时 Ubuntu runner 验证，不是实际 VPS 或 VPN 验收 |

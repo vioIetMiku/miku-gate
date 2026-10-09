@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-dev.5 — 2026-10-09 · 开发中
+
+- 新增OpenVPN运行配置规范化、严格PEM/证书/端点检查、固定运行参数，不直接执行源配置。
+- 新增仅由实验驱动的namespace OpenVPN子进程，密钥配置放在封印memfd，不新增公共启动接口。
+- 新增独立worker中的指定接口DNS/TCP拨号器；DNS直接处理报文，不使用宿主hosts/NSS/search或回退默认路由。
+- 新增受控TLS、UDP/TCP DNS、私网DNS拒绝和VPN/TUN失效后的已有/新连接测试，等待对应Linux实测结论。
+- 使用锁定的golang.org/x/net v0.60.0解析DNS报文，保留模块完整性校验。
+- 真实入口/start仍关闭，已发布dev.2标签与压缩包不变。
+
+
 ## 0.1.0-dev.4 — 2026-10-09 · 开发中
 
 - 新增默认关闭、固定实例与指定 UID 的 Unix socket IPC，双向 SO_PEERCRED 身份校验和保守的端点恢复。

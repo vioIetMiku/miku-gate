@@ -1,6 +1,6 @@
 # Miku Gate
 
-**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.4`。**
+**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.5`。**
 
 > 当前可运行的是控制面开发原型，不是可用于上网的 VPN 网关。
 >
@@ -124,6 +124,10 @@ npm --prefix web run test:e2e
 
 当前验证结果及未完成项目见 [开发进度](docs/PROGRESS.md)。交叉编译成功不代表 Linux 运行、TUN 或防泄漏验证成功。
 
+## 受控 OpenVPN 实验
+
+dev.5 新增规范化配置、接口绑定DNS/TCP拨号器和全隔离的真OpenVPN测试拓扑，尚未接入Web启动或公网代理监听。见 [受控实验手册](docs/CONTROLLED_OPENVPN.md)。真实Linux结论以对应提交的验收记录为准。
+
 ## 可选的本机隔离 IPC
 
 dev.4 新增固定实例、指定非 root UID 的 Unix socket 助手。需管理员显式授权，并给普通用户控制台添加 --sandbox-ipc；默认不开启。界面区分计划与实际隔离，变更需二次确认，原有 VPN 启动闸门不解除。
@@ -158,6 +162,7 @@ internal/egress/    IPv4 公网目标策略的纯函数
 internal/proxy/     独立、未接线的 HTTP / SOCKS5 TCP 核心
 internal/netexec/   隔离计划、Linux 全阻断沙箱、归属与故障实验
 internal/executoripc/ 指定 UID 的本机 IPC、端点归属和跨权限测试
+internal/tunnel/     受控OpenVPN配置、worker拨号器和隔离真隧道实验
 internal/diagnostics/ 只读环境检查
 web/                React / TypeScript 界面与前端测试
 scripts/            构建、真实 HTTP smoke 与浏览器测试辅助

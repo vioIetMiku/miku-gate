@@ -1,0 +1,16 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { execFileSync, spawn } from 'node:child_process';
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const data = join(root, '.cache', 'e2e', `${process.pid}-${Date.now()}`);
+mkdirSync(data, { recursive: true });
+const binary = join(root, 'bin', process.platform === 'win32' ? 'miku-gate.exe' : 'miku-gate');
+const output = execFileSync(binary, ['init', '--data', data], { encoding: 'utf8', windowsHide: true });
+const password = output.match(/密码：([^\r\n]+)/)?.[1];
+if (!password) throw new Error('Failed to initialize isolated test account');
+writeFileSync(join(root, '.cache', 'e2e-auth.json'), JSON.stringify({ username: 'admin', password }), { mode: 0o600 });
+const server = spawn(binary, ['serve', '--data', data, '--listen', '127.0.0.1:3940'], { stdio: 'inherit', windowsHide: true });
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.kill());
+process.on('exit', () => server.kill());
+server.on('exit', code => process.exit(code ?? 0));

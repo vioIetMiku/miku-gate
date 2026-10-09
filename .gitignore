@@ -1,0 +1,14 @@
+.tools/
+.data/
+.cache/
+go-downloads.json
+web/node_modules/
+web/dist/*
+!web/dist/.gitkeep
+web/test-results/
+artifacts/
+bin/
+*.log
+.env
+# Editor / local generated files
+web/tsconfig.tsbuildinfo

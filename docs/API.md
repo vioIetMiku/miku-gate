@@ -1,6 +1,6 @@
-# 当前 API：控制面开发原型
+# 当前 API：控制面与代理上游运行时
 
-当前开发版本：`0.1.0-dev.5`，接口保持与 dev.2 兼容。默认基址为 `http://127.0.0.1:3939/api`。所有数据面启动操作目前明确失败，不提供真实代理地址或活动隧道。
+当前开发版本：`0.1.0-dev.6`，接口保持与 dev.2 兼容。默认基址为 `http://127.0.0.1:3939/api`。已配置的HTTP/SOCKS/HTTPS代理上游可实际启动；OpenVPN生产驱动仍不可用。运行中的配置/凭据/删除有互锁，不能假定全部旧的写操作仍无条件成功。
 
 ## 认证与请求规则
 
@@ -17,11 +17,11 @@
 
 | 方法 | 路径 | 权限 | 成功响应 |
 | --- | --- | --- | --- |
-| GET | `/health` | 本机访问，无会话要求 | 200，版本与 `control-plane-only` 状态 |
+| GET | `/health` | 本机访问，无会话要求 | 200，版本与 `proxy-upstream-runtime`（或显式control-plane-only）状态 |
 | POST | `/auth/login` | 本机访问，登录限速 | 200，会话信息及 Cookie |
 | GET | `/auth/session` | 已登录 | 200，会话信息 |
 | POST | `/auth/logout` | 已登录 + CSRF | 204，撤销会话和 Cookie |
-| GET | `/overview` | 已登录 | 200，配置统计与未接入执行器的状态 |
+| GET | `/overview` | 已登录 | 200，配置统计、实际监听数与最近健康数 |
 | GET | `/exits` | 已登录 | 200，出口配置数组，不含密码 |
 | POST | `/exits` | 已登录 + CSRF | 201，`exit`、一次性 `password` 与说明 |
 | PATCH | `/exits/{id}` | 已登录 + CSRF | 204，更新名称、国家与策略 |
@@ -31,9 +31,14 @@
 | POST | `/exits/{id}/sandbox/prepare` | 已登录 + CSRF + confirm:true + IPC | 200，限定为创建全阻断沙箱 |
 | POST | `/exits/{id}/sandbox/cleanup` | 已登录 + CSRF + confirm:true + IPC | 200，仅回收可证明归属且未占用的沙箱 |
 | GET | `/exits/{id}/network-plan` | 已登录 | 200，只读隔离计划；不创建沙箱或代理 |
-| POST | `/exits/{id}/start` | 已登录 + CSRF | 当前固定返回 409，保存 blocked 状态和原因 |
-| POST | `/exits/{id}/stop` | 已登录 + CSRF | 204，保存 stopped 状态 |
+| POST | `/exits/{id}/start` | 已登录 + CSRF | 200，实际运行快照；验证失败不开放监听 |
+| POST | `/exits/{id}/stop` | 已登录 + CSRF | 204，实际关闭入口和在途连接后保存stopped |
 | POST | `/exits/{id}/credentials` | 已登录 + CSRF | 200，一次性新 `password` |
+| GET | `/exits/{id}/upstream` | 已登录 | 200，配置视图、has_password，不包含密码 |
+| PUT | `/exits/{id}/upstream` | 已登录 + CSRF + 出口停止 | 204，加密保存上游，不隐式连接 |
+| DELETE | `/exits/{id}/upstream` | 已登录 + CSRF + 出口停止 | 204，仅移除上游，保留出口和入口凭据 |
+| GET | `/exits/{id}/runtime` | 已登录 | 200，实际监听/健康/最近探测，不用配置冒充存活 |
+| POST | `/exits/{id}/probe` | 已登录 + CSRF + 运行中 | 200，经当前上游的DNS/TLS复测；失败返回明确错误 |
 | GET | `/nodes` | 已登录 | 200，缓存候选节点，不含 OpenVPN 配置正文 |
 | POST | `/nodes/refresh` | 已登录 + CSRF | 200，`count`、`skipped`、`tested:false` |
 | GET | `/events` | 已登录 | 200，最近 100 条事件 |
@@ -54,14 +59,14 @@
 
 - `name`：去除两端空白后 1–48 字符，不允许内部控制字符。
 - `country`：两位字母代码，标准化为大写。
-- `policy`：`any`、`residential_preferred`、`residential_strict`。当前仅保存，不执行网络分类策略。
+- `policy`：`any`、`residential_preferred`、`residential_strict`。地区/类型不是实测；缺少住宅证据时residential_strict拒绝启动。
 - `port`：0 表示在 20000–29999 范围内选择未被本数据库占用的端口；显式值允许 1024–65535。
 - 创建最多允许 100 条出口配置；数据库端口唯一，不代表操作系统已经检查该端口的实际可用性。
 - 监听地址固定为 `127.0.0.1`，状态初始为 `stopped`。
 - 创建时的一次性密码需要由调用方妥善保存。后续读取不可恢复原密码，只能重置。
 - PATCH 提交名称、国家和策略，不允许提交非零端口；更新不改变原端口和凭据。
 
-出口字段包括：`id`、`name`、`country`、`policy`、`port`、`listen`、`username`、`status`、`reason`、`created_at`。当前合法状态仅有 `stopped` 与 `blocked`。
+出口字段包括：`id`、`name`、`country`、`policy`、`port`、`listen`、`username`、`status`、`reason`、`created_at`。配置只持久化stopped/blocked；读取时可叠加真实运行时的starting/running/degraded/stopping。`upstream_kind`可表示已配置的代理类型。
 
 ## 预览出口的隔离计划
 
@@ -83,14 +88,14 @@ GET /exits/{id}/network-plan 返回稳定的 instance_id、exit_id、namespace�
 - 每次显式同步最多处理 5000 条记录、保留 2000 条候选，总响应限制 8 MiB。
 - 一个进程内同时只运行一个同步，至少间隔一分钟，HTTP 超时 25 秒；官方 HTTPS 端点固定，禁止重定向。
 - 同步失败或结果为空时保留原缓存，不把过期缓存说成当前可用。
-- 概览的 `active_count` 为 0，`executor_available` 和 `protection_verified` 为 false。这是未实现能力的明确表示，不是模拟数据。
+- 概览的active_count统计真实代理监听，healthy_count是其中最近探测健康的数量；executor_available/protection_verified仍为false，因为生产VPN执行器未接线。代理上游能力由proxy_runtime_available单独标明。
 
 ## 错误格式
 
 ```json
 {
   "code": "executor_unavailable",
-  "message": "启动已阻止：VPN 数据面尚未接入，未建立隧道、未监听代理端口。"
+  "message": "尚未配置代理上游；生产OpenVPN驱动仍未接通"
 }
 ```
 
@@ -114,3 +119,17 @@ GET /exits/{id}/network-plan 返回稳定的 instance_id、exit_id、namespace�
 IPC 未启用返回 503 sandbox_ipc_disabled；无法验证/连接返回 503 sandbox_ipc_unavailable；缺少确认返回400。忙碌、归属冲突、未清理和资源预算通常返回409，无法核验/操作失败返回502，执行器报告取消/超时返回504。错误不包含原始子进程输出。
 
 所有变更无自动重试；连接中断后先 GET sandbox 查询实际状态。控制台内的 sandbox prepare/cleanup/delete 共用互锁；不会协调同 UID 另行运行的独立 CLI。正常 start 仍返回409 executor_unavailable。
+
+## 代理上游与运行快照
+
+PUT上游字段：`kind`（socks5/http/https）、`host`、`port`、可选`username`/`password`、`reuse_password`、HTTPS可选`tls_name`、`dns`（cloudflare/google）、`allow_loopback`、`allow_plaintext`。只允许已校验公网地址，或显式选择的127.0.0.1非特权端口；远程明文协议需明确确认风险。
+
+`password`只写不读。留空并设`reuse_password=true`时，只能对相同协议/地址/端口/TLS身份/用户名复用旧凭据。清空用户名和密码且不复用表示取消上游认证。更换目标而复用旧密码返回409 credential_target_changed。
+
+运行快照包括`phase`、`listen`、`proxy_listening`、`healthy`、`proof`、`started_at`、`checked_at`、`check_ms`与`reason`。proof的`dns_verified`是经指定上游的实际探测；代理模式`protection_mode=proxy_only`、`kernel_verified=false`，不表示VPN/住宅/公网出口IP已验证。active_count统计实际监听入口，healthy_count统计最近探测成功的运行时。
+
+常见新错误：409 runtime_busy（运行中修改或操作冲突）、409 runtime_capacity、409 port_unavailable、409 policy_unverified、409 executor_unavailable（未配置驱动/生产OpenVPN未接线）、502 upstream_unavailable、503 credential_store_unavailable、504 runtime_timeout。
+
+启动是有界的同步操作；在已提交为运行状态的边界附近断开HTTP连接，调用方不能仅凭未收到响应推断未启动，应查询runtime。重复启动运行中的出口不重复建立会话。停止会等待已接受连接退出；超时后同样先查状态。重启不会从数据库恢复虚假的running值，也不自动启动已保存的出口。
+
+代理模式与独立的quarantine-only沙箱不是同一条数据路径。若该出口尚有独立沙箱，需先清理再启动代理上游。运行中也不能创建/清理沙箱，避免误把隔离状态当作代理的内核防泄漏证明。

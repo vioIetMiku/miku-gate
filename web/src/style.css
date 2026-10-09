@@ -1704,3 +1704,79 @@ label input:disabled {
   color: var(--red);
   font-size: 12px;
 }
+
+.upstream-fields {
+  display: grid;
+  gap: 16px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.modal-form .option-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.option-check input[type='checkbox'] {
+  width: 17px;
+  height: 17px;
+  min-height: 17px;
+  margin-top: 3px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+.runtime-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 0;
+}
+.runtime-heading,
+.runtime-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.runtime-heading h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.runtime-actions {
+  margin-top: 12px;
+}
+.runtime-actions > span {
+  flex: 1 1 220px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.runtime-actions svg {
+  vertical-align: middle;
+}
+
+.upstream-fields {
+  margin-top: 14px;
+}
+.upstream-fields label {
+  margin: 0;
+}
+.modal-form .option-check {
+  flex-direction: row;
+}
+.option-check span {
+  font-weight: 400;
+}
+.upstream-form .modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--surface);
+  padding-top: 12px;
+  padding-bottom: 4px;
+  box-shadow: 0 -7px 12px var(--surface);
+}

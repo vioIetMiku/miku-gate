@@ -136,3 +136,100 @@ func TestHTTPRejectsCONNECTBody(t *testing.T) {
 		t.Fatal("ambiguous CONNECT request dialed upstream")
 	}
 }
+
+func TestTCPRelayPreservesHalfClose(t *testing.T) {
+	target, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer target.Close()
+	go func() {
+		conn, err := target.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		conn.SetDeadline(time.Now().Add(3 * time.Second))
+		payload, err := io.ReadAll(conn)
+		if err == nil {
+			conn.Write(append([]byte("reply:"), payload...))
+		}
+	}()
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	s := Server{Authenticate: func(u, p string) bool { return u == "u" && p == "p" }, Dial: func(ctx context.Context, n, a string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "tcp4", target.Addr().String())
+	}}
+	go func() { done <- s.Serve(ctx, ln) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Error(err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Error("relay did not drain")
+		}
+	})
+	conn, err := net.Dial("tcp4", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	io.WriteString(conn, "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\nProxy-Authorization: Basic dTpw\r\n\r\n")
+	reader := bufio.NewReader(conn)
+	response, err := http.ReadResponse(reader, &http.Request{Method: "CONNECT"})
+	if err != nil || response.StatusCode != 200 {
+		t.Fatal("CONNECT failed", err)
+	}
+	conn.Write([]byte("request"))
+	if err = conn.(*net.TCPConn).CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := io.ReadAll(reader)
+	if err != nil || string(payload) != "reply:request" {
+		t.Fatal("half-close discarded the server response", string(payload), err)
+	}
+}
+func TestHTTPForwardDoesNotLeakPipelinedProxyCredentials(t *testing.T) {
+	observed := make(chan bool, 1)
+	s := &Server{Authenticate: func(u, p string) bool { return u == "u" && p == "p" }, Dial: func(ctx context.Context, n, a string) (net.Conn, error) {
+		left, right := net.Pipe()
+		go func() {
+			defer right.Close()
+			reader := bufio.NewReader(right)
+			req, err := http.ReadRequest(reader)
+			if err != nil {
+				observed <- true
+				return
+			}
+			if req.Header.Get("Proxy-Authorization") != "" {
+				observed <- true
+				return
+			}
+			io.WriteString(right, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+			right.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+			_, err = reader.ReadByte()
+			observed <- err == nil
+		}()
+		return left, nil
+	}}
+	conn := testConn(t, s)
+	go io.WriteString(conn, "GET http://example.com/ HTTP/1.1\r\nHost: example.com\r\nProxy-Authorization: Basic dTpw\r\n\r\nGET http://example.com/second HTTP/1.1\r\nHost: example.com\r\nProxy-Authorization: Basic dTpw\r\n\r\n")
+	response, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "GET"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, response.Body)
+	response.Body.Close()
+	if <-observed {
+		t.Fatal("pipelined proxy authorization leaked to the destination")
+	}
+}

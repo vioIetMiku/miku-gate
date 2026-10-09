@@ -261,7 +261,7 @@ func constraint(err error) error {
 	return err
 }
 func (s *Store) ListExits() ([]domain.Exit, error) {
-	rows, err := s.db.Query(`SELECT id,name,country,policy,port,listen,username,status,reason,created_at FROM exits ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`SELECT e.id,e.name,e.country,e.policy,e.port,e.listen,e.username,e.status,e.reason,e.created_at,COALESCE(u.kind,'') FROM exits e LEFT JOIN upstreams u ON u.exit_id=e.id ORDER BY e.created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +270,7 @@ func (s *Store) ListExits() ([]domain.Exit, error) {
 	for rows.Next() {
 		var e domain.Exit
 		var created string
-		if err = rows.Scan(&e.ID, &e.Name, &e.Country, &e.Policy, &e.Port, &e.Listen, &e.Username, &e.Status, &e.Reason, &created); err != nil {
+		if err = rows.Scan(&e.ID, &e.Name, &e.Country, &e.Policy, &e.Port, &e.Listen, &e.Username, &e.Status, &e.Reason, &created, &e.UpstreamKind); err != nil {
 			return nil, err
 		}
 		e.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)

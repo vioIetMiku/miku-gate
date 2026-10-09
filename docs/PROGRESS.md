@@ -1,10 +1,10 @@
 # 开发进度与验证记录
 
-更新：2026-10-10。当前代码版本：0.1.0-dev.6（开发中）；已发布快照：v0.1.0-dev.2。**这是控制面 + 实验性隔离底座，尚不是能代理上网的 VPN 网关。**
+更新：2026-10-10。当前代码版本：0.1.0-dev.6（开发中）；已发布快照：v0.1.0-dev.2。**当前支持本机认证代理上游；完整OpenVPN/Xray/sing-box/域名安装目标仍未完成。**
 
 ## 完整目标与真实代理运行时开发
 
-完整终态见 [DELIVERY_PLAN.md](DELIVERY_PLAN.md)，不以私有实验或此阶段组件替代整个项目。dev.6已加入加密的代理上游配置、SOCKS5/HTTP/HTTPS驱动、经同一上游的DoH与数字IP拨号，以及监听停止/凭据边界回归。真实私有TCP/TLS测试通过；运行时协调、API及界面正在接线，当前生产start仍阻止。详见 [UPSTREAM_PROXY.md](UPSTREAM_PROXY.md)。
+完整终态见 [DELIVERY_PLAN.md](DELIVERY_PLAN.md)，不以私有实验或此阶段组件替代整个项目。dev.6已加入加密的代理上游配置、SOCKS5/HTTP/HTTPS驱动、经同一上游的DoH与数字IP拨号，以及监听停止/凭据边界回归。真实私有TCP/TLS测试通过；运行时、API与界面已接线。本机完整Go回归、48项真实HTTP/CLI smoke、9项前端单元及Chrome表单/失败/移动旅程通过，协议/运行时各有独立正反对照。目标VPS新路径与dev.6发行仍待完成；OpenVPN start仍被阻止。详见 [UPSTREAM_PROXY.md](UPSTREAM_PROXY.md)。
 
 ## 目标 VPS 受控验收已完成
 
@@ -79,7 +79,7 @@ dev.2 发布快照与 dev.3 补充代码分别有独立 CI 记录。dev.3 测试
 - 尚未完成完整安全审计、依赖漏洞审计、发行许可证审查或生产安装/升级验证。
 - 浏览器自动化不等于手机真机、读屏器或完整可访问性验收。
 
-所有控制台 start 请求继续返回 409 executor_unavailable；active_count 为 0，executor_available / protection_verified 为 false。独立 CLI 的 quarantine_verified 也不能作为真实 VPN 防泄漏的证明。
+未配置代理上游或请求生产OpenVPN时start仍返回409；已配置代理可真实监听，active_count来自运行时。executor_available/protection_verified仍只针对未接通的VPN执行器，代理模式另用proxy_runtime_available与proxy_only说明。独立 CLI 的 quarantine_verified 也不能作为真实 VPN 防泄漏的证明。
 
 ## VPS 访问边界
 
@@ -91,7 +91,7 @@ dev.2 发布快照与 dev.3 补充代码分别有独立 CI 记录。dev.3 测试
 
 1. 实现生产最小权限分离与受限隧道生命周期；测试专用启动助手不能直接用作网关守护进程。
 2. 实现worker连接交接及可核验状态协调；先覆盖失败/取消/崩溃关闭顺序，禁止宿主解析或默认路由后备。
-3. 接通带认证、默认非公网暴露的HTTP/SOCKS代理入口，再向Web提供真实且可核验的启动/停止能力。
+3. 本机认证HTTP/SOCKS代理上游已接线；后续完成Xray/sing-box加密入口、既有工具复用、域名/TLS/REALITY与VPS安装向导。
 4. 通过隧道断线、DNS、IPv6、崩溃恢复与资源冲突测试后，才接通现有代理核心并解除启动闸门。
 
-使用说明见 [LINUX_SANDBOX.md](LINUX_SANDBOX.md)，完整网络契约见 [NETWORK_EXECUTOR.md](NETWORK_EXECUTOR.md)。升级前备份旧数据目录；schema v2 不能由旧 dev.1 直接降级打开。
+使用说明见 [LINUX_SANDBOX.md](LINUX_SANDBOX.md)，完整网络契约见 [NETWORK_EXECUTOR.md](NETWORK_EXECUTOR.md)。升级前备份旧数据目录；schema v3不能由旧dev.5及以前版本直接降级打开，备份需包括配套.key密钥。

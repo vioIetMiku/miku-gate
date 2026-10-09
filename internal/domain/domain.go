@@ -14,16 +14,17 @@ var ErrConflict = errors.New("conflict")
 var countryPattern = regexp.MustCompile(`^[A-Z]{2}$`)
 
 type Exit struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Country   string    `json:"country"`
-	Policy    string    `json:"policy"`
-	Port      int       `json:"port"`
-	Listen    string    `json:"listen"`
-	Username  string    `json:"username"`
-	Status    string    `json:"status"`
-	Reason    string    `json:"reason"`
-	CreatedAt time.Time `json:"created_at"`
+	UpstreamKind string    `json:"upstream_kind,omitempty"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Country      string    `json:"country"`
+	Policy       string    `json:"policy"`
+	Port         int       `json:"port"`
+	Listen       string    `json:"listen"`
+	Username     string    `json:"username"`
+	Status       string    `json:"status"`
+	Reason       string    `json:"reason"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 type ExitInput struct {
 	Name    string `json:"name"`

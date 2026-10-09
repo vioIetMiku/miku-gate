@@ -20,6 +20,7 @@ import (
 	"mikugate/internal/diagnostics"
 	"mikugate/internal/domain"
 	"mikugate/internal/executoripc"
+	"mikugate/internal/gateway"
 	"mikugate/internal/netexec"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
@@ -34,8 +35,12 @@ type SandboxClient interface {
 	executoripc.Runtime
 	Capabilities(context.Context) (executoripc.Capabilities, error)
 }
-type Options struct{ Sandbox SandboxClient }
+type Options struct {
+	Sandbox SandboxClient
+	Gateway *gateway.Manager
+}
 type Server struct {
+	gateway     *gateway.Manager
 	sandbox     SandboxClient
 	sandboxSlot chan struct{}
 	store       *store.Store
@@ -57,10 +62,10 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 	if err != nil {
 		return nil, err
 	}
-	a := &Server{sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	a := &Server{gateway: options.Gateway, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
-		write(w, 200, map[string]any{"version": domain.Version, "status": "control-plane-only"})
+		write(w, 200, map[string]any{"version": domain.Version, "status": a.mode()})
 	})
 	mux.HandleFunc("POST /api/auth/login", a.login)
 	mux.HandleFunc("GET /api/auth/session", a.auth(func(w http.ResponseWriter, r *http.Request, s domain.Session) {
@@ -76,25 +81,23 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 		w.WriteHeader(204)
 	}))
 	mux.HandleFunc("GET /api/overview", a.auth(a.overview))
-	mux.HandleFunc("GET /api/exits", a.auth(func(w http.ResponseWriter, r *http.Request, s domain.Session) {
-		v, err := a.store.ListExits()
-		if err != nil {
-			a.internal(w, err)
-			return
-		}
-		write(w, 200, v)
-	}))
+	mux.HandleFunc("GET /api/exits", a.auth(a.listExits))
 	mux.HandleFunc("POST /api/exits", a.auth(a.createExit))
-	mux.HandleFunc("PATCH /api/exits/{id}", a.auth(a.updateExit))
-	mux.HandleFunc("DELETE /api/exits/{id}", a.auth(a.deleteExit))
+	mux.HandleFunc("PATCH /api/exits/{id}", a.auth(a.stopped(a.updateExit)))
+	mux.HandleFunc("DELETE /api/exits/{id}", a.auth(a.stopped(a.deleteExit)))
 	mux.HandleFunc("GET /api/executor", a.auth(a.executorStatus))
 	mux.HandleFunc("GET /api/exits/{id}/sandbox", a.auth(a.sandboxInspect))
-	mux.HandleFunc("POST /api/exits/{id}/sandbox/prepare", a.auth(a.sandboxPrepare))
-	mux.HandleFunc("POST /api/exits/{id}/sandbox/cleanup", a.auth(a.sandboxCleanup))
+	mux.HandleFunc("POST /api/exits/{id}/sandbox/prepare", a.auth(a.stopped(a.sandboxPrepare)))
+	mux.HandleFunc("POST /api/exits/{id}/sandbox/cleanup", a.auth(a.stopped(a.sandboxCleanup)))
 	mux.HandleFunc("GET /api/exits/{id}/network-plan", a.auth(a.networkPlan))
+	mux.HandleFunc("GET /api/exits/{id}/upstream", a.auth(a.getUpstream))
+	mux.HandleFunc("PUT /api/exits/{id}/upstream", a.auth(a.stopped(a.saveUpstream)))
+	mux.HandleFunc("DELETE /api/exits/{id}/upstream", a.auth(a.stopped(a.removeUpstream)))
+	mux.HandleFunc("GET /api/exits/{id}/runtime", a.auth(a.runtimeState))
+	mux.HandleFunc("POST /api/exits/{id}/probe", a.auth(a.checkRuntime))
 	mux.HandleFunc("POST /api/exits/{id}/start", a.auth(a.startExit))
 	mux.HandleFunc("POST /api/exits/{id}/stop", a.auth(a.stopExit))
-	mux.HandleFunc("POST /api/exits/{id}/credentials", a.auth(a.rotateCredentials))
+	mux.HandleFunc("POST /api/exits/{id}/credentials", a.auth(a.stopped(a.rotateCredentials)))
 	mux.HandleFunc("GET /api/nodes", a.auth(func(w http.ResponseWriter, r *http.Request, s domain.Session) {
 		v, err := a.store.ListNodes()
 		if err != nil {
@@ -259,7 +262,20 @@ func (a *Server) overview(w http.ResponseWriter, r *http.Request, s domain.Sessi
 	for _, e := range exits {
 		countries[e.Country] = true
 	}
-	write(w, 200, map[string]any{"version": domain.Version, "mode": "control-plane-only", "exit_count": len(exits), "active_count": 0, "country_count": len(countries), "node_count": len(nodes), "executor_available": false, "protection_verified": false, "message": "控制台与配置管理可用；VPN 数据面尚未接入，没有活动代理或隧道。"})
+	active, healthy := 0, 0
+	message := "控制台与配置管理可用；VPN 数据面尚未接入，没有活动代理或隧道。"
+	if a.gateway != nil {
+		for _, state := range a.gateway.States() {
+			if state.ProxyListening {
+				active++
+			}
+			if state.Healthy {
+				healthy++
+			}
+		}
+		message = "HTTP/SOCKS/HTTPS代理上游运行时已启用，入口仅本机；生产OpenVPN执行器仍待接通。"
+	}
+	write(w, 200, map[string]any{"version": domain.Version, "mode": a.mode(), "exit_count": len(exits), "active_count": active, "healthy_count": healthy, "country_count": len(countries), "node_count": len(nodes), "executor_available": false, "proxy_runtime_available": a.gateway != nil, "protection_verified": false, "message": message})
 }
 func (a *Server) createExit(w http.ResponseWriter, r *http.Request, s domain.Session) {
 	var in domain.ExitInput
@@ -322,6 +338,34 @@ func (a *Server) deleteExit(w http.ResponseWriter, r *http.Request, s domain.Ses
 	w.WriteHeader(204)
 }
 func (a *Server) startExit(w http.ResponseWriter, r *http.Request, s domain.Session) {
+	if a.gateway != nil {
+		if !a.acquireSandbox(w) {
+			return
+		}
+		defer func() { <-a.sandboxSlot }()
+		if !a.requireExit(w, r.PathValue("id")) {
+			return
+		}
+		if a.sandbox != nil {
+			actual, err := a.sandbox.Inspect(r.Context(), r.PathValue("id"))
+			if err != nil {
+				a.sandboxError(w, err)
+				return
+			}
+			if actual.Phase != "absent" {
+				fail(w, 409, "sandbox_cleanup_required", "请先清理本出口的隔离沙箱，再启动代理上游模式")
+				return
+			}
+		}
+		state, err := a.gateway.Start(r.Context(), r.PathValue("id"))
+		if err != nil {
+			a.runtimeError(w, err)
+			return
+		}
+		write(w, 200, state)
+		return
+	}
+
 	reason := "启动已阻止：VPN 数据面尚未接入，未建立隧道、未监听代理端口。"
 	if err := a.store.SetStatus(r.PathValue("id"), "blocked", reason); err != nil {
 		a.storeError(w, err)
@@ -330,6 +374,15 @@ func (a *Server) startExit(w http.ResponseWriter, r *http.Request, s domain.Sess
 	fail(w, 409, "executor_unavailable", reason)
 }
 func (a *Server) stopExit(w http.ResponseWriter, r *http.Request, s domain.Session) {
+	if a.gateway != nil {
+		if err := a.gateway.Stop(r.Context(), r.PathValue("id")); err != nil {
+			a.runtimeError(w, err)
+			return
+		}
+		w.WriteHeader(204)
+		return
+	}
+
 	if err := a.store.SetStatus(r.PathValue("id"), "stopped", "已停止；当前版本无活动代理监听。"); err != nil {
 		a.storeError(w, err)
 		return

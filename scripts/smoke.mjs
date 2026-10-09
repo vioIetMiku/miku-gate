@@ -27,6 +27,9 @@ try {
     return fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json', ...(cookie ? { Cookie: cookie } : {}), ...(csrf && method !== 'GET' ? { 'X-CSRF-Token': csrf } : {}), ...headers }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(10000) });
   }
   function check(actual, expected, message) { assert.equal(actual, expected, message); checks++; }
+  const competing=spawnSync(binary,['serve','--data',data,'--listen','127.0.0.1:0'],{encoding:'utf8',windowsHide:true,timeout:5000});
+  check(competing.status,1,'one control service per data directory');
+  check(competing.stderr.includes('已有控制服务'),true,'competing service fails on the lease, not a bind collision');
   check((await request('/api/exits')).status, 401, 'anonymous API requests must fail');
   check((await request('/api/exits/missing_exit/network-plan')).status, 401, 'anonymous network plans must fail');
   let r = await request('/'); check(r.status, 200, 'embedded frontend must be served');
@@ -64,6 +67,18 @@ try {
   check((await request('/api/exits').then(r => r.json()))[0].port, port, 'editing must preserve entrance port');
   check((await request(`/api/exits/${id}/credentials`, 'POST')).status, 200, 'credential rotation');
   check((await request(`/api/exits/${id}/stop`, 'POST')).status, 204, 'stop configuration');
+  check((await request(`/api/exits/${id}/runtime`).then(r=>r.json())).proxy_listening,false,'stopped runtime has no listener');
+  check((await request(`/api/exits/${id}/upstream`).then(r=>r.json())).configured,false,'empty upstream is explicit');
+  const upstream={kind:'http',host:'127.0.0.1',port:10999,username:'smoke-up',password:'ephemeral-upstream-password'};
+  check((await request(`/api/exits/${id}/upstream`,'PUT',upstream)).status,400,'loopback requires explicit confirmation');
+  check((await request(`/api/exits/${id}/upstream`,'PUT',{...upstream,allow_loopback:true})).status,204,'save encrypted upstream without opening a connection');
+  const savedUpstream=await request(`/api/exits/${id}/upstream`).then(r=>r.json());
+  check(savedUpstream.has_password,true,'saved upstream reports credential presence');
+  check(JSON.stringify(savedUpstream).includes(upstream.password),false,'upstream secret never returns');
+  check((await request('/api/exits').then(r=>r.json())).find(e=>e.id===id).upstream_kind,'http','driver type visible without secrets');
+  check((await request(`/api/exits/${id}/upstream`,'PUT',{...upstream,password:'',reuse_password:true,port:11000,allow_loopback:true})).status,409,'credential reuse cannot change recipient');
+  check((await request(`/api/exits/${id}/upstream`,'DELETE')).status,204,'remove upstream while stopped');
+
   check((await request('/api/executor').then(r => r.json())).configured, false, 'sandbox IPC is opt-in');
   check((await request(`/api/exits/${id}/sandbox`)).status, 503, 'no implicit privileged sandbox inspection');
   check((await request(`/api/exits/${id}/sandbox/prepare`, 'POST', { confirm: true })).status, 503, 'no implicit privileged preparation');
@@ -75,7 +90,7 @@ try {
   check((await request('/api/events').then(r => r.json())).length >= 6, true, 'audit trail persisted');
   check((await request('/api/auth/logout', 'POST')).status, 204, 'logout');
   check((await request('/api/exits')).status, 401, 'revoked session rejected');
-  console.log(`PASS: ${checks} HTTP/CLI smoke checks (isolated database, no VPN or proxy listener).`);
+  console.log(`PASS: ${checks} HTTP/CLI smoke checks (isolated database, no public network or active proxy).`);
 } finally {
   child.kill();
 }

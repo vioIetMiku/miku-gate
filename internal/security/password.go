@@ -31,17 +31,28 @@ func HashPassword(password string) (string, error) {
 	key := argon2.IDKey([]byte(password), salt, 2, 64*1024, 2, 32)
 	return fmt.Sprintf("argon2id$v19$m65536t2p2$%s$%s", base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(key)), nil
 }
-func VerifyPassword(encoded, password string) bool {
+func passwordParts(encoded string) ([]byte, []byte, bool) {
 	parts := strings.Split(encoded, "$")
-	if len(parts) != 5 || parts[0] != "argon2id" || parts[1] != "v19" || parts[2] != "m65536t2p2" || len(password) > 1024 {
-		return false
+	if len(parts) != 5 || parts[0] != "argon2id" || parts[1] != "v19" || parts[2] != "m65536t2p2" || len(parts[3]) != 22 || len(parts[4]) != 43 {
+		return nil, nil, false
 	}
 	salt, err := base64.RawStdEncoding.DecodeString(parts[3])
 	if err != nil || len(salt) != 16 {
-		return false
+		return nil, nil, false
 	}
 	expected, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil || len(expected) != 32 {
+		return nil, nil, false
+	}
+	return salt, expected, true
+}
+func ValidPasswordHash(encoded string) bool { _, _, ok := passwordParts(encoded); return ok }
+func VerifyPassword(encoded, password string) bool {
+	if len(password) > 1024 {
+		return false
+	}
+	salt, expected, ok := passwordParts(encoded)
+	if !ok {
 		return false
 	}
 	key := argon2.IDKey([]byte(password), salt, 2, 64*1024, 2, 32)

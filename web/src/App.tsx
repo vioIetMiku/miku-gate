@@ -1,3 +1,5 @@
+import { Modal } from './Modal';
+import { UpstreamSettings, RuntimeView } from './UpstreamSettings';
 import { NetworkPlanView } from './NetworkPlanView';
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
@@ -36,6 +38,9 @@ import {
   api,
   countries,
   filterExits,
+  hasRuntime,
+  runtimeLabels,
+  runtimeTone,
   policies,
   setCSRF,
   timestamp,
@@ -74,43 +79,6 @@ function Spinner() {
 }
 function Pill({ children, tone = '' }: { children: ReactNode; tone?: string }) {
   return <span className={`pill ${tone}`}>{children}</span>;
-}
-function Modal({
-  title,
-  children,
-  close,
-  wide = false,
-}: {
-  title: string;
-  children: ReactNode;
-  close: () => void;
-  wide?: boolean;
-}) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    dialog.current?.showModal();
-    const el = dialog.current;
-    return () => el?.close();
-  }, []);
-  return (
-    <dialog
-      ref={dialog}
-      className={wide ? 'wide' : ''}
-      onCancel={(event) => {
-        event.preventDefault();
-        close();
-      }}
-      aria-label={title}
-    >
-      <div className="modal-heading">
-        <h2>{title}</h2>
-        <button className="icon-button" onClick={close} aria-label="关闭对话框">
-          <X size={20} />
-        </button>
-      </div>
-      {children}
-    </dialog>
-  );
 }
 function Login({ onLogin }: { onLogin: (s: Session) => void }) {
   const [username, setUsername] = useState('admin');
@@ -212,7 +180,7 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
           </div>
           <p className="login-note">
             <Info size={16} />
-            当前版本只管理配置，尚未接入 VPN 网络执行器。
+            支持本机代理上游；生产 OpenVPN、加密入口和安装向导仍在开发。
           </p>
         </div>
       </main>
@@ -310,11 +278,14 @@ function ExitForm({
           </select>
         </label>
         <div className="field-note">
-          类型情报尚未接入。未知类型不会被视为“已验证住宅”，策略先保存为配置。
+          地区是配置标签，不是实测出口位置。住宅类型情报未接入时，严格住宅策略会阻止启动。
         </div>
         <div className="notice">
           <ShieldWarning size={21} />
-          <p>当前仅保存配置。网络执行器接入并验证前，代理不会监听，也不会建立 VPN 隧道。</p>
+          <p>
+            创建后设置 HTTP/SOCKS/HTTPS 代理上游，再明确启动。验证通过前不监听；OpenVPN
+            生产驱动尚未接通。
+          </p>
         </div>
         {error && (
           <div className="inline-error" role="alert">
@@ -450,6 +421,7 @@ export default function App() {
   const [actionBusy, setActionBusy] = useState(false);
   const [form, setForm] = useState<Exit | 'new' | null>(null);
   const [detail, setDetail] = useState<Exit | null>(null);
+  const [upstreamExit, setUpstreamExit] = useState<Exit | null>(null);
   const [deleting, setDeleting] = useState<Exit | null>(null);
   const [secret, setSecret] = useState<{ exit: Exit; password: string } | null>(null);
   const [query, setQuery] = useState('');
@@ -476,6 +448,7 @@ export default function App() {
       setEvents([]);
       setForm(null);
       setDetail(null);
+      setUpstreamExit(null);
       setSecret(null);
       setDeleting(null);
     }
@@ -764,10 +737,12 @@ export default function App() {
               <ShieldWarning size={21} />
             </span>
             <div>
-              <strong>先保存配置，再连接世界。</strong>
-              <span>
-                当前为控制台开发版：没有活动 VPN 隧道或代理监听，断线保护尚未经 Linux 验证。
-              </span>
+              <strong>
+                {overview?.proxy_runtime_available
+                  ? '代理上游已可用，连接路径不再只是配置。'
+                  : '控制台模式，运行时未启用。'}
+              </strong>
+              <span>{overview?.message ?? '正在读取实际运行能力…'}</span>
             </div>
             <button className="text-button" onClick={() => setPage('system')}>
               查看能力边界
@@ -787,9 +762,9 @@ export default function App() {
                         icon: ArrowsLeftRight,
                       },
                       {
-                        label: '活动隧道',
+                        label: '运行入口',
                         value: overview?.active_count,
-                        note: 'VPN 数据面未接入',
+                        note: '实际本机代理监听数',
                         icon: WaveSine,
                       },
                       {
@@ -938,34 +913,61 @@ export default function App() {
                               <code>
                                 {e.listen}:{e.port}
                               </code>
-                              <small className="subline">HTTP / SOCKS5 · 未监听</small>
+                              <small className="subline">
+                                HTTP / SOCKS5 ·{' '}
+                                {e.status === 'running' || e.status === 'degraded'
+                                  ? '已监听'
+                                  : e.status === 'starting'
+                                    ? '校验中'
+                                    : '未监听'}
+                              </small>
                             </td>
                             <td>
                               <span className="policy-name">{policies[e.policy]}</span>
+                              <small className="subline">
+                                {e.upstream_kind
+                                  ? e.upstream_kind.toUpperCase() + ' 上游'
+                                  : '未配置上游'}
+                              </small>
                             </td>
                             <td>
-                              <Pill tone={e.status === 'blocked' ? 'amber' : ''}>
-                                {e.status === 'blocked' ? (
-                                  <ShieldWarning size={13} />
+                              <Pill tone={runtimeTone(e.status)}>
+                                {e.status === 'running' ? (
+                                  <CheckCircle size={13} />
+                                ) : e.status === 'starting' || e.status === 'stopping' ? (
+                                  <CircleNotch className="spin" size={13} />
                                 ) : (
-                                  <Pause size={12} />
-                                )}
-                                {e.status === 'blocked' ? '启动已阻止' : '已停止'}
+                                  <ShieldWarning size={13} />
+                                )}{' '}
+                                {runtimeLabels[e.status]}
                               </Pill>
                             </td>
                             <td className="align-right">
                               <button
                                 className="icon-button"
-                                aria-label={`启动 ${e.name}`}
+                                aria-label={`${hasRuntime(e.status) ? '停止' : '启动'} ${e.name}`}
                                 disabled={actionBusy}
                                 onClick={() =>
                                   void mutate(
-                                    () => api(`/exits/${e.id}/start`, 'POST'),
-                                    '启动请求已发送',
+                                    () =>
+                                      api(
+                                        `/exits/${e.id}/${hasRuntime(e.status) ? 'stop' : 'start'}`,
+                                        'POST',
+                                      ),
+                                    hasRuntime(e.status)
+                                      ? '代理入口及连接已停止'
+                                      : '上游已验证，本机代理入口已启动',
                                   )
                                 }
                               >
                                 <Power size={17} />
+                              </button>
+                              <button
+                                className="icon-button"
+                                aria-label={`设置上游 ${e.name}`}
+                                onClick={() => setUpstreamExit(e)}
+                              >
+                                <SlidersHorizontal size={17} />
                               </button>
                               <button
                                 className="icon-button"
@@ -1177,11 +1179,11 @@ export default function App() {
                     </li>
                     <li className="muted">
                       <Clock size={17} />
-                      Linux 真实隧道与防泄漏验收：待完成
+                      OpenVPN私有实验已通过；生产驱动接线中
                     </li>
                     <li className="muted">
                       <Clock size={17} />
-                      热备、Xray、订阅：后续版本
+                      域名/TLS/REALITY、Xray/sing-box、安装向导：后续阶段
                     </li>
                   </ul>
                 </section>
@@ -1206,7 +1208,7 @@ export default function App() {
                     </div>
                     <div>
                       <dt>数据面状态</dt>
-                      <dd>未启动任何代理</dd>
+                      <dd>{overview?.active_count ?? 0} 个实际监听 · OpenVPN未接通</dd>
                     </div>
                   </dl>
                 </section>
@@ -1218,7 +1220,7 @@ export default function App() {
               Miku Gate <b>·</b> 让连接更有条理
             </span>
             <span>
-              控制台开发版 <b>·</b> 无活动 VPN 数据面
+              开发预览 <b>·</b> 代理上游 / OpenVPN接线中
             </span>
           </footer>
         </main>
@@ -1228,6 +1230,17 @@ export default function App() {
           current={form === 'new' ? undefined : form}
           submit={saveExit}
           close={() => setForm(null)}
+        />
+      )}
+      {upstreamExit && (
+        <UpstreamSettings
+          exit={exits.find((e) => e.id === upstreamExit.id) ?? upstreamExit}
+          close={() => setUpstreamExit(null)}
+          saved={async () => {
+            await load();
+            setToast('上游配置已更新；启动前仍会实际校验连接');
+            setUpstreamExit(null);
+          }}
         />
       )}
       {secret && <Secret {...secret} close={() => setSecret(null)} notify={setToast} />}
@@ -1271,8 +1284,19 @@ export default function App() {
                 <dd>{timestamp(detail.created_at)}</dd>
               </div>
             </dl>
+            <RuntimeView key={detail.id + 'runtime'} exitID={detail.id} changed={load} />
             <NetworkPlanView key={detail.id} exitID={detail.id} />
             <div className="detail-actions">
+              <button
+                className="button"
+                onClick={() => {
+                  setDetail(null);
+                  setUpstreamExit(exits.find((e) => e.id === detail.id) ?? detail);
+                }}
+              >
+                <SlidersHorizontal size={17} />
+                代理上游
+              </button>
               <button
                 className="button"
                 onClick={() => {

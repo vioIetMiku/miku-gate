@@ -79,3 +79,20 @@ describe('API client', () => {
     expect(dispatchEvent).toHaveBeenCalledOnce();
   });
 });
+
+import { hasRuntime, runtimeLabels, runtimeTone } from './api';
+describe('真实运行状态', () => {
+  it('停止或阻止不是活动运行时', () => {
+    expect(hasRuntime('stopped')).toBe(false);
+    expect(hasRuntime('blocked')).toBe(false);
+  });
+  it('启动、运行、降级和关闭阶段都需要配置互锁', () => {
+    for (const phase of ['starting', 'running', 'degraded', 'stopping'] as const)
+      expect(hasRuntime(phase)).toBe(true);
+  });
+  it('降级不显示成健康，标签不冒充VPN隧道', () => {
+    expect(runtimeTone('degraded')).toBe('amber');
+    expect(runtimeTone('running')).toBe('teal');
+    expect(runtimeLabels.degraded).toBe('上游异常');
+  });
+});

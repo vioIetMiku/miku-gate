@@ -49,8 +49,50 @@ test('本机控制台：登录、配置、阻止假启动、移动布局和会�
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole('button', { name: '关闭对话框', exact: true }).click();
   await page.getByRole('button', { name: '启动 日本开发环境', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('启动已阻止');
+  await expect(page.getByRole('status')).toContainText('生产OpenVPN驱动仍未接通');
   await expect(page.locator('tbody')).toContainText('启动已阻止');
+  await page.getByRole('button', { name: '关闭提示' }).click();
+  await page.getByRole('button', { name: '设置上游 日本开发环境', exact: true }).click();
+  const upstreamDialog = page.getByRole('dialog', { name: '代理上游 · 日本开发环境' });
+  await expect(upstreamDialog.getByLabel('上游协议')).toBeEnabled();
+  await upstreamDialog.getByLabel('上游地址', { exact: true }).fill('127.0.0.1');
+  await upstreamDialog
+    .getByLabel('上游端口', { exact: true })
+    .fill(String(credentials.refusingProxyPort));
+  await upstreamDialog.getByLabel('上游用户名（可选）', { exact: true }).fill('lab-upstream');
+  await upstreamDialog
+    .getByLabel('上游密码（可选）', { exact: true })
+    .fill('not-a-real-upstream-password');
+  await upstreamDialog.getByRole('checkbox', { name: /允许我明确指定的本机/ }).check();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
+  await expect(
+    upstreamDialog.getByRole('button', { name: '关闭对话框', exact: true }),
+  ).toBeInViewport();
+  await page.screenshot({ path: '../artifacts/upstream-mobile.png', fullPage: false });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await upstreamDialog.getByRole('button', { name: '保存上游', exact: true }).click();
+  await expect(upstreamDialog).toHaveCount(0);
+  await expect(page.locator('tbody')).toContainText('SOCKS5 上游');
+  await page.getByRole('button', { name: '设置上游 日本开发环境', exact: true }).click();
+  await expect(upstreamDialog.getByLabel('上游密码（可选）', { exact: true })).toHaveValue('');
+  await expect(upstreamDialog.getByText(/不会回传旧密码/)).toBeVisible();
+  await page.screenshot({ path: '../artifacts/upstream-settings.png', fullPage: false });
+  await upstreamDialog.getByRole('button', { name: '关闭对话框', exact: true }).click();
+  const rejected = page.waitForResponse(
+    (r) => r.url().endsWith('/start') && r.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: '启动 日本开发环境', exact: true }).click();
+  expect((await rejected).status()).toBe(502);
+  await expect(page.getByRole('status')).toContainText('代理上游认证失败');
+  const exitsResponse = await page.request.get('/api/exits');
+  const savedExits = await exitsResponse.json();
+  const savedExit = savedExits.find((item: { name: string }) => item.name === '日本开发环境');
+  const savedUpstream = await page.request.get('/api/exits/' + savedExit.id + '/upstream');
+  const safeView = await savedUpstream.json();
+  expect(safeView.has_password).toBe(true);
+  expect(safeView.password).toBeUndefined();
+  expect(JSON.stringify(safeView)).not.toContain('not-a-real-upstream-password');
   await page.getByRole('button', { name: '关闭提示' }).click();
   await page.screenshot({ path: '../artifacts/overview.png', fullPage: true });
   await page.getByRole('button', { name: '切换深色主题' }).click();

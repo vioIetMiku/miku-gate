@@ -7,7 +7,8 @@ export type Exit = {
   port: number;
   listen: string;
   username: string;
-  status: 'stopped' | 'blocked';
+  status: 'stopped' | 'blocked' | 'starting' | 'running' | 'degraded' | 'stopping';
+  upstream_kind?: 'socks5' | 'http' | 'https';
   reason: string;
   created_at: string;
 };
@@ -20,6 +21,8 @@ export type Overview = {
   country_count: number;
   node_count: number;
   executor_available: boolean;
+  proxy_runtime_available?: boolean;
+  healthy_count?: number;
   protection_verified: boolean;
   message: string;
 };
@@ -165,3 +168,55 @@ export type SandboxState = {
   proxy_listening: boolean;
   reason: string;
 };
+
+export type UpstreamConfig = {
+  configured: boolean;
+  kind: 'socks5' | 'http' | 'https';
+  host: string;
+  port: number;
+  username: string;
+  has_password: boolean;
+  tls_name: string;
+  dns: 'cloudflare' | 'google';
+  allow_loopback: boolean;
+  allow_plaintext: boolean;
+  updated_at?: string;
+};
+export type UpstreamInput = Omit<UpstreamConfig, 'configured' | 'has_password' | 'updated_at'> & {
+  password: string;
+  reuse_password: boolean;
+};
+export type RuntimeState = {
+  exit_id: string;
+  phase: Exit['status'];
+  listen?: string;
+  proxy_listening: boolean;
+  healthy: boolean;
+  proof: {
+    kind: string;
+    protection_mode: string;
+    dns_verified: boolean;
+    kernel_verified: boolean;
+    exit_ip?: string;
+  };
+  started_at?: string;
+  checked_at?: string;
+  check_ms: number;
+  reason: string;
+};
+export const runtimeLabels: Record<Exit['status'], string> = {
+  stopped: '已停止',
+  blocked: '启动已阻止',
+  starting: '校验中',
+  running: '运行中',
+  degraded: '上游异常',
+  stopping: '停止中',
+};
+export function hasRuntime(phase: Exit['status']) {
+  return (
+    phase === 'starting' || phase === 'running' || phase === 'degraded' || phase === 'stopping'
+  );
+}
+export function runtimeTone(phase: Exit['status']) {
+  return phase === 'running' ? 'teal' : phase === 'degraded' || phase === 'blocked' ? 'amber' : '';
+}

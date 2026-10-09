@@ -331,17 +331,39 @@ func (l *vpnLab) outputDrops() uint64 {
 	return 0
 }
 func TestLinuxOpenVPNControlledTunnelAndFailClosed(t *testing.T) {
+	runControlledTunnel(t, false)
+}
+func TestLinuxOpenVPNLegacyControlledTunnelAndFailClosed(t *testing.T) {
+	runControlledTunnel(t, true)
+}
+func runControlledTunnel(t *testing.T, legacy bool) {
 	l := newVPNLab(t)
 	before := l.hostSnapshot()
 	pki := testPKI(t)
 	l.installTopology()
-	server, err := startProcess(l.ctx, l.server.file, serverConfig(pki))
+	serverText := serverConfig(pki)
+	if legacy {
+		serverText = strings.Replace(serverText, "data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305", "data-ciphers AES-128-CBC", 1)
+		serverText = strings.Replace(serverText, "auth SHA256", "auth SHA1", 1)
+	}
+	server, err := startProcess(l.ctx, l.server.file, serverText)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(server.close)
 	l.ready(server)
 	profile := l.clientProfile(pki)
+	if legacy {
+		profile, err = normalizeOptions(pki.profile(transportServer)+"cipher AES-128-CBC\ndata-ciphers AES-128-CBC\nauth SHA1\n", transportServer, time.Now(), func(ip string) error {
+			if ip != transportServer {
+				return ErrProfile
+			}
+			return nil
+		}, NormalizeOptions{AllowVPNGateLegacy: true, ExpectedPeerName: "miku-lab-server"})
+		if err != nil || !profile.LegacyDataChannel() {
+			t.Fatal("explicit legacy profile failed", err)
+		}
+	}
 	// Certificate-role checks alone are not evidence of actual peer authentication.
 	// A deliberately wrong expected server name must fail before tunnel setup.
 	wrong := profile
@@ -422,5 +444,8 @@ func TestLinuxOpenVPNControlledTunnelAndFailClosed(t *testing.T) {
 	if !bytes.Equal(before, l.hostSnapshot()) {
 		t.Fatal("controlled lab changed host links/routes/firewall/DNS")
 	}
-	t.Logf("Observed: mutual TLS handshake with rejected wrong server name; ignored pushed route/DNS; DNS UDP/TCP and business TCP sourced from tunnel; mixed/private DNS rejected; DNS timeout did not fall back; established and new flows blocked after VPN/TUN loss, even with an underlay default route. Counters before=%d after=%d; service before=%+v after=%+v; host network/DNS unchanged.", drops, l.outputDrops(), oldStats, later)
+	if legacy && !strings.Contains(client.output.text(), "Data Channel: cipher 'AES-128-CBC'") {
+		t.Fatal("legacy data cipher was not actually negotiated")
+	}
+	t.Logf("Observed: legacy-data=%t; mutual TLS handshake with rejected wrong server name; ignored pushed route/DNS; DNS UDP/TCP and business TCP sourced from tunnel; mixed/private DNS rejected; DNS timeout did not fall back; established and new flows blocked after VPN/TUN loss, even with an underlay default route. Counters before=%d after=%d; service before=%+v after=%+v; host network/DNS unchanged.", legacy, drops, l.outputDrops(), oldStats, later)
 }

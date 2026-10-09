@@ -1,6 +1,6 @@
 # 当前 API：控制面与代理上游运行时
 
-当前开发版本：`0.1.0-dev.6`，接口保持与 dev.2 兼容。默认基址为 `http://127.0.0.1:3939/api`。已配置的HTTP/SOCKS/HTTPS代理上游可实际启动；OpenVPN生产驱动仍不可用。运行中的配置/凭据/删除有互锁，不能假定全部旧的写操作仍无条件成功。
+当前开发版本：`0.1.0-dev.7`，接口保持与 dev.2 兼容。默认基址为 `http://127.0.0.1:3939/api`。已配置的HTTP/SOCKS/HTTPS代理上游可实际启动；OpenVPN生产驱动仍不可用。运行中的配置/凭据/删除有互锁，不能假定全部旧的写操作仍无条件成功。
 
 ## 认证与请求规则
 
@@ -40,6 +40,7 @@
 | GET | `/exits/{id}/runtime` | 已登录 | 200，实际监听/健康/最近探测，不用配置冒充存活 |
 | POST | `/exits/{id}/probe` | 已登录 + CSRF + 运行中 | 200，经当前上游的DNS/TLS复测；失败返回明确错误 |
 | GET | `/nodes` | 已登录 | 200，缓存候选节点，不含 OpenVPN 配置正文 |
+| GET | `/nodes/{id}/profile` | 已登录，官方来源缓存 | 200，仅静态格式/材料检查，不返回配置正文、不联网 |
 | POST | `/nodes/refresh` | 已登录 + CSRF | 200，`count`、`skipped`、`tested:false` |
 | GET | `/events` | 已登录 | 200，最近 100 条事件 |
 | GET | `/diagnostics` | 已登录 | 200，只读平台/工具检查及执行器不可用状态 |
@@ -133,3 +134,5 @@ PUT上游字段：`kind`（socks5/http/https）、`host`、`port`、可选`usern
 启动是有界的同步操作；在已提交为运行状态的边界附近断开HTTP连接，调用方不能仅凭未收到响应推断未启动，应查询runtime。重复启动运行中的出口不重复建立会话。停止会等待已接受连接退出；超时后同样先查状态。重启不会从数据库恢复虚假的running值，也不自动启动已保存的出口。
 
 代理模式与独立的quarantine-only沙箱不是同一条数据路径。若该出口尚有独立沙箱，需先清理再启动代理上游。运行中也不能创建/清理沙箱，避免误把隔离状态当作代理的内核防泄漏证明。
+
+节点profile响应说明见 [VPNGATE_COMPATIBILITY.md](VPNGATE_COMPATIBILITY.md)。strict/legacy-candidate不表示节点在线，network_tested与server_identity_verified固定false；点击查看不授权连接或兼容模式。

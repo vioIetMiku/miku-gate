@@ -81,7 +81,7 @@ run_lab ipc "$IPC_SHA256"
 run_lab openvpn "$OPENVPN_SHA256"
 ```
 
-守护脚本固定为测试子进程设置 `/usr/local/lib/miku-gate-lab-exec`，无需用户传入可执行路径或任意命令。每组使用独立 scope，不并行。只有准确命中 7、4、1 项主测试、无 SKIP、退出码 0、宿主快照一致且没有残留/资源拒绝时，才输出 `success: true`。netexec 组还包含 6 个文件对象子用例。
+守护脚本固定为测试子进程设置 `/usr/local/lib/miku-gate-lab-exec`，无需用户传入可执行路径或任意命令。每组使用独立 scope，不并行。只有准确命中 7、4、2 项主测试（dev.7增加显式CBC/HMAC兼容旅程）、无 SKIP、退出码 0、宿主快照一致且没有残留/资源拒绝时，才输出 `success: true`。netexec 组还包含 6 个文件对象子用例。
 
 ## 如何读结果
 

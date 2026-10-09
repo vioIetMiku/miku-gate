@@ -14,6 +14,28 @@ test('本机控制台：登录、配置、阻止假启动、移动布局和会�
   await page.getByRole('button', { name: '登录控制台' }).click();
   await expect(page.getByRole('heading', { name: '连接的全貌，尽在这里。' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '从第一个出口开始' })).toBeVisible();
+  await page.getByRole('button', { name: '节点库', exact: true }).click();
+  const profileResponse = page.waitForResponse((r) =>
+    r.url().endsWith('/nodes/profile-check-fixture/profile'),
+  );
+  await page.getByRole('button', { name: '检查配置 fixture-static-profile', exact: true }).click();
+  const profileResult = await (await profileResponse).json();
+  expect(profileResult.mode).toBe('unsupported');
+  expect(profileResult.network_tested).toBe(false);
+  expect(profileResult.server_identity_verified).toBe(false);
+  expect(JSON.stringify(profileResult)).not.toContain('UNTRUSTED_TEST_CONFIG_DO_NOT_ECHO');
+  const profileDialog = page.getByRole('dialog', {
+    name: '配置检查 · fixture-static-profile',
+    exact: true,
+  });
+  await expect(
+    profileDialog.getByRole('heading', { name: '配置不受支持', exact: true }),
+  ).toBeVisible();
+  await expect(profileDialog).toContainText('未测试网络');
+  await page.screenshot({ path: '../artifacts/node-profile-check.png', fullPage: false });
+  await profileDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.getByRole('button', { name: '概览', exact: true }).click();
+
   for (const [name, country] of [
     ['日本开发环境', 'JP'],
     ['美国浏览环境', 'US'],

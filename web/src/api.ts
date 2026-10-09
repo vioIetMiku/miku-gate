@@ -220,3 +220,18 @@ export function hasRuntime(phase: Exit['status']) {
 export function runtimeTone(phase: Exit['status']) {
   return phase === 'running' ? 'teal' : phase === 'degraded' || phase === 'blocked' ? 'amber' : '';
 }
+
+export type ProfileCheck = {
+  mode: 'strict' | 'legacy-candidate' | 'unsupported';
+  strict_compatible: boolean;
+  legacy_candidate: boolean;
+  legacy_data_channel: boolean;
+  shared_client_identity: boolean;
+  expected_peer_name_required: boolean;
+  server_identity_verified: boolean;
+  network_tested: boolean;
+  profile_sha256?: string;
+  tls_minimum: string;
+  message: string;
+  checked_at: string;
+};

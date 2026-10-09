@@ -1,6 +1,6 @@
 # Miku Gate
 
-**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.6`。**
+**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.7`。**
 
 > 当前可运行的是带认证的本机代理上游网关：HTTP/SOCKS入口 → 用户提供的SOCKS5、HTTP或HTTPS代理。完整VPN网关仍在开发。
 >
@@ -189,3 +189,5 @@ scripts/            构建、真实 HTTP smoke 与浏览器测试辅助
 当前实现为独立编写，没有把三个参考仓库的源码直接拼接进来。分发许可证尚未选定，不应将此开发快照当成已经完成许可审查的对外发行版。
 
 完整终态要求与验收矩阵见 [DELIVERY_PLAN.md](docs/DELIVERY_PLAN.md)。正在开发的代理上游与密钥边界见 [UPSTREAM_PROXY.md](docs/UPSTREAM_PROXY.md)。
+
+VPN Gate官方配置的显式旧数据通道支持与静态节点检查见 [VPNGATE_COMPATIBILITY.md](docs/VPNGATE_COMPATIBILITY.md)；main/dev.7开发中，不等于公共节点已连通。

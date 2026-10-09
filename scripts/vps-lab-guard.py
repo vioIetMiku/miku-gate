@@ -48,6 +48,7 @@ SUITES = {
     }),
     "openvpn": ("openvpn.test", "^TestLinuxOpenVPN", {
         "TestLinuxOpenVPNControlledTunnelAndFailClosed",
+        "TestLinuxOpenVPNLegacyControlledTunnelAndFailClosed",
     }),
 }
 

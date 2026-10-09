@@ -1,3 +1,4 @@
+import { NodeProfileView } from './NodeProfileView';
 import { Modal } from './Modal';
 import { UpstreamSettings, RuntimeView } from './UpstreamSettings';
 import { NetworkPlanView } from './NetworkPlanView';
@@ -426,6 +427,7 @@ export default function App() {
   const [secret, setSecret] = useState<{ exit: Exit; password: string } | null>(null);
   const [query, setQuery] = useState('');
   const [country, setCountry] = useState('');
+  const [profileNode, setProfileNode] = useState<VPNNode | null>(null);
   const [nodeQuery, setNodeQuery] = useState('');
   const [nodeLimit, setNodeLimit] = useState(50);
   useEffect(() => {
@@ -445,6 +447,7 @@ export default function App() {
       setOverview(null);
       setExits([]);
       setNodes([]);
+      setProfileNode(null);
       setEvents([]);
       setForm(null);
       setDetail(null);
@@ -1091,6 +1094,13 @@ export default function App() {
                             <td>
                               <Pill>类型未知</Pill>
                               <small className="subline">未测试连通性</small>
+                              <button
+                                className="text-button"
+                                aria-label={`检查配置 ${n.hostname}`}
+                                onClick={() => setProfileNode(n)}
+                              >
+                                检查配置
+                              </button>
                             </td>
                             <td className="small muted">{timestamp(n.fetched_at)}</td>
                           </tr>
@@ -1232,6 +1242,7 @@ export default function App() {
           close={() => setForm(null)}
         />
       )}
+      {profileNode && <NodeProfileView node={profileNode} close={() => setProfileNode(null)} />}
       {upstreamExit && (
         <UpstreamSettings
           exit={exits.find((e) => e.id === upstreamExit.id) ?? upstreamExit}

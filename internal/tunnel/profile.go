@@ -6,8 +6,10 @@ import (
 	"bufio"
 	"crypto/ecdsa"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -38,6 +40,8 @@ type Endpoint struct {
 // Source text is never forwarded to OpenVPN; only canonical fields are rendered.
 type Profile struct {
 	endpoint                       Endpoint
+	legacyData                     bool
+	sharedClient                   bool
 	ca, certificate, key, peerName string
 }
 
@@ -50,7 +54,39 @@ func (p Profile) GoString() string   { return p.String() }
 func Normalize(raw, expectedIP string) (Profile, error) {
 	return normalize(raw, expectedIP, time.Now(), egress.PublicIPv4)
 }
+
+// NormalizeOptions never inherits compatibility from a downloaded directive.
+// Enabling the VPN Gate legacy data channel requires explicit caller consent and
+// an independently selected expected peer name; it does not relax server TLS.
+type NormalizeOptions struct {
+	AllowVPNGateLegacy bool
+	ExpectedPeerName   string
+}
+
+func NormalizeWithOptions(raw, expectedIP string, options NormalizeOptions) (Profile, error) {
+	return normalizeOptions(raw, expectedIP, time.Now(), egress.PublicIPv4, options)
+}
 func normalize(raw, expectedIP string, now time.Time, allowEndpoint func(string) error) (Profile, error) {
+	return normalizeOptions(raw, expectedIP, now, allowEndpoint, NormalizeOptions{})
+}
+func normalizeOptions(raw, expectedIP string, now time.Time, allowEndpoint func(string) error, options NormalizeOptions) (Profile, error) {
+	if options.ExpectedPeerName != "" && !peerNamePattern.MatchString(options.ExpectedPeerName) {
+		return Profile{}, ErrProfile
+	}
+	if options.AllowVPNGateLegacy && options.ExpectedPeerName == "" {
+		return Profile{}, ErrProfile
+	}
+	legacyData := false
+	cipherAllowed := func(value string) bool {
+		if aead(value) {
+			return true
+		}
+		if options.AllowVPNGateLegacy && value == "AES-128-CBC" {
+			legacyData = true
+			return true
+		}
+		return false
+	}
 	fail := func() (Profile, error) { return Profile{}, ErrProfile }
 	if len(raw) == 0 || len(raw) > MaxProfileBytes {
 		return fail()
@@ -140,7 +176,7 @@ func normalize(raw, expectedIP string, now time.Time, allowEndpoint func(string)
 				return fail()
 			}
 		case "cipher", "data-ciphers-fallback":
-			if len(args) != 1 || !aead(args[0]) {
+			if len(args) != 1 || !cipherAllowed(args[0]) {
 				return fail()
 			}
 		case "data-ciphers":
@@ -148,12 +184,19 @@ func normalize(raw, expectedIP string, now time.Time, allowEndpoint func(string)
 				return fail()
 			}
 			for _, cipher := range strings.Split(args[0], ":") {
-				if !aead(cipher) {
+				if !cipherAllowed(cipher) {
 					return fail()
 				}
 			}
 		case "auth":
-			if len(args) != 1 || (args[0] != "SHA256" && args[0] != "SHA384" && args[0] != "SHA512") {
+			if len(args) != 1 {
+				return fail()
+			}
+			if args[0] == "SHA1" && options.AllowVPNGateLegacy {
+				legacyData = true
+				break
+			}
+			if args[0] != "SHA256" && args[0] != "SHA384" && args[0] != "SHA512" {
 				return fail()
 			}
 		case "comp-lzo":
@@ -220,9 +263,15 @@ func normalize(raw, expectedIP string, now time.Time, allowEndpoint func(string)
 	if err != nil {
 		return fail()
 	}
-	profile := Profile{endpoint: Endpoint{IP: expected, Port: uint16(port), Transport: transport}, ca: ca}
+	profile := Profile{endpoint: Endpoint{IP: expected, Port: uint16(port), Transport: transport}, ca: ca, legacyData: legacyData}
 	if name := values["verify-x509-name"]; len(name) == 2 {
 		profile.peerName = name[0]
+	}
+	if options.ExpectedPeerName != "" {
+		if profile.peerName != "" && profile.peerName != options.ExpectedPeerName {
+			return fail()
+		}
+		profile.peerName = options.ExpectedPeerName
 	}
 	cert, key := blocks["cert"], blocks["key"]
 	if (cert == "") != (key == "") {
@@ -230,6 +279,12 @@ func normalize(raw, expectedIP string, now time.Time, allowEndpoint func(string)
 	}
 	if cert != "" {
 		canonicalCert, canonicalKey, err := normalizeClientIdentity(cert, key, roots, now)
+		if err != nil && options.AllowVPNGateLegacy {
+			canonicalCert, canonicalKey, err = normalizeVPNGateSharedClient(cert, key, now)
+			if err == nil {
+				profile.sharedClient = true
+			}
+		}
 		if err != nil {
 			return fail()
 		}
@@ -399,6 +454,10 @@ ping-restart 6
 verb 3
 mute 0
 `, p.endpoint.Transport, p.endpoint.IP, p.endpoint.Port, Device)
+	if p.legacyData {
+		header = strings.Replace(header, "data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305\n", "data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305:AES-128-CBC\ndata-ciphers-fallback AES-128-CBC\n", 1)
+		header = strings.Replace(header, "auth SHA256\n", "auth SHA1\n", 1)
+	}
 	if p.peerName != "" {
 		header += "verify-x509-name " + p.peerName + " name\n"
 	}
@@ -416,3 +475,38 @@ func strongSignature(value x509.SignatureAlgorithm) bool {
 	}
 	return false
 }
+
+// This fingerprint is the public, shared VPN Gate client identity observed in
+// official HTTPS configurations. It is NOT a CA or a server trust anchor. We do
+// not accept arbitrary SHA1-signed clients or weaken OpenSSL's server verifier.
+const vpnGateSharedClientSHA256 = "5f63774f1fc257f26108a02ca6b18fa9131bb48a36dfd75edd13fdbe2e5ca47c"
+
+func normalizeVPNGateSharedClient(certText, keyText string, now time.Time) (string, string, error) {
+	block, rest := pem.Decode([]byte(strings.TrimSpace(certText)))
+	if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 || strings.TrimSpace(string(rest)) != "" || !strings.HasPrefix(strings.TrimSpace(certText), "-----BEGIN CERTIFICATE-----") {
+		return "", "", ErrProfile
+	}
+	fingerprint := sha256.Sum256(block.Bytes)
+	if hex.EncodeToString(fingerprint[:]) != vpnGateSharedClientSHA256 {
+		return "", "", ErrProfile
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil || cert.IsCA || !strongKey(cert.PublicKey) || now.Before(cert.NotBefore) || !now.Before(cert.NotAfter) {
+		return "", "", ErrProfile
+	}
+	pair, err := tls.X509KeyPair([]byte(certText), []byte(keyText))
+	if err != nil || len(pair.Certificate) != 1 {
+		return "", "", ErrProfile
+	}
+	keyBlock, keyRest := pem.Decode([]byte(strings.TrimSpace(keyText)))
+	if keyBlock == nil || len(keyBlock.Headers) != 0 || strings.TrimSpace(string(keyRest)) != "" || !strings.HasPrefix(strings.TrimSpace(keyText), "-----BEGIN ") {
+		return "", "", ErrProfile
+	}
+	canonical, err := x509.MarshalPKCS8PrivateKey(pair.PrivateKey)
+	if err != nil {
+		return "", "", ErrProfile
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})), string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: canonical})), nil
+}
+func (p Profile) LegacyDataChannel() bool    { return p.legacyData }
+func (p Profile) SharedClientIdentity() bool { return p.sharedClient }

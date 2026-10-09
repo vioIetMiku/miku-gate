@@ -106,6 +106,7 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 		}
 		write(w, 200, v)
 	}))
+	mux.HandleFunc("GET /api/nodes/{id}/profile", a.auth(a.nodeProfile))
 	mux.HandleFunc("POST /api/nodes/refresh", a.auth(a.refreshNodes))
 	mux.HandleFunc("GET /api/events", a.auth(func(w http.ResponseWriter, r *http.Request, s domain.Session) {
 		v, err := a.store.Events()

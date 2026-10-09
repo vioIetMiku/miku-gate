@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { createServer } from 'node:net';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -14,6 +15,11 @@ const output = execFileSync(binary, ['init', '--data', data], { encoding: 'utf8'
 const password = output.match(/密码：([^\r\n]+)/)?.[1];
 if (!password) throw new Error('Failed to initialize isolated test account');
 writeFileSync(join(root, '.cache', 'e2e-auth.json'), JSON.stringify({ username: 'admin', password, refusingProxyPort }), { mode: 0o600 });
+// Synthetic cache row for the read-only profile UI, created before the real
+// service opens its database. No public node request or mock HTTP API is used.
+const seedDB=new DatabaseSync(join(data,'miku-gate.db'));
+seedDB.prepare('INSERT INTO nodes VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('profile-check-fixture','fixture-static-profile','8.8.8.8','JP','Fixture country',0,0,0,'https://www.vpngate.net/api/iphone/',new Date().toISOString(),'client\ndev tun\nremote 8.8.8.8 443\n<key>\nUNTRUSTED_TEST_CONFIG_DO_NOT_ECHO\n</key>\n');
+seedDB.close();
 const server = spawn(binary, ['serve', '--data', data, '--listen', '127.0.0.1:3940'], { stdio: 'inherit', windowsHide: true });
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.kill());
 process.on('exit', () => { server.kill(); refusingProxy.close(); });

@@ -314,7 +314,7 @@ push "redirect-gateway def1"
 push "dhcp-option DNS 198.18.48.1"
 push "route 203.0.113.0 255.255.255.0"
 verb 3
-mute 5
+mute 0
 <ca>
 ` + p.ca + "</ca>\n<cert>\n" + p.serverCert + "</cert>\n<key>\n" + p.serverKey + "</key>\n"
 }

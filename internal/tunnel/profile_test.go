@@ -64,7 +64,7 @@ func TestNormalizeReconstructsOwnedConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := profile.render()
-	for _, required := range []string{"dev " + Device, "proto udp4", "route-nopull", "route-noexec", "tls-version-min 1.2", "remote-cert-tls server", "allow-compression no", "disable-dco", "script-security 1", "pull-filter ignore \"dhcp-option\""} {
+	for _, required := range []string{"dev " + Device, "proto udp4", "route-nopull", "route-noexec", "tls-version-min 1.2", "remote-cert-tls server", "allow-compression no", "disable-dco", "script-security 1", "mute 0", "pull-filter ignore \"dhcp-option\""} {
 		if !strings.Contains(text, required+"\n") {
 			t.Fatal("missing fixed safety option", required)
 		}

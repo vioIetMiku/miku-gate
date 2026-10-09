@@ -397,7 +397,7 @@ persist-tun
 ping 2
 ping-restart 6
 verb 3
-mute 5
+mute 0
 `, p.endpoint.Transport, p.endpoint.IP, p.endpoint.Port, Device)
 	if p.peerName != "" {
 		header += "verify-x509-name " + p.peerName + " name\n"

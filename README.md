@@ -126,7 +126,7 @@ npm --prefix web run test:e2e
 
 ## 受控 OpenVPN 实验
 
-dev.5 新增规范化配置、接口绑定DNS/TCP拨号器和全隔离的真OpenVPN测试拓扑，尚未接入Web启动或公网代理监听。见 [受控实验手册](docs/CONTROLLED_OPENVPN.md)。真实Linux结论以对应提交的验收记录为准。
+dev.5 新增规范化配置、接口绑定DNS/TCP拨号器和全隔离的真OpenVPN测试拓扑，尚未接入Web启动或公网代理监听。见 [受控实验手册](docs/CONTROLLED_OPENVPN.md)。真实mTLS、DNS/TCP和断线阻断已通过 [受控Linux验收](docs/validation/2026-10-09-controlled-openvpn.md)，不是实际VPS或公网代理验证。
 
 ## 可选的本机隔离 IPC
 
@@ -170,7 +170,7 @@ scripts/            构建、真实 HTTP smoke 与浏览器测试辅助
 
 ## 下一步
 
-隔离与受限IPC已通过临时Linux环境验收。下一步实现受控OpenVPN测试拓扑、规范化配置与namespace内DNS/拨号器；验证隧道断线与重启边界后，再接通代理核心和管理API。
+隔离、受限IPC及受控OpenVPN/DNS/TCP实验已通过临时Linux环境验收。下一步完成生产权限分离、隧道生命周期协调与worker连接交接；补充更多故障测试后，接通真实代理入口与管理API。
 
 - [阶段任务与验收清单 · Issue #1](https://github.com/vioIetMiku/miku-gate/issues/1)
 - [完整产品规划](docs/PRODUCT_PLAN.md)

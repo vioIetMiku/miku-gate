@@ -6,8 +6,8 @@
 
 - 已实现限定操作、固定实例、指定非 root UID 的 Unix socket IPC；默认关闭、双向 peer credential 与 root 路径校验。
 - 已实现 executor serve/info、instance 查询、sandbox --ipc，以及显式接入的 Web 状态/确认操作/审计/删除互锁。
-- 已加入跨 UID、伪服务器拒绝、重启恢复和真实 HTTP→IPC→内核实验，等待 dev.4 的远端实测结果。
-- 本机 Go 测试/vet、37项真实 HTTP/CLI smoke、前端6项单元测试、TypeScript/Vite构建、Chrome完整旅程已通过。IPC解码器5秒有界fuzz执行637,737次无崩溃。Linux结果按提交单独追加。
+- 4项真实IPC实验已通过：跨UID权限、伪服务器拒绝、重启/socket归属、真实普通用户HTTP→IPC→root→内核；原有7项内核主测试和6个文件子用例也通过。
+- 本机 Go 测试/vet、37项真实 HTTP/CLI smoke、前端6项单元测试、TypeScript/Vite构建、Chrome完整旅程已通过。IPC解码器5秒有界fuzz执行637,737次无崩溃。远端Go race、浏览器与内核实验全部通过；测试源码为 c0c0995，详见 [IPC验收记录](validation/2026-10-09-executor-ipc.md)。
 - 这仍不是 OpenVPN 或代理出口；已发布 dev.2 资产未替换。
 
 ## 先前交付
@@ -70,7 +70,7 @@ dev.2 发布快照与 dev.3 补充代码分别有独立 CI 记录。dev.3 测试
 
 1. 核对可信 SSH 主机指纹；只读确认 Linux 发行版、能力、工具及现有网络环境。测试资源预算为 1 核 / 1GB，采用本机构建、远程单任务验收，不在 VPS 安装构建工具链。
 2. 将已通过的受控隔离用例用于目标环境复核；先前的临时 runner 证据见验证记录，避免重新把交叉编译当运行证明。
-3. 完成 dev.4 IPC 的实际跨权限验收后，继续规范化 OpenVPN 配置、受控隧道和 namespace 内 DNS/拨号器。
+3. dev.4 IPC 跨权限验收已通过；继续规范化 OpenVPN 配置、受控隧道和 namespace 内 DNS/拨号器。
 4. 通过隧道断线、DNS、IPv6、崩溃恢复与资源冲突测试后，才接通现有代理核心并解除启动闸门。
 
 使用说明见 [LINUX_SANDBOX.md](LINUX_SANDBOX.md)，完整网络契约见 [NETWORK_EXECUTOR.md](NETWORK_EXECUTOR.md)。升级前备份旧数据目录；schema v2 不能由旧 dev.1 直接降级打开。

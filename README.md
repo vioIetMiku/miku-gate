@@ -128,7 +128,7 @@ npm --prefix web run test:e2e
 
 dev.4 新增固定实例、指定非 root UID 的 Unix socket 助手。需管理员显式授权，并给普通用户控制台添加 --sandbox-ipc；默认不开启。界面区分计划与实际隔离，变更需二次确认，原有 VPN 启动闸门不解除。
 
-完整命令、身份边界和故障处理见 [隔离 IPC 手册](docs/EXECUTOR_IPC.md)。已经发布的 dev.2 压缩包不包含这部分新功能。
+完整命令、身份边界和故障处理见 [隔离 IPC 手册](docs/EXECUTOR_IPC.md)；[真实跨UID验收记录](docs/validation/2026-10-09-executor-ipc.md)已完成。已经发布的 dev.2 压缩包不包含这部分新功能。
 
 ## Linux 隔离实验
 
@@ -165,7 +165,7 @@ scripts/            构建、真实 HTTP smoke 与浏览器测试辅助
 
 ## 下一步
 
-先运行真实 Linux 隔离实验，随后补齐特权 IPC、受控 OpenVPN 测试拓扑与 namespace 内的 DNS / 拨号器；验证隧道断线与重启边界后，再接通代理核心和管理 API。
+隔离与受限IPC已通过临时Linux环境验收。下一步实现受控OpenVPN测试拓扑、规范化配置与namespace内DNS/拨号器；验证隧道断线与重启边界后，再接通代理核心和管理API。
 
 - [阶段任务与验收清单 · Issue #1](https://github.com/vioIetMiku/miku-gate/issues/1)
 - [完整产品规划](docs/PRODUCT_PLAN.md)

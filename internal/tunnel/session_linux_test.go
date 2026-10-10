@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -52,7 +51,7 @@ func TestLinuxOpenVPNSessionWorkerLifecycle(t *testing.T) {
 			child := exec.CommandContext(l.ctx, l.nsenter, "--net=/proc/self/fd/3", "--", l.binary, "-test.run=^TestSessionRootHarness$", "-test.v", "-test.timeout=60s")
 			child.ExtraFiles = []*os.File{l.server.file, file}
 			child.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "MIKU_SESSION_ROOT_HARNESS=1", "GOMAXPROCS=1", "GOMEMLIMIT=96MiB"}
-			child.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+			// CommandContext/Wait own this test coordinator; production children use startParentBound.
 			child.WaitDelay = time.Second
 			output, err := child.CombinedOutput()
 			if err != nil || !strings.Contains(string(output), "SESSION_PRODUCTION_PATH_OK") {

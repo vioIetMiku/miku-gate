@@ -420,7 +420,12 @@ func waitChild(cmd *exec.Cmd, done <-chan struct{}) (<-chan struct{}, func()) {
 	return done, close
 }
 func spawnUnprivileged(binary string, args []string, files []*os.File, uid uint32, caps ...uintptr) (*exec.Cmd, error) {
-	cmd := exec.Command(binary, args...)
+	launcher, err := trustedTool("setpriv")
+	if err != nil {
+		return nil, err
+	}
+	argv := append([]string{"--no-new-privs", "--", binary}, args...)
+	cmd := exec.Command(launcher, argv...)
 	cmd.ExtraFiles = files
 	cmd.Dir = "/"
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "GOMAXPROCS=1", "GOMEMLIMIT=64MiB"}
@@ -492,7 +497,10 @@ func RunSupervisor() error {
 	if err != nil {
 		return err
 	}
-	vpn, _ := spawnUnprivileged(binary, []string{"_vpn-openvpn"}, []*os.File{configFile}, boot.Options.TunnelUID, unix.CAP_NET_ADMIN)
+	vpn, err := spawnUnprivileged(binary, []string{"_vpn-openvpn"}, []*os.File{configFile}, boot.Options.TunnelUID, unix.CAP_NET_ADMIN)
+	if err != nil {
+		return err
+	}
 	output := &processOutput{ready: make(chan struct{})}
 	vpn.Stdout = output
 	vpn.Stderr = output
@@ -542,7 +550,10 @@ func RunSupervisor() error {
 		return err
 	}
 	defer workerConfig.Close()
-	worker, _ := spawnUnprivileged(binary, []string{"_vpn-worker"}, []*os.File{childFile, workerConfig}, boot.Options.WorkerUID, unix.CAP_NET_RAW)
+	worker, err := spawnUnprivileged(binary, []string{"_vpn-worker"}, []*os.File{childFile, workerConfig}, boot.Options.WorkerUID, unix.CAP_NET_RAW)
+	if err != nil {
+		return err
+	}
 	workerWait, err := startParentBound(worker)
 	if err != nil {
 		return err
@@ -637,7 +648,9 @@ func RunWorker() error {
 	if err != nil || resolver.String() != "1.1.1.1:53" {
 		return ErrScope
 	}
-	// Immutable no-new-privileges plus a non-root UID: the only ambient capability
+	// The native setpriv launcher set no_new_privs before this Go runtime began,
+	// so every worker thread inherits it. The following repeat is defense-in-depth.
+	// With a non-root UID, the only ambient capability
 	// is NET_RAW for device binding, not NET_ADMIN/SYS_ADMIN or filesystem powers.
 	if !hasOnlyCapability(unix.CAP_NET_RAW) || unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != nil {
 		return ErrPrivilege
@@ -717,6 +730,7 @@ func verifyChildIdentity(cmd *exec.Cmd, uid uint32, capabilities uint64) error {
 		return ErrPrivilege
 	}
 	seenUID, seenGID, seenCaps, seenNNP := false, false, false, false
+	actualCaps := "missing"
 	for _, line := range strings.Split(string(raw), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 2 {
@@ -739,6 +753,7 @@ func verifyChildIdentity(cmd *exec.Cmd, uid uint32, capabilities uint64) error {
 				seenGID = true
 			}
 		case "CapEff:":
+			actualCaps = fields[1]
 			value, e := strconv.ParseUint(fields[1], 16, 64)
 			seenCaps = e == nil && value == capabilities
 		case "NoNewPrivs:":
@@ -746,7 +761,7 @@ func verifyChildIdentity(cmd *exec.Cmd, uid uint32, capabilities uint64) error {
 		}
 	}
 	if !seenUID || !seenGID || !seenCaps || !seenNNP {
-		return ErrPrivilege
+		return fmt.Errorf("%w: uid_ok=%t gid_ok=%t caps=%s expected=%x no_new_privs=%t", ErrPrivilege, seenUID, seenGID, actualCaps, capabilities, seenNNP)
 	}
 	return nil
 }
@@ -820,7 +835,7 @@ func CheckSessionEnvironment(options SessionOptions) error {
 	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
 		return ErrScope
 	}
-	for _, name := range []string{"openvpn", "ip", "nft"} {
+	for _, name := range []string{"openvpn", "ip", "nft", "setpriv"} {
 		if _, err = trustedTool(name); err != nil {
 			return err
 		}

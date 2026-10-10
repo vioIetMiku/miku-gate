@@ -1,3 +1,4 @@
+import { IngressInventory } from './IngressInventory';
 import { HostInventory } from './HostInventory';
 import { VPNSettings } from './VPNSettings';
 import { NodeProfileView } from './NodeProfileView';
@@ -1148,6 +1149,7 @@ export default function App() {
           {page === 'system' && (
             <>
               <HostInventory />
+              <IngressInventory />
               <section className="panel">
                 <div className="section-heading">
                   <div>

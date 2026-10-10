@@ -48,7 +48,7 @@ func run() error {
 		return tunnel.RunWorker()
 	}
 	if len(os.Args) < 2 {
-		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | instance | serve | doctor | inventory | version | sandbox | executor | vpn-executor\n支持本机认证代理上游；Linux 隔离 OpenVPN 已接线；交互安装与加密入口开发中。")
+		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | instance | serve | doctor | inventory | ingress | version | sandbox | executor | vpn-executor\n支持本机认证代理上游；Linux 隔离 OpenVPN 已接线；交互安装与加密入口开发中。")
 		return nil
 	}
 	if os.Args[1] == "version" {
@@ -73,6 +73,9 @@ func run() error {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(hostinventory.Inspect(ctx))
+	}
+	if os.Args[1] == "ingress" {
+		return runIngress(os.Args[2:], os.Stdin, os.Stdout)
 	}
 	if os.Args[1] == "doctor" {
 		enc := json.NewEncoder(os.Stdout)

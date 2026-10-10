@@ -1846,3 +1846,64 @@ label input:disabled {
 .host-inventory .section-heading {
   padding: 0 0 18px;
 }
+
+.ingress-inventory {
+  margin-bottom: 20px;
+}
+.ingress-content {
+  padding: 0 21px 21px;
+}
+.ingress-content > label {
+  display: block;
+  margin: 12px 0;
+}
+.ingress-content select {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin-top: 7px;
+}
+.ingress-content .confirm-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.ingress-content .confirm-check input {
+  flex-shrink: 0;
+  width: auto;
+  margin-top: 4px;
+}
+.ingress-content code {
+  overflow-wrap: anywhere;
+}
+.ingress-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ingress-entry input {
+  width: auto;
+  flex-shrink: 0;
+}
+.ingress-entry div {
+  min-width: 0;
+  flex: 1;
+}
+.ingress-entry p {
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .ingress-content {
+    padding: 0 14px 18px;
+  }
+  .ingress-entry {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}

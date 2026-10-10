@@ -189,6 +189,28 @@ test('本机控制台：登录、配置、阻止假启动、移动布局和会�
     animations: 'disabled',
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(page.getByRole('heading', { name: '已有入口配置' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '读取入口摘要' })).toBeDisabled();
+  await expect(
+    page.getByRole('combobox', { name: '固定配置来源' }).getByRole('option'),
+  ).toHaveCount(4);
+  await page.getByRole('checkbox', { name: /我同意读取所选核心配置/ }).check();
+  const configRead = page.waitForResponse((r) => r.url().endsWith('/api/host/ingress/inspect'));
+  await page.getByRole('button', { name: '读取入口摘要' }).click();
+  expect((await configRead).status()).toBe(422);
+  await expect(page.getByRole('alert')).toContainText('不会放宽权限或回显原始配置');
+  await page.getByRole('combobox', { name: '固定配置来源' }).selectOption('sing-box');
+  await expect(page.getByRole('button', { name: '读取入口摘要' })).toBeDisabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({
+    path: '../artifacts/ingress-inventory-mobile.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
 
   await page.getByRole('button', { name: '概览', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });

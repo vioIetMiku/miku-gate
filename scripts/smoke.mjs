@@ -83,6 +83,9 @@ try {
   check((await request(`/api/exits/${id}/sandbox`)).status, 503, 'no implicit privileged sandbox inspection');
   check((await request(`/api/exits/${id}/sandbox/prepare`, 'POST', { confirm: true })).status, 503, 'no implicit privileged preparation');
   check((await request(`/api/exits/${id}/sandbox/prepare`, 'POST', {})).status, 400, 'sandbox action requires confirmation');
+  check((await request('/api/host/ingress/sources').then(r => r.json())).length, 4, 'fixed ingress config sources');
+  check((await request('/api/host/ingress/inspect', 'POST', { source: 'x-ui', confirm_read: false })).status, 400, 'no config read without explicit consent');
+  check((await request('/api/host/ingress/inspect', 'POST', { source: '/etc/shadow', confirm_read: true })).status, 400, 'arbitrary ingress paths rejected');
   const inventory = await request('/api/host/inventory').then(r => r.json());
   check(inventory.read_only, true, 'host inventory is read-only');
   check(inventory.components.every(c => c.reuse_ready === false), true, 'inventory cannot authorize reuse');

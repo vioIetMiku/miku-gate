@@ -153,3 +153,8 @@ VPN选择请求字段：`node_id`、`peer_name`、`allow_legacy`、`confirm`。�
 ## dev.9：只读主机清单
 
 `GET /api/host/inventory`：已认证、同源的手动只读检测；返回检测时间、平台、发行版、TUN/systemd、依赖和固定常见面板/核心路径/单元证据。6秒总预算、15秒短缓存、同时一个检测，繁忙返回429 `inventory_busy`。不接受路径/命令参数，不读取配置/数据库/私钥内容，`reuse_ready` 固定 false。Windows 返回 `supported:false`，不会冒充 VPS 结果。详见 HOST_INVENTORY.md。
+
+## dev.9：明确同意的已有核心配置检测
+
+- `GET /api/host/ingress/sources`：认证后返回四个固定来源，不接受任意文件路径。
+- `POST /api/host/ingress/inspect`：JSON `source` 与 `confirm_read:true`，需要会话、CSRF和同源；单并行、3秒限频。返回摘要、不返回UUID/密码/私钥/原始配置。不可读/权限或类型不合规/严格JSON不支持为422 `ingress_unavailable`。只读检测，不保存复用绑定、不改写/重启。详见 EXISTING_INGRESS.md。

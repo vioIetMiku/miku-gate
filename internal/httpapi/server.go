@@ -22,6 +22,7 @@ import (
 	"mikugate/internal/executoripc"
 	"mikugate/internal/gateway"
 	"mikugate/internal/hostinventory"
+	"mikugate/internal/ingress"
 	"mikugate/internal/netexec"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
@@ -38,12 +39,16 @@ type SandboxClient interface {
 	Capabilities(context.Context) (executoripc.Capabilities, error)
 }
 type Options struct {
+	InspectIngress      func(ingress.Source) (ingress.Report, error)
 	InspectNodeIdentity func(context.Context, domain.Node) (domain.NodeIdentity, error)
 	Sandbox             SandboxClient
 	Gateway             *gateway.Manager
 	VPN                 *vpnipc.Client
 }
 type Server struct {
+	ingressSlot     chan struct{}
+	lastIngress     time.Time
+	inspectIngress  func(ingress.Source) (ingress.Report, error)
 	hostSlot        chan struct{}
 	hostReport      *hostinventory.Report
 	nodeIdentities  map[string]domain.NodeIdentity
@@ -77,7 +82,17 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 	if inspect == nil {
 		inspect = vpngate.InspectIdentity
 	}
-	a := &Server{hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	inspectIngress := options.InspectIngress
+	if inspectIngress == nil {
+		inspectIngress = func(source ingress.Source) (ingress.Report, error) {
+			raw, err := ingress.ReadSource(source)
+			if err != nil {
+				return ingress.Report{}, err
+			}
+			return ingress.Inspect(source, raw)
+		}
+	}
+	a := &Server{ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]any{"version": domain.Version, "status": a.mode()})
@@ -136,6 +151,8 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 		}
 		write(w, 200, v)
 	}))
+	mux.HandleFunc("GET /api/host/ingress/sources", a.auth(a.ingressSources))
+	mux.HandleFunc("POST /api/host/ingress/inspect", a.auth(a.ingressInspect))
 	mux.HandleFunc("GET /api/host/inventory", a.auth(a.hostInventory))
 	mux.HandleFunc("GET /api/diagnostics", a.auth(func(w http.ResponseWriter, r *http.Request, s domain.Session) { write(w, 200, diagnostics.Inspect()) }))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { fail(w, 404, "not_found", "接口不存在") })

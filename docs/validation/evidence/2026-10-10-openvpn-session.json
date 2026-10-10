@@ -1,0 +1,227 @@
+{
+  "schema": 1,
+  "source": "1f9c278812c6af8fb7fe7f3a9a98950859334a0b",
+  "date": "2026-10-10",
+  "scope": "Actual Linux isolated OpenVPN session/worker code in private laboratory; not public VPN or full web/IPC acceptance",
+  "attempts": [
+    {
+      "file": ".cache/vps/session-openvpn-001.log",
+      "log_sha256": "dfa43792b72df8081145673e529e0aeaad3b4317975c2f86f13b4f991d32561d",
+      "result": {
+        "binary_sha256": "304f187cd3c0def261e4ae99b08f199932b440b4223694ab9a2dab54a5e144f9",
+        "changed_host_sections": [],
+        "child_maxrss_kib": 25580,
+        "elapsed_seconds": 16.983,
+        "error": null,
+        "exit_code": 1,
+        "expected_tests": [
+          "TestLinuxOpenVPNControlledTunnelAndFailClosed",
+          "TestLinuxOpenVPNLegacyControlledTunnelAndFailClosed",
+          "TestLinuxOpenVPNSessionWorkerLifecycle"
+        ],
+        "guard_sha256": "3ba32fc9b04d9b61d1e464c7ad2a4efa53be97686aa0e6d97f98748e02fa6a4d",
+        "host_after_sha256": "140db29dd81dcf59d99ccc47276f1a3b337daf3842605f93740098469489b8f9",
+        "host_before_sha256": "140db29dd81dcf59d99ccc47276f1a3b337daf3842605f93740098469489b8f9",
+        "host_unchanged": true,
+        "lab_exec_root": "/usr/local/lib/miku-gate-lab-exec",
+        "lab_roots": {
+          "/run/miku-gate-ipc": "empty",
+          "/run/miku-gate-ipc-http-tests": "empty",
+          "/run/miku-gate-ipc-tests": "empty",
+          "/run/miku-gate-lab-exec": "absent",
+          "/run/miku-gate-netexec-tests": "empty",
+          "/run/miku-gate-openvpn-tests": "absent",
+          "/run/miku-gate/netexec": "empty",
+          "/usr/local/lib/miku-gate-lab-exec": "empty"
+        },
+        "limits": {
+          "cpu.max": "100000 100000",
+          "memory.max": "402653184",
+          "memory.swap.max": "0",
+          "pids.max": "64"
+        },
+        "memory_events_delta": {
+          "high": 0,
+          "low": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0,
+          "sock_throttled": 0
+        },
+        "memory_peak_bytes": 35430400,
+        "passed_tests": [
+          "TestLinuxOpenVPNControlledTunnelAndFailClosed",
+          "TestLinuxOpenVPNLegacyControlledTunnelAndFailClosed"
+        ],
+        "pids_events_delta": {
+          "max": 0
+        },
+        "remaining_scope_pids": [],
+        "run_id": "openvpn-20261010T005527Z-190134",
+        "schema": 1,
+        "scope_cpu_usage_usec": 2053546,
+        "source": "8cf9f547fe3c3528bb68a3373ff0c7f264ba0715",
+        "started_at": "2026-10-10T00:55:27.358596+00:00",
+        "success": false,
+        "suite": "openvpn",
+        "verification_error": "test process failed"
+      },
+      "observations": [
+        "lab_linux_test.go:450: Observed: legacy-data=false; mutual TLS handshake with rejected wrong server name; ignored pushed route/DNS; DNS UDP/TCP and business TCP sourced from tunnel; mixed/private DNS rejected; DNS timeout did not fall back; established and new flows blocked after VPN/TUN loss, even with an underlay default route. Counters before=3 after=8; service before={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0} after={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0}; host network/DNS unchanged.",
+        "lab_linux_test.go:450: Observed: legacy-data=true; mutual TLS handshake with rejected wrong server name; ignored pushed route/DNS; DNS UDP/TCP and business TCP sourced from tunnel; mixed/private DNS rejected; DNS timeout did not fall back; established and new flows blocked after VPN/TUN loss, even with an underlay default route. Counters before=2 after=8; service before={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0} after={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0}; host network/DNS unchanged.",
+        "session_linux_test.go:66: Observed: udp4 fixed-peer socket passed into anonymous namespace; actual OpenVPN UID65533 NET_ADMIN-only, worker UID65532 NET_RAW-only, no_new_privs; TUN-bound DNS/TCP via FD handoff; normal close and supervisor kill revoke old/new streams; host unchanged."
+      ]
+    },
+    {
+      "file": ".cache/vps/session-openvpn-b481517-001.log",
+      "log_sha256": "726cf21e8eb6f228a6f1a8bff7042dbf7a0bb7bbb0ebecf69204d594ca63f9a8",
+      "result": {
+        "binary_sha256": "4430a242f761e032df073245826ebd87c25922d8621d6ac0111f1437e33d91fe",
+        "changed_host_sections": [],
+        "child_maxrss_kib": 25652,
+        "elapsed_seconds": 9.883,
+        "error": null,
+        "exit_code": 1,
+        "expected_tests": [
+          "TestLinuxOpenVPNControlledTunnelAndFailClosed",
+          "TestLinuxOpenVPNLegacyControlledTunnelAndFailClosed",
+          "TestLinuxOpenVPNSessionWorkerLifecycle"
+        ],
+        "guard_sha256": "3ba32fc9b04d9b61d1e464c7ad2a4efa53be97686aa0e6d97f98748e02fa6a4d",
+        "host_after_sha256": "140db29dd81dcf59d99ccc47276f1a3b337daf3842605f93740098469489b8f9",
+        "host_before_sha256": "140db29dd81dcf59d99ccc47276f1a3b337daf3842605f93740098469489b8f9",
+        "host_unchanged": true,
+        "lab_exec_root": "/usr/local/lib/miku-gate-lab-exec",
+        "lab_roots": {
+          "/run/miku-gate-ipc": "empty",
+          "/run/miku-gate-ipc-http-tests": "empty",
+          "/run/miku-gate-ipc-tests": "empty",
+          "/run/miku-gate-lab-exec": "absent",
+          "/run/miku-gate-netexec-tests": "empty",
+          "/run/miku-gate-openvpn-tests": "absent",
+          "/run/miku-gate/netexec": "empty",
+          "/usr/local/lib/miku-gate-lab-exec": "empty"
+        },
+        "limits": {
+          "cpu.max": "100000 100000",
+          "memory.max": "402653184",
+          "memory.swap.max": "0",
+          "pids.max": "64"
+        },
+        "memory_events_delta": {
+          "high": 0,
+          "low": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0,
+          "sock_throttled": 0
+        },
+        "memory_peak_bytes": 40374272,
+        "passed_tests": [
+          "TestLinuxOpenVPNControlledTunnelAndFailClosed",
+          "TestLinuxOpenVPNLegacyControlledTunnelAndFailClosed"
+        ],
+        "pids_events_delta": {
+          "max": 0
+        },
+        "remaining_scope_pids": [],
+        "run_id": "openvpn-20261010T050259Z-194409",
+        "schema": 1,
+        "scope_cpu_usage_usec": 1861116,
+        "source": "b48151754bd3b527f4f82be39e08dbeed5a91576",
+        "started_at": "2026-10-10T05:02:59.286157+00:00",
+        "success": false,
+        "suite": "openvpn",
+        "verification_error": "test process failed"
+      },
+      "observations": [
+        "lab_linux_test.go:450: Observed: legacy-data=false; mutual TLS handshake with rejected wrong server name; ignored pushed route/DNS; DNS UDP/TCP and business TCP sourced from tunnel; mixed/private DNS rejected; DNS timeout did not fall back; established and new flows blocked after VPN/TUN loss, even with an underlay default route. Counters before=3 after=9; service before={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0} after={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0}; host network/DNS unchanged.",
+        "lab_linux_test.go:450: Observed: legacy-data=true; mutual TLS handshake with rejected wrong server name; ignored pushed route/DNS; DNS UDP/TCP and business TCP sourced from tunnel; mixed/private DNS rejected; DNS timeout did not fall back; established and new flows blocked after VPN/TUN loss, even with an underlay default route. Counters before=4 after=7; service before={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0} after={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0}; host network/DNS unchanged.",
+        "session_linux_test.go:66: Observed: udp4 fixed-peer socket passed into anonymous namespace; actual OpenVPN UID65533 NET_ADMIN-only, worker UID65532 NET_RAW-only, no_new_privs; TUN-bound DNS/TCP via FD handoff; normal close and supervisor kill revoke old/new streams; host unchanged."
+      ]
+    },
+    {
+      "file": ".cache/vps/session-openvpn-1f9c278-001.log",
+      "log_sha256": "b12431bff1a73a7c5febe08d602f993b4a6fafa5197d571be968bba8529fa6fc",
+      "result": {
+        "binary_sha256": "e7959452ac6ed7a4e1dd726b88b6cb96df1f1edfc15e010253e9921426c9552c",
+        "changed_host_sections": [],
+        "child_maxrss_kib": 25524,
+        "elapsed_seconds": 10.19,
+        "error": null,
+        "exit_code": 0,
+        "expected_tests": [
+          "TestLinuxOpenVPNControlledTunnelAndFailClosed",
+          "TestLinuxOpenVPNLegacyControlledTunnelAndFailClosed",
+          "TestLinuxOpenVPNSessionWorkerLifecycle"
+        ],
+        "guard_sha256": "3ba32fc9b04d9b61d1e464c7ad2a4efa53be97686aa0e6d97f98748e02fa6a4d",
+        "host_after_sha256": "e8eb107fda1c6ede930583310d827ba4f0a5fb72b8ad873819b67296d7f97621",
+        "host_before_sha256": "e8eb107fda1c6ede930583310d827ba4f0a5fb72b8ad873819b67296d7f97621",
+        "host_unchanged": true,
+        "lab_exec_root": "/usr/local/lib/miku-gate-lab-exec",
+        "lab_roots": {
+          "/run/miku-gate-ipc": "empty",
+          "/run/miku-gate-ipc-http-tests": "empty",
+          "/run/miku-gate-ipc-tests": "empty",
+          "/run/miku-gate-lab-exec": "absent",
+          "/run/miku-gate-netexec-tests": "empty",
+          "/run/miku-gate-openvpn-tests": "absent",
+          "/run/miku-gate/netexec": "empty",
+          "/usr/local/lib/miku-gate-lab-exec": "empty"
+        },
+        "limits": {
+          "cpu.max": "100000 100000",
+          "memory.max": "402653184",
+          "memory.swap.max": "0",
+          "pids.max": "64"
+        },
+        "memory_events_delta": {
+          "high": 0,
+          "low": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0,
+          "sock_throttled": 0
+        },
+        "memory_peak_bytes": 36704256,
+        "passed_tests": [
+          "TestLinuxOpenVPNControlledTunnelAndFailClosed",
+          "TestLinuxOpenVPNLegacyControlledTunnelAndFailClosed",
+          "TestLinuxOpenVPNSessionWorkerLifecycle"
+        ],
+        "pids_events_delta": {
+          "max": 0
+        },
+        "remaining_scope_pids": [],
+        "run_id": "openvpn-20261010T063649Z-196123",
+        "schema": 1,
+        "scope_cpu_usage_usec": 1891496,
+        "source": "1f9c278812c6af8fb7fe7f3a9a98950859334a0b",
+        "started_at": "2026-10-10T06:36:49.063191+00:00",
+        "success": true,
+        "suite": "openvpn"
+      },
+      "observations": [
+        "lab_linux_test.go:450: Observed: legacy-data=false; mutual TLS handshake with rejected wrong server name; ignored pushed route/DNS; DNS UDP/TCP and business TCP sourced from tunnel; mixed/private DNS rejected; DNS timeout did not fall back; established and new flows blocked after VPN/TUN loss, even with an underlay default route. Counters before=2 after=9; service before={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0} after={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0}; host network/DNS unchanged.",
+        "lab_linux_test.go:450: Observed: legacy-data=true; mutual TLS handshake with rejected wrong server name; ignored pushed route/DNS; DNS UDP/TCP and business TCP sourced from tunnel; mixed/private DNS rejected; DNS timeout did not fall back; established and new flows blocked after VPN/TUN loss, even with an underlay default route. Counters before=2 after=6; service before={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0} after={DNSUDP:6 DNSTCP:1 Connections:5 Messages:5 BadSource:0}; host network/DNS unchanged.",
+        "session_linux_test.go:65: Observed: udp4 fixed-peer socket passed into anonymous namespace; actual OpenVPN UID65533 NET_ADMIN-only, worker UID65532 NET_RAW-only, no_new_privs; TUN-bound DNS/TCP via FD handoff; normal close and supervisor kill revoke old/new streams; host unchanged.",
+        "session_linux_test.go:65: Observed: tcp4-client fixed-peer socket passed into anonymous namespace; actual OpenVPN UID65533 NET_ADMIN-only, worker UID65532 NET_RAW-only, no_new_privs; TUN-bound DNS/TCP via FD handoff; normal close and supervisor kill revoke old/new streams; host unchanged."
+      ]
+    }
+  ],
+  "fixes": [
+    "Exact numeric-IP SOCKS ATYP domain form accepted without resolving or permitting arbitrary destinations",
+    "Parent-death process creation thread retained with LockOSThread through Wait",
+    "no_new_privs applied by native setpriv before Go/OpenVPN runtime starts"
+  ],
+  "limitations": [
+    "Controlled generated mTLS identities, not public shared VPN Gate client handshake",
+    "New root supervisor/worker entry points used; full VPN IPC daemon to ordinary web service not yet exercised in this test",
+    "No new host routes/firewall/DNS; UID/network capabilities checked inside scope; not a complete security audit",
+    "Short serial experiment, not long-duration multi-session capacity testing"
+  ]
+}

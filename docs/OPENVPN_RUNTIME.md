@@ -59,3 +59,5 @@ miku-gate vpn-executor info --instance=实例ID
 - Linux的parent-death信号绑定创建线程，新增固定OS线程贯穿Start/Wait，避免Go运行时回收线程误杀健康子进程。测试夹具不借用不稳定创建线程的parent-death信号。
 
 修正后需要新精确源码重跑TCP/UDP及完整Web/IPC链路；旧失败日志保留。当前dev.8尚未发布，不替换dev.6资产；公共VPN节点、加密入口、域名和安装目标也未因这些接线而视为完成。
+
+最新复测：1f9c278的TCP/UDP独立会话、实际低权限/NoNewPrivs和正常/强制关闭已在VPS通过，见[独立会话验收](validation/2026-10-10-openvpn-session.md)。完整Web/VPN IPC/公共节点路径仍未被本用例覆盖，继续保留相关验收门槛。

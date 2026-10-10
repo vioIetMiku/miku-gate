@@ -6,7 +6,7 @@
 
 新增无宿主路由变更的固定传输FD→匿名namespace方案；OpenVPN与worker分用非rootUID、单一网络能力与no_new_privs。正式root服务使用独立Unix路径，保留原sandbox-only协议边界。已接schema v4加密VPN快照、API、界面确认选择和gateway工厂；需要明确`--vpn-executor`，保存不联网，活动状态来自实际TLS/DNS/出口核验。
 
-8cf9f54的VPS首测通过UDP生产会话但TCP的SOCKS编码适配失败；宿主/残留核验通过。已修正数字IP域名编码及Linux父线程生命周期，正在对修正源码重跑。完整Web/IPC/公共节点验收尚未完成，不能用首测UDP结果代替；详见 [OPENVPN_RUNTIME.md](OPENVPN_RUNTIME.md)。旧dev.6 Release不替换。
+8cf9f54的VPS首测通过UDP生产会话但TCP的SOCKS编码适配失败；宿主/残留核验通过。已修正数字IP域名编码及Linux父线程生命周期，修正后1f9c278已在目标VPS通过TCP/UDP生产会话及旧AEAD/CBC用例，10.190秒、scope峰值35.00MiB，宿主不变；见[会话验收记录](validation/2026-10-10-openvpn-session.md)。完整Web/IPC/公共节点验收尚未完成，不能用首测UDP结果代替；详见 [OPENVPN_RUNTIME.md](OPENVPN_RUNTIME.md)。旧dev.6 Release不替换。
 
 ## dev.7：真实VPN Gate格式兼容与节点检查
 

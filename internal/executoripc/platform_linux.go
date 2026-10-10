@@ -61,7 +61,10 @@ func peer(conn *net.UnixConn) (*unix.Ucred, error) {
 	return credentials, nil
 }
 func dialTrusted(ctx context.Context, instance string) (net.Conn, error) {
-	path, err := SocketPath(instance)
+	return dialTrustedAt(ctx, instance, SocketRoot)
+}
+func dialTrustedAt(ctx context.Context, instance, root string) (net.Conn, error) {
+	path, err := socketPathAt(instance, root)
 	if err != nil {
 		return nil, err
 	}

@@ -181,6 +181,10 @@ func TestOpenVPNHelper(t *testing.T) {
 	if err != nil || current != expected {
 		t.Fatal("test worker did not enter expected namespace")
 	}
+	if mode == "session-services" {
+		runSessionServices(t)
+		return
+	}
 	if mode == "server" {
 		runServices(t)
 		return

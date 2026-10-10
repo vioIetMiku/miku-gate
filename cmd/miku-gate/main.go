@@ -25,6 +25,7 @@ import (
 	"mikugate/internal/runlock"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
+	"mikugate/internal/tunnel"
 	"mikugate/web"
 )
 
@@ -35,13 +36,25 @@ func main() {
 	}
 }
 func run() error {
+	if len(os.Args) == 2 && os.Args[1] == "_vpn-openvpn" {
+		return tunnel.RunOpenVPN()
+	}
+	if len(os.Args) == 2 && os.Args[1] == "_vpn-supervisor" {
+		return tunnel.RunSupervisor()
+	}
+	if len(os.Args) == 2 && os.Args[1] == "_vpn-worker" {
+		return tunnel.RunWorker()
+	}
 	if len(os.Args) < 2 {
-		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | instance | serve | doctor | version | sandbox | executor\n支持本机认证代理上游；生产 OpenVPN 接线与安装向导开发中。")
+		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | instance | serve | doctor | version | sandbox | executor | vpn-executor\n支持本机认证代理上游；生产 OpenVPN 接线与安装向导开发中。")
 		return nil
 	}
 	if os.Args[1] == "version" {
 		fmt.Println(domain.Version)
 		return nil
+	}
+	if os.Args[1] == "vpn-executor" {
+		return runVPNExecutor(os.Args[2:], os.Stdout)
 	}
 	if os.Args[1] == "executor" {
 		return runExecutor(os.Args[2:], os.Stdout)

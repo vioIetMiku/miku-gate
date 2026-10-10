@@ -138,12 +138,20 @@ type response struct {
 	Error        *RPCError       `json:"error,omitempty"`
 }
 
-func SocketPath(instance string) (string, error) {
+func SocketPath(instance string) (string, error) { return socketPathAt(instance, SocketRoot) }
+
+const VPNRoot = "/run/miku-gate-vpnipc"
+
+func VPNSocketPath(instance string) (string, error) { return socketPathAt(instance, VPNRoot) }
+func socketPathAt(instance, root string) (string, error) {
+	if root != SocketRoot && root != VPNRoot {
+		return "", ErrPeer
+	}
 	if err := netexec.ValidateID(instance); err != nil {
 		return "", err
 	}
 	sum := sha256.Sum256([]byte("miku-gate/ipc/v1\x00" + instance))
-	return path.Join(SocketRoot, hex.EncodeToString(sum[:12]), "control.sock"), nil
+	return path.Join(root, hex.EncodeToString(sum[:12]), "control.sock"), nil
 }
 func validResult(instance, exit string, result netexec.Result) bool {
 	plan, err := netexec.BuildPlan(instance, exit)

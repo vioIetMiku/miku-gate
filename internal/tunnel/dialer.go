@@ -20,8 +20,8 @@ var ErrUnsupported = errors.New("tunnel runtime requires Linux")
 // NamespaceID is supplied by the parent before exec into the worker namespace.
 // Workers must be separate processes; this code never setns-es a Go thread.
 type NamespaceID struct {
-	Device uint64
-	Inode  uint64
+	Device uint64 `json:"device"`
+	Inode  uint64 `json:"inode"`
 }
 type DialOptions struct {
 	Expected  NamespaceID

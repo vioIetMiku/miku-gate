@@ -153,12 +153,13 @@ func syncDirectory(path string) error {
 	return file.Sync()
 }
 
-func openLease(p policy) (*socketLease, error) {
-	path, err := SocketPath(p.instance)
+func openLease(p policy) (*socketLease, error) { return openLeaseAt(p, SocketRoot) }
+func openLeaseAt(p policy, root string) (*socketLease, error) {
+	path, err := socketPathAt(p.instance, root)
 	if err != nil {
 		return nil, err
 	}
-	if err = createDirectory(SocketRoot, 0755); err != nil {
+	if err = createDirectory(root, 0755); err != nil {
 		return nil, err
 	}
 	directory := filepath.Dir(path)

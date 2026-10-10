@@ -52,7 +52,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	var protected int
-	if err := db.QueryRow("SELECT count(*) FROM upstreams").Scan(&protected); err != nil {
+	if err := db.QueryRow("SELECT (SELECT count(*) FROM upstreams)+(SELECT count(*) FROM vpn_configs)").Scan(&protected); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -70,8 +70,8 @@ func (s *Store) migrate() error {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 3 {
-		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 3，拒绝降级打开", version)
+	if version > 4 {
+		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 4，拒绝降级打开", version)
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -83,6 +83,7 @@ func (s *Store) migrate() error {
  INSERT OR IGNORE INTO schema_version VALUES(1);
  INSERT OR IGNORE INTO schema_version VALUES(2);
  INSERT OR IGNORE INTO schema_version VALUES(3);
+ INSERT OR IGNORE INTO schema_version VALUES(4);
  CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS accounts(username TEXT PRIMARY KEY,password_hash TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,username TEXT NOT NULL REFERENCES accounts(username),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
@@ -90,7 +91,8 @@ func (s *Store) migrate() error {
  CREATE TABLE IF NOT EXISTS nodes(id TEXT PRIMARY KEY,hostname TEXT NOT NULL,ip TEXT NOT NULL,country TEXT NOT NULL,country_name TEXT NOT NULL,ping INTEGER NOT NULL,speed INTEGER NOT NULL,sessions INTEGER NOT NULL,source TEXT NOT NULL,fetched_at TEXT NOT NULL,config TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,level TEXT NOT NULL,kind TEXT NOT NULL,message TEXT NOT NULL,exit_id TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS upstreams(exit_id TEXT PRIMARY KEY REFERENCES exits(id) ON DELETE CASCADE,kind TEXT NOT NULL,sealed BLOB NOT NULL,updated_at TEXT NOT NULL);
- PRAGMA user_version=3;
+ CREATE TABLE IF NOT EXISTS vpn_configs(exit_id TEXT PRIMARY KEY REFERENCES exits(id) ON DELETE CASCADE,sealed BLOB NOT NULL);
+ PRAGMA user_version=4;
  `)
 	if err != nil {
 		return err
@@ -261,7 +263,7 @@ func constraint(err error) error {
 	return err
 }
 func (s *Store) ListExits() ([]domain.Exit, error) {
-	rows, err := s.db.Query(`SELECT e.id,e.name,e.country,e.policy,e.port,e.listen,e.username,e.status,e.reason,e.created_at,COALESCE(u.kind,'') FROM exits e LEFT JOIN upstreams u ON u.exit_id=e.id ORDER BY e.created_at DESC`)
+	rows, err := s.db.Query(`SELECT e.id,e.name,e.country,e.policy,e.port,e.listen,e.username,e.status,e.reason,e.created_at,CASE WHEN v.exit_id IS NOT NULL THEN 'openvpn' ELSE COALESCE(u.kind,'') END FROM exits e LEFT JOIN upstreams u ON u.exit_id=e.id LEFT JOIN vpn_configs v ON v.exit_id=e.id ORDER BY e.created_at DESC`)
 	if err != nil {
 		return nil, err
 	}

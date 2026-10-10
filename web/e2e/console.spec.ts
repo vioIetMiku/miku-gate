@@ -48,6 +48,25 @@ test('本机控制台：登录、配置、阻止假启动、移动布局和会�
     await page.getByRole('button', { name: '已保存', exact: true }).click();
     await expect(page.getByRole('button', { name: `查看 ${name}` })).toBeVisible();
   }
+  await page.getByRole('button', { name: '选择VPN 日本开发环境', exact: true }).click();
+  const vpnDialog = page.getByRole('dialog', { name: 'OpenVPN 节点 · 日本开发环境', exact: true });
+  await expect(
+    vpnDialog.getByRole('combobox', { name: '官方候选节点', exact: true }),
+  ).toBeEnabled();
+  await vpnDialog
+    .getByRole('combobox', { name: '官方候选节点', exact: true })
+    .selectOption('profile-check-fixture');
+  await expect(
+    vpnDialog.getByRole('textbox', { name: '预期服务器证书名称', exact: true }),
+  ).toHaveValue('fixture-static-profile');
+  await expect(vpnDialog).toContainText('配置未通过受限格式');
+  await expect(vpnDialog.getByRole('button', { name: '保存VPN绑定', exact: true })).toBeDisabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(vpnDialog.getByRole('button', { name: '关闭对话框', exact: true })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
+  await page.screenshot({ path: '../artifacts/vpn-selection-mobile.png', fullPage: false });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await vpnDialog.getByRole('button', { name: '关闭对话框', exact: true }).click();
   await page.getByRole('button', { name: '查看 日本开发环境', exact: true }).click();
   const planResponse = page.waitForResponse(
     (response) => response.url().endsWith('/network-plan') && response.request().method() === 'GET',
@@ -71,7 +90,7 @@ test('本机控制台：登录、配置、阻止假启动、移动布局和会�
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole('button', { name: '关闭对话框', exact: true }).click();
   await page.getByRole('button', { name: '启动 日本开发环境', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('生产OpenVPN驱动仍未接通');
+  await expect(page.getByRole('status')).toContainText('请先选择出口');
   await expect(page.locator('tbody')).toContainText('启动已阻止');
   await page.getByRole('button', { name: '关闭提示' }).click();
   await page.getByRole('button', { name: '设置上游 日本开发环境', exact: true }).click();

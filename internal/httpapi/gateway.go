@@ -8,9 +8,13 @@ import (
 	"mikugate/internal/domain"
 	"mikugate/internal/gateway"
 	"mikugate/internal/secretstore"
+	"mikugate/internal/vpnipc"
 )
 
 func (a *Server) mode() string {
+	if a.gateway != nil && a.vpnClient != nil {
+		return "isolated-gateway-runtime"
+	}
 	if a.gateway != nil {
 		return "proxy-upstream-runtime"
 	}
@@ -70,7 +74,7 @@ func (a *Server) saveUpstream(w http.ResponseWriter, r *http.Request, _ domain.S
 	}
 	if err := a.store.SaveUpstream(r.PathValue("id"), in); err != nil {
 		if errors.Is(err, domain.ErrConflict) {
-			fail(w, 409, "credential_target_changed", "更换上游目标时不能复用旧密码，请明确填写新凭据")
+			fail(w, 409, "upstream_change_requires_confirmation", "更换凭据目标不能复用旧密码；替换VPN绑定还需明确确认")
 			return
 		}
 		a.runtimeError(w, err)
@@ -133,6 +137,14 @@ func (a *Server) runtimeError(w http.ResponseWriter, err error) {
 		fail(w, 409, "runtime_busy", gateway.Reason(err))
 	case errors.Is(err, gateway.ErrCapacity):
 		fail(w, 409, "runtime_capacity", gateway.Reason(err))
+	case errors.Is(err, gateway.ErrVPNDisabled):
+		fail(w, 409, "vpn_executor_disabled", gateway.Reason(err))
+	case errors.Is(err, vpnipc.ErrProfile):
+		fail(w, 400, "vpn_profile_rejected", gateway.Reason(err))
+	case errors.Is(err, vpnipc.ErrBusy):
+		fail(w, 409, "vpn_executor_busy", gateway.Reason(err))
+	case errors.Is(err, vpnipc.ErrUnavailable):
+		fail(w, 502, "vpn_executor_unavailable", gateway.Reason(err))
 	case errors.Is(err, gateway.ErrUnavailable):
 		fail(w, 409, "executor_unavailable", gateway.Reason(err))
 	case errors.Is(err, gateway.ErrListen):

@@ -33,6 +33,9 @@ func Serve(ctx context.Context, instance string, uid uint32, options tunnel.Sess
 	if os.Geteuid() != 0 || options.Validate() != nil || options.WorkerUID == uid || options.TunnelUID == uid {
 		return tunnel.ErrPrivilege
 	}
+	if err := tunnel.CheckSessionEnvironment(options); err != nil {
+		return err
+	}
 	lease, err := executoripc.OpenVPNLease(instance, uid)
 	if err != nil {
 		return err

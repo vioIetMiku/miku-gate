@@ -26,6 +26,7 @@ type UpstreamConfig struct {
 }
 
 type UpstreamInput struct {
+	ReplaceVPN     bool   `json:"replace_vpn"`
 	Kind           string `json:"kind"`
 	Host           string `json:"host"`
 	Port           int    `json:"port"`

@@ -14,7 +14,7 @@ import (
 var ErrKey = errors.New("凭据密钥不可用；请恢复数据库配套的.key文件，不要覆盖或重新生成")
 var ErrCiphertext = errors.New("加密凭据损坏、密钥不匹配或记录归属错误")
 
-const maxPlaintext = 4096
+const maxPlaintext = 192 << 10
 
 type Vault struct{ aead cipher.AEAD }
 

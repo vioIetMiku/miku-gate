@@ -1,6 +1,6 @@
 # 当前 API：控制面与代理上游运行时
 
-当前开发版本：`0.1.0-dev.7`，接口保持与 dev.2 兼容。默认基址为 `http://127.0.0.1:3939/api`。已配置的HTTP/SOCKS/HTTPS代理上游可实际启动；OpenVPN生产驱动仍不可用。运行中的配置/凭据/删除有互锁，不能假定全部旧的写操作仍无条件成功。
+当前开发版本：`0.1.0-dev.8`，接口保持与 dev.2 兼容。默认基址为 `http://127.0.0.1:3939/api`。已配置的HTTP/SOCKS/HTTPS代理上游可实际启动；OpenVPN驱动通过显式独立执行器接入，完整实测进行中。运行中的配置/凭据/删除有互锁，不能假定全部旧的写操作仍无条件成功。
 
 ## 认证与请求规则
 
@@ -39,6 +39,10 @@
 | DELETE | `/exits/{id}/upstream` | 已登录 + CSRF + 出口停止 | 204，仅移除上游，保留出口和入口凭据 |
 | GET | `/exits/{id}/runtime` | 已登录 | 200，实际监听/健康/最近探测，不用配置冒充存活 |
 | POST | `/exits/{id}/probe` | 已登录 + CSRF + 运行中 | 200，经当前上游的DNS/TLS复测；失败返回明确错误 |
+| GET | `/vpn-executor` | 已登录 | 200，独立VPN执行器配置/可达状态；不代表隧道在线 |
+| GET | `/exits/{id}/vpn` | 已登录 | 200，加密快照元数据，不返回配置/密钥正文 |
+| PUT | `/exits/{id}/vpn` | 已登录 + CSRF + confirm:true + 停止 | 204，保存官方缓存快照和明确名称，替换原上游 |
+| DELETE | `/exits/{id}/vpn` | 已登录 + CSRF + 停止 | 204，移除绑定，保留入口凭据 |
 | GET | `/nodes` | 已登录 | 200，缓存候选节点，不含 OpenVPN 配置正文 |
 | GET | `/nodes/{id}/profile` | 已登录，官方来源缓存 | 200，仅静态格式/材料检查，不返回配置正文、不联网 |
 | POST | `/nodes/refresh` | 已登录 + CSRF | 200，`count`、`skipped`、`tested:false` |
@@ -136,3 +140,9 @@ PUT上游字段：`kind`（socks5/http/https）、`host`、`port`、可选`usern
 代理模式与独立的quarantine-only沙箱不是同一条数据路径。若该出口尚有独立沙箱，需先清理再启动代理上游。运行中也不能创建/清理沙箱，避免误把隔离状态当作代理的内核防泄漏证明。
 
 节点profile响应说明见 [VPNGATE_COMPATIBILITY.md](VPNGATE_COMPATIBILITY.md)。strict/legacy-candidate不表示节点在线，network_tested与server_identity_verified固定false；点击查看不授权连接或兼容模式。
+
+VPN选择请求字段：`node_id`、`peer_name`、`allow_legacy`、`confirm`。预期服务器名称由用户从可信来源确认，不能自动信任连接错误给出的名字。选中节点须来自固定官方HTTPS缓存、时间不超过24小时，并通过所选规范化政策。保存快照不会自动启动，缓存刷新不自动改已有快照。
+
+`--vpn-executor`未启用时，保存的VPN节点启动返回409 `vpn_executor_disabled`。实际根服务不可达/会话失败返回502，绝不转成代理直连。普通代理PUT若替换VPN必须加`replace_vpn:true`。schema v4包含新的加密记录，缺少配套.key时拒绝恢复。
+
+概览新增`vpn_runtime_configured`与`vpn_verified_count`；只有确有活动会话且全都通过当前namespace/TUN/规则/TLS/DNS核验时`protection_verified`才为true。混合代理模式不能被标成全局内核保护。实际UI和部署链路验收仍按独立记录追踪。

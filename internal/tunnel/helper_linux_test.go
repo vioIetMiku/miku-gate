@@ -17,7 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -37,7 +36,7 @@ func (l *vpnLab) helperCommand(mode string, space labNamespace) *exec.Cmd {
 	command.ExtraFiles = []*os.File{space.file}
 	command.Dir = "/"
 	command.WaitDelay = time.Second
-	command.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+	// Fixture lifetime is owned by CommandContext and registered cleanup.
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "GOMAXPROCS=1", "GOMEMLIMIT=96MiB", "MIKU_VPN_HELPER=" + mode, fmt.Sprintf("MIKU_VPN_EXPECTED=%d:%d", space.identity.Device, space.identity.Inode), fmt.Sprintf("MIKU_VPN_HOST=%d:%d", l.host.Device, l.host.Inode)}
 	return command
 }

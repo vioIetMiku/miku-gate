@@ -13,11 +13,12 @@ import (
 	"mikugate/internal/domain"
 	"mikugate/internal/proxy"
 	"mikugate/internal/upstream"
+	"mikugate/internal/vpnipc"
 )
 
 var ErrBusy = errors.New("出口正在运行或有操作进行中，请先停止并等待完成")
 var ErrCapacity = errors.New("已达到同时运行出口上限，请先停止其他出口")
-var ErrUnavailable = errors.New("尚未配置代理上游；生产OpenVPN驱动仍未接通")
+var ErrUnavailable = errors.New("尚未配置代理上游或OpenVPN节点；请先选择出口")
 var ErrPolicy = errors.New("没有可核验的住宅属性依据，不能启动严格住宅策略")
 var ErrClosed = errors.New("代理运行时正在关闭")
 var ErrListen = errors.New("代理入口端口不可用；不会关闭或抢占其他服务")
@@ -74,6 +75,7 @@ type entry struct {
 	session       Session
 	stopRequested bool
 	finalErr      error
+	closeErr      error
 }
 type Manager struct {
 	source    Source
@@ -205,11 +207,12 @@ func (m *Manager) Start(ctx context.Context, id string) (State, error) {
 	e := &entry{ctx: life, cancel: cancel, done: make(chan struct{}), slot: make(chan struct{}, 1), state: State{ExitID: id, Phase: "starting", Reason: "正在校验代理上游和经上游的DNS；尚未开放入口"}}
 	m.entries[id] = e
 	m.mu.Unlock()
-	startup, cancelStartup := context.WithTimeout(life, 20*time.Second)
-	stopRequest := context.AfterFunc(ctx, cancelStartup)
+	startup, cancelStartup := context.WithTimeout(life, 35*time.Second)
+	stopRequest := context.AfterFunc(ctx, cancel)
+	stopStartup := context.AfterFunc(startup, cancel)
 	// Once startup returns successfully, HTTP request cancellation must not kill
 	// the established runtime. The manager/exit context owns its lifetime instead.
-	defer func() { stopRequest(); cancelStartup() }()
+	defer func() { stopRequest(); stopStartup(); cancelStartup() }()
 	fail := func(err error) (State, error) { m.finish(e, err); return State{}, err }
 	exit, hash, err := m.source.ExitForRuntime(id)
 	if err != nil {
@@ -268,7 +271,7 @@ func (m *Manager) Start(ctx context.Context, id string) (State, error) {
 		return fail(err)
 	}
 	m.mu.Lock()
-	if !stopRequest() || ctx.Err() != nil || startup.Err() != nil || life.Err() != nil {
+	if !stopRequest() || !stopStartup() || ctx.Err() != nil || startup.Err() != nil || life.Err() != nil {
 		m.mu.Unlock()
 		listener.Close()
 		cause := startup.Err()
@@ -278,12 +281,24 @@ func (m *Manager) Start(ctx context.Context, id string) (State, error) {
 		return fail(cause)
 	}
 	e.state = State{ExitID: id, Phase: "running", Listen: listener.Addr().String(), ProxyListening: true, Healthy: true, Proof: proof, StartedAt: time.Now().UTC(), CheckedAt: time.Now().UTC(), CheckMilliseconds: time.Since(started).Milliseconds(), Reason: "本机认证代理运行中；业务DNS与TCP只经指定上游，未核验住宅属性或公网出口IP"}
+	if proof.Kind == "openvpn" {
+		e.state.Reason = "独立OpenVPN与TUN绑定worker已验证；TLS/DNS和出口IP通过，不代表住宅或节点信誉"
+	}
 	state := e.state
 	m.mu.Unlock()
 	go m.serve(e, listener, authenticate)
 	return state, nil
 }
 func (m *Manager) serve(e *entry, listener net.Listener, authenticate func(string, string) bool) {
+	if session, ok := e.session.(interface{ Done() <-chan struct{} }); ok {
+		go func() {
+			select {
+			case <-session.Done():
+				e.cancel()
+			case <-e.ctx.Done():
+			}
+		}()
+	}
 	healthDone := make(chan struct{})
 	go func() {
 		defer close(healthDone)
@@ -308,7 +323,7 @@ func (m *Manager) serve(e *entry, listener net.Listener, authenticate func(strin
 func (m *Manager) closeSession(e *entry) {
 	e.closeOnce.Do(func() {
 		if e.session != nil {
-			e.session.Close()
+			e.closeErr = e.session.Close()
 		}
 	})
 }
@@ -328,12 +343,15 @@ func (m *Manager) finish(e *entry, cause error) {
 	if cause == nil && !intentional {
 		reason = "代理监听意外结束，入口已关闭"
 	}
+	if e.closeErr != nil {
+		status, reason = "blocked", "执行器未确认会话已停止；本机入口已关闭，请检查独立执行器状态"
+	}
 	var recordErr error
 	if !errors.Is(cause, domain.ErrNotFound) {
 		recordErr = m.source.SetStatus(e.state.ExitID, status, reason)
 	}
 	m.mu.Lock()
-	e.finalErr = recordErr
+	e.finalErr = errors.Join(recordErr, e.closeErr)
 	if m.entries[e.state.ExitID] == e {
 		delete(m.entries, e.state.ExitID)
 	}
@@ -456,6 +474,14 @@ func Reason(err error) string {
 	switch {
 	case err == nil:
 		return "代理未运行"
+	case errors.Is(err, ErrVPNDisabled):
+		return ErrVPNDisabled.Error()
+	case errors.Is(err, vpnipc.ErrProfile):
+		return "VPN配置或预期服务器身份不符合策略；未放宽TLS校验"
+	case errors.Is(err, vpnipc.ErrUnavailable):
+		return "隔离OpenVPN执行器或会话不可用；未使用宿主路由后备"
+	case errors.Is(err, vpnipc.ErrBusy):
+		return "独立VPN执行器已达到会话上限或出口正在操作中"
 	case errors.Is(err, ErrUnavailable):
 		return ErrUnavailable.Error()
 	case errors.Is(err, ErrPolicy):

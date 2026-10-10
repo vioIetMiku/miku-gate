@@ -82,16 +82,42 @@ func (p *transportProxy) run() {
 	if _, err = conn.Write([]byte{5, 0}); err != nil {
 		return
 	}
-	var request [10]byte
-	if _, err = io.ReadFull(conn, request[:]); err != nil || request[0] != 5 || request[2] != 0 || request[3] != 1 {
+	var request [4]byte
+	if _, err = io.ReadFull(conn, request[:]); err != nil || request[0] != 5 || request[2] != 0 {
 		return
 	}
-	expected := p.endpoint.IP.As4()
-	if p.endpoint.Transport == "tcp4-client" {
-		if request[1] != 1 || string(request[4:8]) != string(expected[:]) || binary.BigEndian.Uint16(request[8:]) != p.endpoint.Port {
+	var address string
+	switch request[3] {
+	case 1:
+		var value [4]byte
+		if _, err = io.ReadFull(conn, value[:]); err != nil {
 			return
 		}
-		if _, err = conn.Write([]byte{5, 0, 0, 1, 127, 0, 0, 1, 0, 0}); err != nil {
+		address = net.IP(value[:]).String()
+	case 3:
+		var size [1]byte
+		if _, err = io.ReadFull(conn, size[:]); err != nil || size[0] == 0 || size[0] > 253 {
+			return
+		}
+		raw := make([]byte, int(size[0]))
+		if _, err = io.ReadFull(conn, raw); err != nil {
+			return
+		}
+		address = string(raw)
+	default:
+		return
+	}
+	var portBytes [2]byte
+	if _, err = io.ReadFull(conn, portBytes[:]); err != nil {
+		return
+	}
+	port := binary.BigEndian.Uint16(portBytes[:])
+	expected := p.endpoint.IP.As4()
+	if p.endpoint.Transport == "tcp4-client" {
+		if request[1] != 1 || address != p.endpoint.IP.String() || port != p.endpoint.Port {
+			return
+		}
+		if _, err = conn.Write(binary.BigEndian.AppendUint16([]byte{5, 0, 0, 1, 127, 0, 0, 1}, p.endpoint.Port)); err != nil {
 			return
 		}
 		conn.SetDeadline(time.Time{})
@@ -104,7 +130,7 @@ func (p *transportProxy) run() {
 	// RFC1928 UDP ASSOCIATE's requested address is not the final peer. Never use
 	// it for routing: the only peer remains endpoint, and the first local sender
 	// address is pinned for this one OpenVPN process/session.
-	if !(request[4] == 0 && request[5] == 0 && request[6] == 0 && request[7] == 0) && !(request[4] == 127 && request[5] == 0 && request[6] == 0 && request[7] == 1) {
+	if address != "0.0.0.0" && address != "127.0.0.1" {
 		return
 	}
 	udp, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})

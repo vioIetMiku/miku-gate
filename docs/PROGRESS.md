@@ -1,6 +1,12 @@
 # 开发进度与验证记录
 
-更新：2026-10-10。当前代码版本：0.1.0-dev.7（开发中）；已发布快照：v0.1.0-dev.6（dev.2保留）。**当前支持本机认证代理上游；完整OpenVPN/Xray/sing-box/域名安装目标仍未完成。**
+更新：2026-10-10。当前代码版本：0.1.0-dev.8（开发中）；已发布快照：v0.1.0-dev.6（dev.2保留）。**当前支持本机认证代理上游；完整OpenVPN/Xray/sing-box/域名安装目标仍未完成。**
+
+## dev.8：独立OpenVPN执行器与Web接线
+
+新增无宿主路由变更的固定传输FD→匿名namespace方案；OpenVPN与worker分用非rootUID、单一网络能力与no_new_privs。正式root服务使用独立Unix路径，保留原sandbox-only协议边界。已接schema v4加密VPN快照、API、界面确认选择和gateway工厂；需要明确`--vpn-executor`，保存不联网，活动状态来自实际TLS/DNS/出口核验。
+
+8cf9f54的VPS首测通过UDP生产会话但TCP的SOCKS编码适配失败；宿主/残留核验通过。已修正数字IP域名编码及Linux父线程生命周期，正在对修正源码重跑。完整Web/IPC/公共节点验收尚未完成，不能用首测UDP结果代替；详见 [OPENVPN_RUNTIME.md](OPENVPN_RUNTIME.md)。旧dev.6 Release不替换。
 
 ## dev.7：真实VPN Gate格式兼容与节点检查
 
@@ -98,4 +104,4 @@ dev.2 发布快照与 dev.3 补充代码分别有独立 CI 记录。dev.3 测试
 3. 本机认证HTTP/SOCKS代理上游已接线；后续完成Xray/sing-box加密入口、既有工具复用、域名/TLS/REALITY与VPS安装向导。
 4. 通过隧道断线、DNS、IPv6、崩溃恢复与资源冲突测试后，才接通现有代理核心并解除启动闸门。
 
-使用说明见 [LINUX_SANDBOX.md](LINUX_SANDBOX.md)，完整网络契约见 [NETWORK_EXECUTOR.md](NETWORK_EXECUTOR.md)。升级前备份旧数据目录；schema v3不能由旧dev.5及以前版本直接降级打开，备份需包括配套.key密钥。
+使用说明见 [LINUX_SANDBOX.md](LINUX_SANDBOX.md)，完整网络契约见 [NETWORK_EXECUTOR.md](NETWORK_EXECUTOR.md)。升级前备份旧数据目录；schema v4不能由旧dev.7及以前版本直接降级打开，备份需包括配套.key密钥。

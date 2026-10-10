@@ -23,3 +23,5 @@ func RunSupervisor() error                      { return ErrUnsupported }
 func RunWorker() error                          { return ErrUnsupported }
 
 func RunOpenVPN() error { return ErrUnsupported }
+
+func CheckSessionEnvironment(SessionOptions) error { return ErrUnsupported }

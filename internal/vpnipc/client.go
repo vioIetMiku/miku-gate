@@ -80,16 +80,17 @@ func (c *Client) Capabilities(ctx context.Context) (Capabilities, error) {
 }
 
 type Session struct {
-	client  *Client
-	token   string
-	control net.Conn
-	info    tunnel.SessionInfo
-	ctx     context.Context
-	cancel  context.CancelFunc
-	done    chan struct{}
-	once    sync.Once
-	mu      sync.Mutex
-	streams map[*businessConn]struct{}
+	client   *Client
+	token    string
+	control  net.Conn
+	info     tunnel.SessionInfo
+	ctx      context.Context
+	cancel   context.CancelFunc
+	done     chan struct{}
+	once     sync.Once
+	mu       sync.Mutex
+	streams  map[*businessConn]struct{}
+	closeErr error
 }
 type businessConn struct {
 	net.Conn
@@ -139,7 +140,6 @@ func (s *Session) closeLocal() {
 	}
 }
 func (s *Session) Close() error {
-	var result error
 	s.once.Do(func() {
 		s.cancel()
 		s.closeLocal()
@@ -147,15 +147,15 @@ func (s *Session) Close() error {
 		defer done()
 		conn, reply, err := s.client.exchange(ctx, request{Version: Version, Operation: "stop", Token: s.token}, 5*time.Second)
 		if err != nil {
-			result = err
+			s.closeErr = err
 			return
 		}
 		conn.Close()
 		if reply.Info != nil || reply.Capabilities != nil || reply.Token != "" {
-			result = ErrProtocol
+			s.closeErr = ErrProtocol
 		}
 	})
-	return result
+	return s.closeErr
 }
 func (s *Session) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	if network != "tcp4" || s.ctx.Err() != nil {

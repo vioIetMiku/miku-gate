@@ -110,3 +110,35 @@ func TestFixedUDPTransportPreservesPackets(t *testing.T) {
 		t.Fatal("SOCKS UDP response framing failed", err)
 	}
 }
+
+func TestOpenVPNTCPNumericDomainForm(t *testing.T) {
+	outer, peer := net.Pipe()
+	defer peer.Close()
+	proxy, err := newTransportProxy(t.Context(), outer, Endpoint{IP: netip.MustParseAddr("8.8.8.8"), Port: 1194, Transport: "tcp4-client"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+	conn, err := net.Dial("tcp4", proxy.listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(time.Second))
+	conn.Write([]byte{5, 1, 0})
+	var methods [2]byte
+	io.ReadFull(conn, methods[:])
+	// OpenVPN may encode even an already-pinned IP using SOCKS ATYP=domain.
+	request := append([]byte{5, 1, 0, 3, 7}, []byte("8.8.8.8")...)
+	request = append(request, 4, 170)
+	conn.Write(request)
+	var reply [10]byte
+	if _, err = io.ReadFull(conn, reply[:]); err != nil || reply[1] != 0 {
+		t.Fatal("exact numeric domain-form peer rejected", err)
+	}
+	go peer.Write([]byte("fixed-peer"))
+	var data [10]byte
+	if _, err = io.ReadFull(conn, data[:]); err != nil || string(data[:]) != "fixed-peer" {
+		t.Fatal("lost transport data", err)
+	}
+}

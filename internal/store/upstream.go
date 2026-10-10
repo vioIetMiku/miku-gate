@@ -18,7 +18,7 @@ func (s *Store) secretVault() (*secretstore.Vault, error) {
 		return s.vault, nil
 	}
 	var count int
-	if err := s.db.QueryRow("SELECT count(*) FROM upstreams").Scan(&count); err != nil {
+	if err := s.db.QueryRow("SELECT (SELECT count(*) FROM upstreams)+(SELECT count(*) FROM vpn_configs)").Scan(&count); err != nil {
 		return nil, err
 	}
 	v, err := secretstore.Open(s.path+".key", count == 0)
@@ -94,6 +94,13 @@ func (s *Store) SaveUpstream(id string, in domain.UpstreamInput) error {
 	if _, _, err := s.ExitForRuntime(id); err != nil {
 		return err
 	}
+	var vpnCount int
+	if err := s.db.QueryRow("SELECT count(*) FROM vpn_configs WHERE exit_id=?", id).Scan(&vpnCount); err != nil {
+		return err
+	}
+	if vpnCount > 0 && !in.ReplaceVPN {
+		return fmt.Errorf("%w: 请明确确认替换此出口现有OpenVPN绑定", domain.ErrConflict)
+	}
 	config := in.Config()
 	if in.ReusePassword {
 		old, _, exists, err := s.Upstream(id)
@@ -130,6 +137,9 @@ func (s *Store) SaveUpstream(id string, in domain.UpstreamInput) error {
 		return err
 	}
 	defer tx.Rollback()
+	if _, err = tx.Exec("DELETE FROM vpn_configs WHERE exit_id=?", id); err != nil {
+		return err
+	}
 	_, err = tx.Exec("INSERT INTO upstreams(exit_id,kind,sealed,updated_at) VALUES(?,?,?,?) ON CONFLICT(exit_id) DO UPDATE SET kind=excluded.kind,sealed=excluded.sealed,updated_at=excluded.updated_at", id, config.Kind, sealed, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return err

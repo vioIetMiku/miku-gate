@@ -26,6 +26,7 @@ import (
 	"mikugate/internal/security"
 	"mikugate/internal/store"
 	"mikugate/internal/tunnel"
+	"mikugate/internal/vpnipc"
 	"mikugate/web"
 )
 
@@ -74,6 +75,7 @@ func run() error {
 	data := flags.String("data", ".data", "数据目录（包含凭据摘要和配置）")
 	username := flags.String("username", "admin", "初始化管理员名称")
 	sandboxIPC := flags.Bool("sandbox-ipc", false, "显式接入本实例 Unix socket 隔离执行器；不启用 VPN")
+	vpnExecutor := flags.Bool("vpn-executor", false, "显式接入独立最小权限OpenVPN执行器")
 	controlOnly := flags.Bool("control-plane-only", false, "禁用代理上游运行时，仅保留配置控制台")
 	maxActive := flags.Int("max-active", 3, "同时运行的代理出口上限，1–8（不是容量保证）")
 	listen := flags.String("listen", "127.0.0.1:3939", "本机管理监听地址")
@@ -82,6 +84,9 @@ func run() error {
 	}
 	if flags.NArg() != 0 {
 		return errors.New("存在不支持的位置参数")
+	}
+	if *vpnExecutor && os.Args[1] != "serve" {
+		return errors.New("--vpn-executor只适用于serve")
 	}
 	if *sandboxIPC && os.Args[1] != "serve" {
 		return errors.New("--sandbox-ipc 只适用于 serve")
@@ -156,8 +161,22 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	var options httpapi.Options
+	if *vpnExecutor {
+		if *controlOnly {
+			return errors.New("--vpn-executor不能用于纯控制台模式")
+		}
+		instance, err := s.InstanceID()
+		if err != nil {
+			return err
+		}
+		client, err := vpnipc.New(instance)
+		if err != nil {
+			return err
+		}
+		options.VPN = client
+	}
 	if !*controlOnly {
-		manager, err := gateway.New(ctx, s, gateway.Options{MaxExits: *maxActive})
+		manager, err := gateway.New(ctx, s, gateway.Options{MaxExits: *maxActive, Factory: gateway.WithVPN(s, options.VPN)})
 		if err != nil {
 			return err
 		}
@@ -186,7 +205,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	server := &http.Server{Addr: *listen, Handler: handler, BaseContext: func(net.Listener) context.Context { return ctx }, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 40 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
+	server := &http.Server{Addr: *listen, Handler: handler, BaseContext: func(net.Listener) context.Context { return ctx }, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
 	listener, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err
@@ -202,7 +221,7 @@ func run() error {
 			server.Close()
 		}
 	}()
-	log.Printf("Miku Gate %s · http://%s · 代理上游运行时=%t · 生产 OpenVPN 未接通 · 隔离 IPC 配置=%t", domain.Version, listener.Addr(), !*controlOnly, *sandboxIPC)
+	log.Printf("Miku Gate %s · http://%s · 代理上游运行时=%t · 隔离 OpenVPN 配置=%t · 沙箱 IPC 配置=%t", domain.Version, listener.Addr(), !*controlOnly, *vpnExecutor, *sandboxIPC)
 	err = server.Serve(listener)
 	stop()
 	<-shutdownDone

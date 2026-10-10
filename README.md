@@ -1,12 +1,12 @@
 # Miku Gate
 
-**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.7`。**
+**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.8`。**
 
 > 当前可运行的是带认证的本机代理上游网关：HTTP/SOCKS入口 → 用户提供的SOCKS5、HTTP或HTTPS代理。完整VPN网关仍在开发。
 >
-> 保存上游后，“启动”会实际验证代理/TLS/DNS路径，再开放固定的127.0.0.1认证入口；失败不会使用宿主直连后备。OpenVPN目前仍是已通过私有实验的构件，生产执行器、Xray/sing-box加密入口、域名与交互安装向导尚未完成。未配置上游时仍返回 `409 executor_unavailable`，不会冒充VPN已连接。
+> 保存上游后，“启动”会实际验证代理/TLS/DNS路径，再开放固定的127.0.0.1认证入口；失败不会使用宿主直连后备。OpenVPN已接入独立root执行器/非rootworker和Web节点绑定，修正后的完整运行验收仍在进行，不能视作公共节点已可用。Xray/sing-box加密入口、域名与交互安装向导尚未完成。未配置上游时仍返回 `409 executor_unavailable`，不会冒充VPN已连接。
 
-> 升级提示：dev.6 数据库 schema 升为 3，上游凭据用独立的数据库同名 `.key` 文件加密。升级前停止旧服务并备份完整数据目录（数据库、WAL及密钥）；旧版本不能直接打开升级后的数据库。丢失密钥时不重新生成冒充恢复。
+> 升级提示：dev.8 数据库 schema 升为 4（dev.6为3），上游凭据用独立的数据库同名 `.key` 文件加密。升级前停止旧服务并备份完整数据目录（数据库、WAL及密钥）；旧版本不能直接打开升级后的数据库。丢失密钥时不重新生成冒充恢复。
 
 已发布压缩包：[v0.1.0-dev.6 代理上游预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.6)。提供Linux amd64/arm64、Windows amd64及校验文件；[实际VPS/发行验收](docs/validation/2026-10-10-proxy-runtime.md)。旧dev.2标签与资产保留，main继续完整网关开发。
 
@@ -191,3 +191,5 @@ scripts/            构建、真实 HTTP smoke 与浏览器测试辅助
 完整终态要求与验收矩阵见 [DELIVERY_PLAN.md](docs/DELIVERY_PLAN.md)。正在开发的代理上游与密钥边界见 [UPSTREAM_PROXY.md](docs/UPSTREAM_PROXY.md)。
 
 VPN Gate官方配置的显式旧数据通道支持与静态节点检查见 [VPNGATE_COMPATIBILITY.md](docs/VPNGATE_COMPATIBILITY.md)；main/dev.7开发中，不等于公共节点已连通。
+
+独立OpenVPN执行器、三个UID及节点快照使用说明见 [OPENVPN_RUNTIME.md](docs/OPENVPN_RUNTIME.md)；dev.8开发中，完整运行验收尚未结束。

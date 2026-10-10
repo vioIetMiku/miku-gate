@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -242,12 +243,13 @@ func startSession(ctx context.Context, profile Profile, options SessionOptions, 
 	cmd.WaitDelay = time.Second
 	diagnostics := &processOutput{ready: make(chan struct{})}
 	cmd.Stderr = diagnostics
-	if err = cmd.Start(); err != nil {
+	processDone, err := startParentBound(cmd)
+	if err != nil {
 		channel.Close()
 		return nil, err
 	}
 	session := &Session{channel: channel, process: cmd, done: make(chan struct{}), ctx: life, cancel: cancel}
-	go func() { cmd.Wait(); cancel(); channel.Close(); close(session.done) }()
+	go func() { <-processDone; cancel(); channel.Close(); close(session.done) }()
 	after := context.AfterFunc(life, func() { channel.Close(); cmd.Process.Signal(syscall.SIGTERM) })
 	defer func() {
 		if failed {
@@ -402,9 +404,7 @@ func sessionGuardDigest(ctx context.Context) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func waitChild(cmd *exec.Cmd) (<-chan struct{}, func()) {
-	done := make(chan struct{})
-	go func() { cmd.Wait(); close(done) }()
+func waitChild(cmd *exec.Cmd, done <-chan struct{}) (<-chan struct{}, func()) {
 	var once sync.Once
 	close := func() {
 		once.Do(func() {
@@ -496,10 +496,11 @@ func RunSupervisor() error {
 	output := &processOutput{ready: make(chan struct{})}
 	vpn.Stdout = output
 	vpn.Stderr = output
-	if err = vpn.Start(); err != nil {
+	vpnWait, err := startParentBound(vpn)
+	if err != nil {
 		return err
 	}
-	vpnDone, closeVPN := waitChild(vpn)
+	vpnDone, closeVPN := waitChild(vpn, vpnWait)
 	defer closeVPN()
 	select {
 	case <-output.ready:
@@ -542,10 +543,11 @@ func RunSupervisor() error {
 	}
 	defer workerConfig.Close()
 	worker, _ := spawnUnprivileged(binary, []string{"_vpn-worker"}, []*os.File{childFile, workerConfig}, boot.Options.WorkerUID, unix.CAP_NET_RAW)
-	if err = worker.Start(); err != nil {
+	workerWait, err := startParentBound(worker)
+	if err != nil {
 		return err
 	}
-	workerDone, closeWorker := waitChild(worker)
+	workerDone, closeWorker := waitChild(worker, workerWait)
 	defer closeWorker()
 	workerChannel.Conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	var ready sessionMessage
@@ -770,4 +772,58 @@ func RunOpenVPN() error {
 		return err
 	}
 	return unix.Exec(binary, []string{binary, "--config", "/proc/self/fd/3"}, []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C"})
+}
+
+// Linux parent-death signals track the creating thread, not merely the Go
+// process. Keep that OS thread alive through Wait so runtime thread retirement
+// cannot terminate a healthy OpenVPN/helper process.
+func startParentBound(cmd *exec.Cmd) (<-chan struct{}, error) {
+	started := make(chan error, 1)
+	done := make(chan struct{})
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		defer close(done)
+		err := cmd.Start()
+		started <- err
+		if err == nil {
+			cmd.Wait()
+		}
+	}()
+	if err := <-started; err != nil {
+		return nil, err
+	}
+	return done, nil
+}
+
+// CheckSessionEnvironment is a read-only daemon preflight. It creates no socket,
+// namespace or host rule, and refuses an untrusted executable before listening.
+func CheckSessionEnvironment(options SessionOptions) error {
+	if os.Geteuid() != 0 || options.Validate() != nil {
+		return ErrPrivilege
+	}
+	if _, err := ownExecutable(); err != nil {
+		return err
+	}
+	var header = unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
+	var caps [2]unix.CapUserData
+	if unix.Capget(&header, &caps[0]) != nil {
+		return ErrPrivilege
+	}
+	effective := uint64(caps[0].Effective) | (uint64(caps[1].Effective) << 32)
+	for _, capability := range []uint{unix.CAP_SYS_ADMIN, unix.CAP_NET_ADMIN, unix.CAP_NET_RAW, unix.CAP_SETUID, unix.CAP_SETGID, unix.CAP_SETPCAP} {
+		if effective&(uint64(1)<<capability) == 0 {
+			return ErrPrivilege
+		}
+	}
+	info, err := os.Stat("/dev/net/tun")
+	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
+		return ErrScope
+	}
+	for _, name := range []string{"openvpn", "ip", "nft"} {
+		if _, err = trustedTool(name); err != nil {
+			return err
+		}
+	}
+	return nil
 }

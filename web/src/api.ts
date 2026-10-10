@@ -8,7 +8,7 @@ export type Exit = {
   listen: string;
   username: string;
   status: 'stopped' | 'blocked' | 'starting' | 'running' | 'degraded' | 'stopping';
-  upstream_kind?: 'socks5' | 'http' | 'https';
+  upstream_kind?: 'socks5' | 'http' | 'https' | 'openvpn';
   reason: string;
   created_at: string;
 };
@@ -23,6 +23,8 @@ export type Overview = {
   executor_available: boolean;
   proxy_runtime_available?: boolean;
   healthy_count?: number;
+  vpn_runtime_configured?: boolean;
+  vpn_verified_count?: number;
   protection_verified: boolean;
   message: string;
 };
@@ -72,7 +74,7 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
   const response = await fetch(`/api${path}`, {
     method,
     credentials: 'same-origin',
-    signal: AbortSignal.timeout(35000),
+    signal: AbortSignal.timeout(42000),
     headers: {
       'Content-Type': 'application/json',
       ...(method !== 'GET' ? { 'X-CSRF-Token': csrf } : {}),
@@ -185,6 +187,7 @@ export type UpstreamConfig = {
 export type UpstreamInput = Omit<UpstreamConfig, 'configured' | 'has_password' | 'updated_at'> & {
   password: string;
   reuse_password: boolean;
+  replace_vpn?: boolean;
 };
 export type RuntimeState = {
   exit_id: string;
@@ -234,4 +237,30 @@ export type ProfileCheck = {
   tls_minimum: string;
   message: string;
   checked_at: string;
+};
+
+export type VPNBinding = {
+  configured: boolean;
+  node_id: string;
+  node_hostname: string;
+  ip: string;
+  peer_name: string;
+  allow_legacy: boolean;
+  profile_sha256: string;
+  source: string;
+  fetched_at: string;
+  updated_at: string;
+};
+export type VPNExecutor = {
+  configured: boolean;
+  reachable: boolean;
+  mode: string;
+  message: string;
+  capabilities?: {
+    version: number;
+    instance: string;
+    mode: string;
+    max_sessions: number;
+    options: { tunnel_uid: number; worker_uid: number };
+  };
 };

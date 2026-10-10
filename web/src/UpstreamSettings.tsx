@@ -18,6 +18,7 @@ import {
   type UpstreamConfig,
   type UpstreamInput,
   type RuntimeState,
+  type VPNBinding,
 } from './api';
 
 export function UpstreamSettings({
@@ -43,13 +44,19 @@ export function UpstreamSettings({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [hasVPN, setHasVPN] = useState(false);
+  const [replaceVPN, setReplaceVPN] = useState(false);
   const locked = hasRuntime(exit.status);
   useEffect(() => {
     let alive = true;
-    api<UpstreamConfig>(`/exits/${exit.id}/upstream`)
-      .then((value) => {
+    Promise.all([
+      api<UpstreamConfig>(`/exits/${exit.id}/upstream`),
+      api<VPNBinding>(`/exits/${exit.id}/vpn`),
+    ])
+      .then(([value, vpn]) => {
         if (!alive) return;
         setOriginal(value);
+        setHasVPN(vpn.configured);
         if (value.configured) {
           setKind(value.kind);
           setHost(value.host);
@@ -87,6 +94,7 @@ export function UpstreamSettings({
       dns,
       allow_loopback: loopback,
       allow_plaintext: plaintext,
+      replace_vpn: replaceVPN,
     };
     try {
       await api(`/exits/${exit.id}/upstream`, 'PUT', input);
@@ -129,7 +137,7 @@ export function UpstreamSettings({
           <Info size={20} />
           <p>
             这是出口使用的代理服务器，不是客户端入口。VPN Gate 的 OpenVPN 配置不能填成 SOCKS/HTTP
-            上游；生产 OpenVPN 驱动仍在接线。
+            上游；OpenVPN 请用出口的“选择VPN”入口，并先授权独立执行器。
           </p>
         </div>
         {loading ? (
@@ -256,6 +264,16 @@ export function UpstreamSettings({
                   </span>
                 </label>
               )}
+              {hasVPN && (
+                <label className="option-check">
+                  <input
+                    type="checkbox"
+                    checked={replaceVPN}
+                    onChange={(e) => setReplaceVPN(e.target.checked)}
+                  />
+                  <span>我确认用此代理上游替换当前OpenVPN绑定。未确认不会移除现有配置。</span>
+                </label>
+              )}
               <p className="field-note">
                 业务 DNS 与 TCP 只经此上游；失败不直连。上游地址自身若是域名，会由本机解析并固定公网
                 IP。配置地区不是实测出口所在地。
@@ -297,7 +315,10 @@ export function UpstreamSettings({
           <button className="button" type="button" onClick={close} disabled={busy}>
             关闭
           </button>
-          <button className="button primary" disabled={busy || locked || loading || !original}>
+          <button
+            className="button primary"
+            disabled={busy || locked || loading || !original || (hasVPN && !replaceVPN)}
+          >
             {busy ? <CircleNotch className="spin" size={17} /> : '保存上游'}
           </button>
         </div>
@@ -388,7 +409,9 @@ export function RuntimeView({ exitID, changed }: { exitID: string; changed: () =
           <p className="field-note">
             {state.proof.protection_mode === 'proxy_only'
               ? '应用层只经代理上游转发；不是OpenVPN隧道或内核隔离的证明。'
-              : '未建立经过验证的生产OpenVPN路径。'}
+              : state.proof.protection_mode === 'namespace' && state.proof.kernel_verified
+                ? '已核对本会话的独立namespace、TUN接口与内核规则；业务通过低权限worker。'
+                : '尚无当前有效的内核保护证明。'}
           </p>
           <div className="runtime-actions">
             <span>

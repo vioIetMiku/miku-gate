@@ -25,6 +25,7 @@ import (
 	"mikugate/internal/security"
 	"mikugate/internal/store"
 	"mikugate/internal/vpngate"
+	"mikugate/internal/vpnipc"
 )
 
 type attempt struct {
@@ -38,9 +39,11 @@ type SandboxClient interface {
 type Options struct {
 	Sandbox SandboxClient
 	Gateway *gateway.Manager
+	VPN     *vpnipc.Client
 }
 type Server struct {
 	gateway     *gateway.Manager
+	vpnClient   *vpnipc.Client
 	sandbox     SandboxClient
 	sandboxSlot chan struct{}
 	store       *store.Store
@@ -62,7 +65,7 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 	if err != nil {
 		return nil, err
 	}
-	a := &Server{gateway: options.Gateway, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	a := &Server{gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]any{"version": domain.Version, "status": a.mode()})
@@ -85,6 +88,10 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 	mux.HandleFunc("POST /api/exits", a.auth(a.createExit))
 	mux.HandleFunc("PATCH /api/exits/{id}", a.auth(a.stopped(a.updateExit)))
 	mux.HandleFunc("DELETE /api/exits/{id}", a.auth(a.stopped(a.deleteExit)))
+	mux.HandleFunc("GET /api/vpn-executor", a.auth(a.vpnStatus))
+	mux.HandleFunc("GET /api/exits/{id}/vpn", a.auth(a.getVPN))
+	mux.HandleFunc("PUT /api/exits/{id}/vpn", a.auth(a.stopped(a.saveVPN)))
+	mux.HandleFunc("DELETE /api/exits/{id}/vpn", a.auth(a.stopped(a.removeVPN)))
 	mux.HandleFunc("GET /api/executor", a.auth(a.executorStatus))
 	mux.HandleFunc("GET /api/exits/{id}/sandbox", a.auth(a.sandboxInspect))
 	mux.HandleFunc("POST /api/exits/{id}/sandbox/prepare", a.auth(a.stopped(a.sandboxPrepare)))
@@ -263,20 +270,31 @@ func (a *Server) overview(w http.ResponseWriter, r *http.Request, s domain.Sessi
 	for _, e := range exits {
 		countries[e.Country] = true
 	}
-	active, healthy := 0, 0
+	active, healthy, verifiedVPN := 0, 0, 0
 	message := "控制台与配置管理可用；VPN 数据面尚未接入，没有活动代理或隧道。"
 	if a.gateway != nil {
 		for _, state := range a.gateway.States() {
 			if state.ProxyListening {
 				active++
 			}
+			if state.Proof.Kind == "openvpn" && state.Proof.KernelVerified && state.Healthy {
+				verifiedVPN++
+			}
 			if state.Healthy {
 				healthy++
 			}
 		}
-		message = "HTTP/SOCKS/HTTPS代理上游运行时已启用，入口仅本机；生产OpenVPN执行器仍待接通。"
+		message = "HTTP/SOCKS/HTTPS代理上游运行时已启用，入口仅本机；隔离OpenVPN执行器需要另行明确授权。"
 	}
-	write(w, 200, map[string]any{"version": domain.Version, "mode": a.mode(), "exit_count": len(exits), "active_count": active, "healthy_count": healthy, "country_count": len(countries), "node_count": len(nodes), "executor_available": false, "proxy_runtime_available": a.gateway != nil, "protection_verified": false, "message": message})
+	vpnReachable := false
+	if a.vpnClient != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		_, err := a.vpnClient.Capabilities(ctx)
+		cancel()
+		vpnReachable = err == nil
+		message = "已配置隔离OpenVPN执行器；代理/隧道启动必须各自通过实际路径验证。"
+	}
+	write(w, 200, map[string]any{"version": domain.Version, "mode": a.mode(), "exit_count": len(exits), "active_count": active, "healthy_count": healthy, "country_count": len(countries), "node_count": len(nodes), "executor_available": vpnReachable, "vpn_runtime_configured": a.vpnClient != nil, "vpn_verified_count": verifiedVPN, "proxy_runtime_available": a.gateway != nil, "protection_verified": active > 0 && verifiedVPN == active, "message": message})
 }
 func (a *Server) createExit(w http.ResponseWriter, r *http.Request, s domain.Session) {
 	var in domain.ExitInput

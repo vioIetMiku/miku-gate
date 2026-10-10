@@ -1,3 +1,4 @@
+import { VPNSettings } from './VPNSettings';
 import { NodeProfileView } from './NodeProfileView';
 import { Modal } from './Modal';
 import { UpstreamSettings, RuntimeView } from './UpstreamSettings';
@@ -181,7 +182,7 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
           </div>
           <p className="login-note">
             <Info size={16} />
-            支持本机代理上游；生产 OpenVPN、加密入口和安装向导仍在开发。
+            支持本机代理上游与显式授权的隔离 OpenVPN；加密入口和安装向导仍在开发。
           </p>
         </div>
       </main>
@@ -423,6 +424,7 @@ export default function App() {
   const [form, setForm] = useState<Exit | 'new' | null>(null);
   const [detail, setDetail] = useState<Exit | null>(null);
   const [upstreamExit, setUpstreamExit] = useState<Exit | null>(null);
+  const [vpnExit, setVPNExit] = useState<Exit | null>(null);
   const [deleting, setDeleting] = useState<Exit | null>(null);
   const [secret, setSecret] = useState<{ exit: Exit; password: string } | null>(null);
   const [query, setQuery] = useState('');
@@ -452,6 +454,7 @@ export default function App() {
       setForm(null);
       setDetail(null);
       setUpstreamExit(null);
+      setVPNExit(null);
       setSecret(null);
       setDeleting(null);
     }
@@ -974,6 +977,13 @@ export default function App() {
                               </button>
                               <button
                                 className="icon-button"
+                                aria-label={`选择VPN ${e.name}`}
+                                onClick={() => setVPNExit(e)}
+                              >
+                                <GlobeHemisphereWest size={17} />
+                              </button>
+                              <button
+                                className="icon-button"
                                 aria-label={`查看 ${e.name}`}
                                 onClick={() => setDetail(e)}
                               >
@@ -1189,7 +1199,7 @@ export default function App() {
                     </li>
                     <li className="muted">
                       <Clock size={17} />
-                      OpenVPN私有实验已通过；生产驱动接线中
+                      隔离OpenVPN监督进程与独立低权限worker
                     </li>
                     <li className="muted">
                       <Clock size={17} />
@@ -1218,7 +1228,10 @@ export default function App() {
                     </div>
                     <div>
                       <dt>数据面状态</dt>
-                      <dd>{overview?.active_count ?? 0} 个实际监听 · OpenVPN未接通</dd>
+                      <dd>
+                        {overview?.active_count ?? 0} 个实际监听 ·{' '}
+                        {overview?.vpn_verified_count ?? 0} 个已核验VPN
+                      </dd>
                     </div>
                   </dl>
                 </section>
@@ -1230,7 +1243,7 @@ export default function App() {
               Miku Gate <b>·</b> 让连接更有条理
             </span>
             <span>
-              开发预览 <b>·</b> 代理上游 / OpenVPN接线中
+              开发预览 <b>·</b> 代理上游 / 独立OpenVPN执行器
             </span>
           </footer>
         </main>
@@ -1240,6 +1253,18 @@ export default function App() {
           current={form === 'new' ? undefined : form}
           submit={saveExit}
           close={() => setForm(null)}
+        />
+      )}
+      {vpnExit && (
+        <VPNSettings
+          exit={exits.find((e) => e.id === vpnExit.id) ?? vpnExit}
+          nodes={nodes}
+          close={() => setVPNExit(null)}
+          saved={async () => {
+            await load();
+            setToast('VPN配置快照已保存；未自动启动');
+            setVPNExit(null);
+          }}
         />
       )}
       {profileNode && <NodeProfileView node={profileNode} close={() => setProfileNode(null)} />}

@@ -270,7 +270,7 @@ class Control:
         self.request("POST", "/api/auth/login", {"username": "admin", "password": self.admin_password}, expect=200)
 
     def request(self, method, path, body=None, expect=200):
-        connection = http.client.HTTPConnection(*self.address, timeout=25)
+        connection = http.client.HTTPConnection(*self.address, timeout=getattr(self, "api_timeout", 25))
         headers = {"Content-Type": "application/json"}
         if self.cookie:
             headers["Cookie"] = self.cookie

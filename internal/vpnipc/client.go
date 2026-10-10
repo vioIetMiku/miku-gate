@@ -111,7 +111,7 @@ func (c *businessConn) CloseWrite() error {
 }
 func (c *Client) Start(ctx context.Context, exit string, config Config) (*Session, error) {
 	life, cancel := context.WithCancel(ctx)
-	conn, reply, err := c.exchange(life, request{Version: Version, Operation: "start", ExitID: exit, Profile: config.Profile, IP: config.IP, PeerName: config.PeerName, Legacy: config.AllowLegacy}, 28*time.Second)
+	conn, reply, err := c.exchange(life, request{Version: Version, Operation: "start", ExitID: exit, Profile: config.Profile, IP: config.IP, PeerName: config.PeerName, PeerFingerprint: config.PeerFingerprint, Legacy: config.AllowLegacy}, 28*time.Second)
 	if err != nil {
 		cancel()
 		return nil, err

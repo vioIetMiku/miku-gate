@@ -28,7 +28,7 @@ func WithVPN(source VPNSource, client *vpnipc.Client) Factory {
 		if client == nil {
 			return nil, ErrVPNDisabled
 		}
-		session, err := client.Start(ctx, exit.ID, vpnipc.Config{Profile: config.Profile, IP: config.IP, PeerName: config.PeerName, AllowLegacy: config.AllowLegacy})
+		session, err := client.Start(ctx, exit.ID, vpnipc.Config{Profile: config.Profile, IP: config.IP, PeerName: config.PeerName, PeerFingerprint: config.PeerFingerprint, AllowLegacy: config.AllowLegacy})
 		if err != nil {
 			return nil, err
 		}

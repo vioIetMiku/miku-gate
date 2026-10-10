@@ -70,8 +70,8 @@ func (s *Store) migrate() error {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 4 {
-		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 4，拒绝降级打开", version)
+	if version > 5 {
+		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 5，拒绝降级打开", version)
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -84,6 +84,7 @@ func (s *Store) migrate() error {
  INSERT OR IGNORE INTO schema_version VALUES(2);
  INSERT OR IGNORE INTO schema_version VALUES(3);
  INSERT OR IGNORE INTO schema_version VALUES(4);
+ INSERT OR IGNORE INTO schema_version VALUES(5);
  CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS accounts(username TEXT PRIMARY KEY,password_hash TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,username TEXT NOT NULL REFERENCES accounts(username),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
@@ -92,7 +93,7 @@ func (s *Store) migrate() error {
  CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,level TEXT NOT NULL,kind TEXT NOT NULL,message TEXT NOT NULL,exit_id TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS upstreams(exit_id TEXT PRIMARY KEY REFERENCES exits(id) ON DELETE CASCADE,kind TEXT NOT NULL,sealed BLOB NOT NULL,updated_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS vpn_configs(exit_id TEXT PRIMARY KEY REFERENCES exits(id) ON DELETE CASCADE,sealed BLOB NOT NULL);
- PRAGMA user_version=4;
+ PRAGMA user_version=5;
  `)
 	if err != nil {
 		return err

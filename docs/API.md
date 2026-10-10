@@ -44,6 +44,7 @@
 | PUT | `/exits/{id}/vpn` | 已登录 + CSRF + confirm:true + 停止 | 204，保存官方缓存快照和明确名称，替换原上游 |
 | DELETE | `/exits/{id}/vpn` | 已登录 + CSRF + 停止 | 204，移除绑定，保留入口凭据 |
 | GET | `/nodes` | 已登录 | 200，缓存候选节点，不含 OpenVPN 配置正文 |
+| POST | `/nodes/{id}/identity` | 已登录 + CSRF | 200，系统CA与官方域名TLS验证后的公开身份；限频，不建立VPN |
 | GET | `/nodes/{id}/profile` | 已登录，官方来源缓存 | 200，仅静态格式/材料检查，不返回配置正文、不联网 |
 | POST | `/nodes/refresh` | 已登录 + CSRF | 200，`count`、`skipped`、`tested:false` |
 | GET | `/events` | 已登录 | 200，最近 100 条事件 |
@@ -146,3 +147,5 @@ VPN选择请求字段：`node_id`、`peer_name`、`allow_legacy`、`confirm`。�
 `--vpn-executor`未启用时，保存的VPN节点启动返回409 `vpn_executor_disabled`。实际根服务不可达/会话失败返回502，绝不转成代理直连。普通代理PUT若替换VPN必须加`replace_vpn:true`。schema v4包含新的加密记录，缺少配套.key时拒绝恢复。
 
 概览新增`vpn_runtime_configured`与`vpn_verified_count`；只有确有活动会话且全都通过当前namespace/TUN/规则/TLS/DNS核验时`protection_verified`才为true。混合代理模式不能被标成全局内核保护。实际UI和部署链路验收仍按独立记录追踪。
+
+自动身份保存使用use_verified_identity:true，浏览器不提供peer_fingerprint或证书私钥。先POST身份检查，再在5分钟内保存对应快照；过期或节点/配置变化时返回409 identity_check_required。schema v5保存精确指纹，见[服务器身份流程](VPN_SERVER_IDENTITY.md)。

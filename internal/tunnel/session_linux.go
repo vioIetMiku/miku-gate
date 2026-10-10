@@ -515,7 +515,7 @@ func RunSupervisor() error {
 	case <-vpnDone:
 		return fmt.Errorf("%w: OpenVPN initialization: %s", ErrSession, output.text())
 	case <-time.After(18 * time.Second):
-		return ErrSession
+		return fmt.Errorf("%w: OpenVPN initialization timeout: %s", ErrSession, output.text())
 	case <-ctx.Done():
 		return ctx.Err()
 	}

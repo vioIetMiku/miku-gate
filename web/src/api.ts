@@ -240,6 +240,9 @@ export type ProfileCheck = {
 };
 
 export type VPNBinding = {
+  peer_fingerprint?: string;
+  verified_tls_host?: string;
+  identity_checked_at?: string;
   configured: boolean;
   node_id: string;
   node_hostname: string;
@@ -263,4 +266,21 @@ export type VPNExecutor = {
     max_sessions: number;
     options: { tunnel_uid: number; worker_uid: number };
   };
+};
+
+export type NodeIdentity = {
+  node_id: string;
+  ip: string;
+  tls_host: string;
+  tls_port: number;
+  peer_name: string;
+  peer_fingerprint: string;
+  profile_sha256: string;
+  tls_version: string;
+  checked_at: string;
+  not_after: string;
+  source: string;
+  verified: boolean;
+  vpn_connected: boolean;
+  message: string;
 };

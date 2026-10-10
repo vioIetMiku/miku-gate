@@ -18,6 +18,7 @@ import (
 	"mikugate/internal/vpngate"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -143,6 +144,51 @@ func TestVPNSelectionRejectsStaleOrNonOfficialCache(t *testing.T) {
 		s.ReplaceNodes(t.Context(), []domain.Node{node})
 		if s.SaveVPN(exit.ID, domain.VPNInput{NodeID: node.ID, PeerName: "vpn.example", Confirm: true}) == nil {
 			t.Fatal("unsafe cached source accepted", kind)
+		}
+	}
+}
+
+func TestVerifiedVPNIdentitySnapshotCannotBeForgedOrReusedForAnotherProfile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	exit, _, _ := s.CreateExit(domain.ExitInput{Name: "identity", Country: "JP"})
+	node := vpnNode(t)
+	node.Hostname = "vpn123"
+	s.ReplaceNodes(t.Context(), []domain.Node{node})
+	input := domain.VPNInput{NodeID: node.ID, Confirm: true, UseVerifiedIdentity: true}
+	if err = s.SaveVPN(exit.ID, input); err == nil {
+		t.Fatal("browser verified flag accepted without server-side identity")
+	}
+	identity := domain.NodeIdentity{NodeID: node.ID, IP: node.IP, TLSHost: "vpn123.opengw.net", TLSPort: 443, PeerName: "opengw.net", PeerFingerprint: strings.Repeat("a", 64), ProfileSHA256: vpngate.ProfileDigest(node.Config), CheckedAt: time.Now().UTC(), NotAfter: time.Now().Add(time.Hour), Source: vpngate.Source, Verified: true}
+	if err = s.SaveVerifiedVPN(exit.ID, input, identity); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := s.VPN(exit.ID)
+	if err != nil || !ok || got.PeerFingerprint != identity.PeerFingerprint || got.VerifiedTLSHost != identity.TLSHost || got.PeerName != "opengw.net" {
+		t.Fatal("lost peer pin", err)
+	}
+	for _, kind := range []string{"profile", "ip", "expired", "name", "unverified", "fingerprint"} {
+		bad := identity
+		switch kind {
+		case "profile":
+			bad.ProfileSHA256 = strings.Repeat("b", 64)
+		case "ip":
+			bad.IP = "1.1.1.1"
+		case "expired":
+			bad.CheckedAt = time.Now().Add(-6 * time.Minute)
+		case "name":
+			bad.TLSHost = "other.opengw.net"
+		case "unverified":
+			bad.Verified = false
+		case "fingerprint":
+			bad.PeerFingerprint = ""
+		}
+		if err = s.SaveVerifiedVPN(exit.ID, input, bad); err == nil {
+			t.Fatal("invalid automatic identity accepted", kind)
 		}
 	}
 }

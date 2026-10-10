@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in, bounded runner for the three private Linux labs; not an installer.
+"""Opt-in, bounded runner for private Linux kernel and full-runtime labs; not an installer.
 
 Run only on an explicitly authorized test host, inside a dedicated systemd
 scope. This runner never changes host networking or deletes leftover resources.
@@ -32,7 +32,7 @@ DIRECTORY_RE = re.compile(r"/var/tmp/miku-gate-lab-[a-z0-9-]{6,64}")
 LAB_ROOTS = (
     "/run/miku-gate-netexec-tests", "/run/miku-gate-ipc-tests",
     "/run/miku-gate-ipc-http-tests", "/run/miku-gate-openvpn-tests",
-    "/run/miku-gate/netexec", "/run/miku-gate-ipc",
+    "/run/miku-gate/netexec", "/run/miku-gate-ipc", "/run/miku-gate-vpnipc",
     "/run/miku-gate-lab-exec", LAB_EXEC_ROOT,
 )
 SUITES = {

@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -353,6 +355,9 @@ func runControlledTunnel(t *testing.T, legacy bool) {
 	t.Cleanup(server.close)
 	l.ready(server)
 	profile := l.clientProfile(pki)
+	block, _ := pem.Decode([]byte(pki.serverCert))
+	digest := sha256.Sum256(block.Bytes)
+	profile.peerFingerprint = hex.EncodeToString(digest[:])
 	if legacy {
 		profile, err = normalizeOptions(pki.profile(transportServer)+"cipher AES-128-CBC\ndata-ciphers AES-128-CBC\nauth SHA1\n", transportServer, time.Now(), func(ip string) error {
 			if ip != transportServer {
@@ -364,6 +369,7 @@ func runControlledTunnel(t *testing.T, legacy bool) {
 			t.Fatal("explicit legacy profile failed", err)
 		}
 	}
+	profile.peerFingerprint = hex.EncodeToString(digest[:])
 	// Certificate-role checks alone are not evidence of actual peer authentication.
 	// A deliberately wrong expected server name must fail before tunnel setup.
 	wrong := profile
@@ -382,6 +388,20 @@ func runControlledTunnel(t *testing.T, legacy bool) {
 	failed.close()
 	if !strings.Contains(failed.output.text(), "VERIFY X509NAME ERROR") {
 		t.Fatalf("missing authentication rejection evidence: %s", failed.output.text())
+	}
+	wrongPin := profile
+	wrongPin.peerFingerprint = strings.Repeat("0", 64)
+	pinDenied, err := startClient(l.ctx, l.client.file, wrongPin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pinDenied.close)
+	pinContext, cancelPin := context.WithTimeout(l.ctx, 2*time.Second)
+	pinErr := pinDenied.waitReady(pinContext)
+	cancelPin()
+	pinDenied.close()
+	if pinErr == nil || !strings.Contains(strings.ToLower(pinDenied.output.text()), "fingerprint") {
+		t.Fatalf("incorrect certificate fingerprint lacked rejection evidence: %v\n%s", pinErr, pinDenied.output.text())
 	}
 	client, err := startClient(l.ctx, l.client.file, profile)
 	if err != nil {
@@ -447,5 +467,5 @@ func runControlledTunnel(t *testing.T, legacy bool) {
 	if legacy && !strings.Contains(client.output.text(), "Data Channel: cipher 'AES-128-CBC'") {
 		t.Fatal("legacy data cipher was not actually negotiated")
 	}
-	t.Logf("Observed: legacy-data=%t; mutual TLS handshake with rejected wrong server name; ignored pushed route/DNS; DNS UDP/TCP and business TCP sourced from tunnel; mixed/private DNS rejected; DNS timeout did not fall back; established and new flows blocked after VPN/TUN loss, even with an underlay default route. Counters before=%d after=%d; service before=%+v after=%+v; host network/DNS unchanged.", legacy, drops, l.outputDrops(), oldStats, later)
+	t.Logf("Observed: legacy-data=%t; mutual TLS handshake with rejected wrong server name and wrong certificate fingerprint; ignored pushed route/DNS; DNS UDP/TCP and business TCP sourced from tunnel; mixed/private DNS rejected; DNS timeout did not fall back; established and new flows blocked after VPN/TUN loss, even with an underlay default route. Counters before=%d after=%d; service before=%+v after=%+v; host network/DNS unchanged.", legacy, drops, l.outputDrops(), oldStats, later)
 }

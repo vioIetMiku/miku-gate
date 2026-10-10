@@ -4,6 +4,7 @@ package vpnipc
 
 import (
 	"context"
+	"log"
 	"mikugate/internal/executoripc"
 	"mikugate/internal/security"
 	"mikugate/internal/streamio"
@@ -110,7 +111,7 @@ func (s *server) handle(parent context.Context, conn *net.UnixConn) {
 		var releaseOnce sync.Once
 		releaseExit := func() { releaseOnce.Do(func() { s.mu.Lock(); delete(s.exits, req.ExitID); s.mu.Unlock() }) }
 		defer releaseExit()
-		profile, err := tunnel.NormalizeWithOptions(req.Profile, req.IP, tunnel.NormalizeOptions{AllowVPNGateLegacy: req.Legacy, ExpectedPeerName: req.PeerName})
+		profile, err := tunnel.NormalizeWithOptions(req.Profile, req.IP, tunnel.NormalizeOptions{AllowVPNGateLegacy: req.Legacy, ExpectedPeerName: req.PeerName, ExpectedPeerFingerprint: req.PeerFingerprint})
 		req.Profile = ""
 		if err != nil {
 			reply(conn, response{Error: "profile"})
@@ -123,6 +124,7 @@ func (s *server) handle(parent context.Context, conn *net.UnixConn) {
 		defer func() { conn.Close(); <-watcher }()
 		engine, err := tunnel.StartSession(ctx, profile, s.options)
 		if err != nil {
+			log.Printf("VPN_START_FAILURE category=%s", tunnel.FailureCode(err))
 			reply(conn, response{Error: "unavailable"})
 			return
 		}

@@ -37,24 +37,29 @@ type SandboxClient interface {
 	Capabilities(context.Context) (executoripc.Capabilities, error)
 }
 type Options struct {
-	Sandbox SandboxClient
-	Gateway *gateway.Manager
-	VPN     *vpnipc.Client
+	InspectNodeIdentity func(context.Context, domain.Node) (domain.NodeIdentity, error)
+	Sandbox             SandboxClient
+	Gateway             *gateway.Manager
+	VPN                 *vpnipc.Client
 }
 type Server struct {
-	gateway     *gateway.Manager
-	vpnClient   *vpnipc.Client
-	sandbox     SandboxClient
-	sandboxSlot chan struct{}
-	store       *store.Store
-	assets      fs.FS
-	dummyHash   string
-	authSlots   chan struct{}
-	writeSlots  chan struct{}
-	refreshSlot chan struct{}
-	mu          sync.Mutex
-	attempts    map[string]attempt
-	lastRefresh time.Time
+	nodeIdentities  map[string]domain.NodeIdentity
+	identitySlot    chan struct{}
+	lastIdentity    time.Time
+	inspectIdentity func(context.Context, domain.Node) (domain.NodeIdentity, error)
+	gateway         *gateway.Manager
+	vpnClient       *vpnipc.Client
+	sandbox         SandboxClient
+	sandboxSlot     chan struct{}
+	store           *store.Store
+	assets          fs.FS
+	dummyHash       string
+	authSlots       chan struct{}
+	writeSlots      chan struct{}
+	refreshSlot     chan struct{}
+	mu              sync.Mutex
+	attempts        map[string]attempt
+	lastRefresh     time.Time
 }
 
 func New(s *store.Store, assets fs.FS) (http.Handler, error) {
@@ -65,7 +70,11 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 	if err != nil {
 		return nil, err
 	}
-	a := &Server{gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	inspect := options.InspectNodeIdentity
+	if inspect == nil {
+		inspect = vpngate.InspectIdentity
+	}
+	a := &Server{nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]any{"version": domain.Version, "status": a.mode()})
@@ -113,6 +122,7 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 		}
 		write(w, 200, v)
 	}))
+	mux.HandleFunc("POST /api/nodes/{id}/identity", a.auth(a.nodeIdentity))
 	mux.HandleFunc("GET /api/nodes/{id}/profile", a.auth(a.nodeProfile))
 	mux.HandleFunc("POST /api/nodes/refresh", a.auth(a.refreshNodes))
 	mux.HandleFunc("GET /api/events", a.auth(func(w http.ResponseWriter, r *http.Request, s domain.Session) {

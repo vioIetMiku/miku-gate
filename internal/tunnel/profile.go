@@ -39,6 +39,7 @@ type Endpoint struct {
 // Profile keeps private key/certificate material out of ordinary JSON/log output.
 // Source text is never forwarded to OpenVPN; only canonical fields are rendered.
 type Profile struct {
+	peerFingerprint                string
 	endpoint                       Endpoint
 	legacyData                     bool
 	sharedClient                   bool
@@ -59,8 +60,9 @@ func Normalize(raw, expectedIP string) (Profile, error) {
 // Enabling the VPN Gate legacy data channel requires explicit caller consent and
 // an independently selected expected peer name; it does not relax server TLS.
 type NormalizeOptions struct {
-	AllowVPNGateLegacy bool
-	ExpectedPeerName   string
+	ExpectedPeerFingerprint string
+	AllowVPNGateLegacy      bool
+	ExpectedPeerName        string
 }
 
 func NormalizeWithOptions(raw, expectedIP string, options NormalizeOptions) (Profile, error) {
@@ -70,6 +72,9 @@ func normalize(raw, expectedIP string, now time.Time, allowEndpoint func(string)
 	return normalizeOptions(raw, expectedIP, now, allowEndpoint, NormalizeOptions{})
 }
 func normalizeOptions(raw, expectedIP string, now time.Time, allowEndpoint func(string) error, options NormalizeOptions) (Profile, error) {
+	if options.ExpectedPeerFingerprint != "" && !validPeerFingerprint(options.ExpectedPeerFingerprint) {
+		return Profile{}, ErrProfile
+	}
 	if options.ExpectedPeerName != "" && !peerNamePattern.MatchString(options.ExpectedPeerName) {
 		return Profile{}, ErrProfile
 	}
@@ -263,7 +268,7 @@ func normalizeOptions(raw, expectedIP string, now time.Time, allowEndpoint func(
 	if err != nil {
 		return fail()
 	}
-	profile := Profile{endpoint: Endpoint{IP: expected, Port: uint16(port), Transport: transport}, ca: ca, legacyData: legacyData}
+	profile := Profile{peerFingerprint: options.ExpectedPeerFingerprint, endpoint: Endpoint{IP: expected, Port: uint16(port), Transport: transport}, ca: ca, legacyData: legacyData}
 	if name := values["verify-x509-name"]; len(name) == 2 {
 		profile.peerName = name[0]
 	}
@@ -461,6 +466,9 @@ mute 0
 	if p.peerName != "" {
 		header += "verify-x509-name " + p.peerName + " name\n"
 	}
+	if p.peerFingerprint != "" {
+		header += "peer-fingerprint " + colonFingerprint(p.peerFingerprint) + "\n"
+	}
 	header += "<ca>\n" + p.ca + "</ca>\n"
 	if p.certificate != "" {
 		header += "<cert>\n" + p.certificate + "</cert>\n<key>\n" + p.key + "</key>\n"
@@ -510,3 +518,25 @@ func normalizeVPNGateSharedClient(certText, keyText string, now time.Time) (stri
 }
 func (p Profile) LegacyDataChannel() bool    { return p.legacyData }
 func (p Profile) SharedClientIdentity() bool { return p.sharedClient }
+
+func validPeerFingerprint(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, c := range value {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+func colonFingerprint(value string) string {
+	var out strings.Builder
+	for i := 0; i < len(value); i += 2 {
+		if i > 0 {
+			out.WriteByte(':')
+		}
+		out.WriteString(value[i : i+2])
+	}
+	return out.String()
+}

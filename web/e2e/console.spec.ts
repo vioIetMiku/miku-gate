@@ -57,6 +57,10 @@ test('本机控制台：登录、配置、阻止假启动、移动布局和会�
     .getByRole('combobox', { name: '官方候选节点', exact: true })
     .selectOption('profile-check-fixture');
   await expect(
+    vpnDialog.getByRole('button', { name: '验证官方TLS身份', exact: true }),
+  ).toBeDisabled();
+  await vpnDialog.getByRole('checkbox', { name: /高级：手动指定/ }).check();
+  await expect(
     vpnDialog.getByRole('textbox', { name: '预期服务器证书名称', exact: true }),
   ).toHaveValue('fixture-static-profile');
   await expect(vpnDialog).toContainText('配置未通过受限格式');

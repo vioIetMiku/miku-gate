@@ -42,7 +42,24 @@ func (a *Server) saveVPN(w http.ResponseWriter, r *http.Request, _ domain.Sessio
 		fail(w, 400, "invalid_vpn_selection", err.Error())
 		return
 	}
-	if err := a.store.SaveVPN(r.PathValue("id"), input); err != nil {
+	var saveErr error
+	if input.UseVerifiedIdentity {
+		node, err := a.store.NodeForRuntime(input.NodeID)
+		if err != nil {
+			a.storeError(w, err)
+			return
+		}
+		identity, ok := a.cachedIdentity(node)
+		if !ok {
+			fail(w, 409, "identity_check_required", "请先验证所选节点的TLS身份；检测仅5分钟有效，节点或配置变化后需重新检测")
+			return
+		}
+		input.PeerName = identity.PeerName
+		saveErr = a.store.SaveVerifiedVPN(r.PathValue("id"), input, identity)
+	} else {
+		saveErr = a.store.SaveVPN(r.PathValue("id"), input)
+	}
+	if err := saveErr; err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			a.storeError(w, err)
 			return

@@ -63,3 +63,26 @@ func CheckProfile(raw, expectedIP string) ProfileCheck {
 	}
 	return result
 }
+
+// InspectionEndpoint returns only the validated transport target, never an
+// executable config. A synthetic analysis name cannot escape this function.
+func InspectionEndpoint(raw, expectedIP string) (Endpoint, error) {
+	if len(raw) == 0 || len(raw) > MaxProfileBytes {
+		return Endpoint{}, ErrProfile
+	}
+	peerName := "miku-static-analysis-not-a-peer"
+	scanner := bufio.NewScanner(strings.NewReader(raw))
+	scanner.Buffer(make([]byte, 4096), MaxProfileBytes)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) == 3 && fields[0] == "verify-x509-name" && fields[2] == "name" && peerNamePattern.MatchString(fields[1]) {
+			peerName = fields[1]
+			break
+		}
+	}
+	profile, err := normalizeOptions(raw, expectedIP, time.Now(), egress.PublicIPv4, NormalizeOptions{AllowVPNGateLegacy: true, ExpectedPeerName: peerName})
+	if err != nil {
+		return Endpoint{}, err
+	}
+	return profile.Endpoint(), nil
+}

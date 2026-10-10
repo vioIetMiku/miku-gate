@@ -6,7 +6,7 @@
 >
 > 保存上游后，“启动”会实际验证代理/TLS/DNS路径，再开放固定的127.0.0.1认证入口；失败不会使用宿主直连后备。OpenVPN已接入独立root执行器/非rootworker和Web节点绑定，修正后的完整运行验收仍在进行，不能视作公共节点已可用。Xray/sing-box加密入口、域名与交互安装向导尚未完成。未配置上游时仍返回 `409 executor_unavailable`，不会冒充VPN已连接。
 
-> 升级提示：dev.8 数据库 schema 升为 4（dev.6为3），上游凭据用独立的数据库同名 `.key` 文件加密。升级前停止旧服务并备份完整数据目录（数据库、WAL及密钥）；旧版本不能直接打开升级后的数据库。丢失密钥时不重新生成冒充恢复。
+> 升级提示：dev.8 数据库 schema 升为 5（dev.6为3），上游凭据用独立的数据库同名 `.key` 文件加密。升级前停止旧服务并备份完整数据目录（数据库、WAL及密钥）；旧版本不能直接打开升级后的数据库。丢失密钥时不重新生成冒充恢复。
 
 已发布压缩包：[v0.1.0-dev.6 代理上游预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.6)。提供Linux amd64/arm64、Windows amd64及校验文件；[实际VPS/发行验收](docs/validation/2026-10-10-proxy-runtime.md)。旧dev.2标签与资产保留，main继续完整网关开发。
 
@@ -195,3 +195,5 @@ VPN Gate官方配置的显式旧数据通道支持与静态节点检查见 [VPNG
 独立OpenVPN执行器、三个UID及节点快照使用说明见 [OPENVPN_RUNTIME.md](docs/OPENVPN_RUNTIME.md)；dev.8开发中，完整运行验收尚未结束。
 
 想先核对最终产品方向，请看 [最终功能对齐稿](docs/FINAL_FEATURES.md)。它区分目标功能、默认行为与当前已完成实现，不用预览版替代完整交付。
+
+节点绑定默认提供[官方域名TLS验证与精确证书指纹](docs/VPN_SERVER_IDENTITY.md)，不再默认让用户猜证书CN；静态/标准TLS/实际VPN连通仍分开显示。

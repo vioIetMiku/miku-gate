@@ -18,27 +18,30 @@ var ErrProfile = errors.New("VPN配置/服务器身份不满足受限策略")
 var ErrBusy = errors.New("VPN执行器繁忙或此出口已有会话")
 var ErrProtocol = errors.New("VPN执行器响应无效")
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{32}$`)
+var fingerprintPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 type Config struct {
-	Profile     string `json:"-"`
-	IP          string `json:"ip"`
-	PeerName    string `json:"peer_name"`
-	AllowLegacy bool   `json:"allow_legacy"`
+	PeerFingerprint string `json:"peer_fingerprint"`
+	Profile         string `json:"-"`
+	IP              string `json:"ip"`
+	PeerName        string `json:"peer_name"`
+	AllowLegacy     bool   `json:"allow_legacy"`
 }
 
 func (Config) String() string   { return "VPN config (private material redacted)" }
 func (Config) GoString() string { return "VPN config (private material redacted)" }
 
 type request struct {
-	Version   int    `json:"version"`
-	Operation string `json:"operation"`
-	ExitID    string `json:"exit_id,omitempty"`
-	Token     string `json:"token,omitempty"`
-	Profile   string `json:"profile,omitempty"`
-	IP        string `json:"ip,omitempty"`
-	PeerName  string `json:"peer_name,omitempty"`
-	Legacy    bool   `json:"legacy,omitempty"`
-	Address   string `json:"address,omitempty"`
+	PeerFingerprint string `json:"peer_fingerprint,omitempty"`
+	Version         int    `json:"version"`
+	Operation       string `json:"operation"`
+	ExitID          string `json:"exit_id,omitempty"`
+	Token           string `json:"token,omitempty"`
+	Profile         string `json:"profile,omitempty"`
+	IP              string `json:"ip,omitempty"`
+	PeerName        string `json:"peer_name,omitempty"`
+	Legacy          bool   `json:"legacy,omitempty"`
+	Address         string `json:"address,omitempty"`
 }
 
 func (r request) valid() bool {
@@ -47,11 +50,11 @@ func (r request) valid() bool {
 	}
 	switch r.Operation {
 	case "capabilities":
-		return r.ExitID == "" && r.Token == "" && r.Profile == "" && r.IP == "" && r.PeerName == "" && !r.Legacy && r.Address == ""
+		return r.ExitID == "" && r.Token == "" && r.Profile == "" && r.IP == "" && r.PeerName == "" && r.PeerFingerprint == "" && !r.Legacy && r.Address == ""
 	case "start":
-		return netexec.ValidateID(r.ExitID) == nil && r.Token == "" && len(r.Profile) > 0 && len(r.Profile) <= tunnel.MaxProfileBytes && len(r.IP) <= 15 && len(r.PeerName) > 0 && len(r.PeerName) <= 128 && r.Address == ""
+		return netexec.ValidateID(r.ExitID) == nil && r.Token == "" && len(r.Profile) > 0 && len(r.Profile) <= tunnel.MaxProfileBytes && len(r.IP) <= 15 && len(r.PeerName) > 0 && len(r.PeerName) <= 128 && (r.PeerFingerprint == "" || fingerprintPattern.MatchString(r.PeerFingerprint)) && r.Address == ""
 	case "dial", "verify", "stop":
-		return tokenPattern.MatchString(r.Token) && r.ExitID == "" && r.Profile == "" && r.IP == "" && r.PeerName == "" && !r.Legacy && len(r.Address) <= 300 && (r.Operation == "dial" && r.Address != "" || r.Operation != "dial" && r.Address == "")
+		return tokenPattern.MatchString(r.Token) && r.ExitID == "" && r.Profile == "" && r.IP == "" && r.PeerName == "" && r.PeerFingerprint == "" && !r.Legacy && len(r.Address) <= 300 && (r.Operation == "dial" && r.Address != "" || r.Operation != "dial" && r.Address == "")
 	}
 	return false
 }

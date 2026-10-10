@@ -45,6 +45,7 @@ func FindSource(id string) (Source, error) {
 }
 
 type Inbound struct {
+	Listener  string `json:"listener"`
 	ID        string `json:"id"`
 	Tag       string `json:"tag"`
 	Protocol  string `json:"protocol"`
@@ -205,7 +206,7 @@ func inspect(source Source, raw []byte, m map[string]any) (Report, error) {
 		if item == nil {
 			return Report{}, ErrConfig
 		}
-		b := Inbound{ID: entryID(r.SHA256, i), Tag: text(item["tag"]), Listen: text(item["listen"]), Transport: "tcp", Security: "none", Reason: "尚未支持该入口或其标签/传输配置"}
+		b := Inbound{Listener: "unknown", ID: entryID(r.SHA256, i), Tag: text(item["tag"]), Listen: text(item["listen"]), Transport: "tcp", Security: "none", Reason: "尚未支持该入口或其标签/传输配置"}
 		if source.Core == "xray" {
 			b.Protocol = text(item["protocol"])
 			b.Port = number(item["port"])

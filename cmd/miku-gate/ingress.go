@@ -8,6 +8,7 @@ import (
 	"io"
 	"mikugate/internal/ingress"
 	"mikugate/internal/wirejson"
+	"strconv"
 )
 
 func runIngress(args []string, input io.Reader, output io.Writer) error {
@@ -20,6 +21,7 @@ func runIngress(args []string, input io.Reader, output io.Writer) error {
 	f := flag.NewFlagSet("ingress "+args[0], flag.ContinueOnError)
 	f.SetOutput(io.Discard)
 	sourceID := f.String("source", "", "固定来源ID")
+	owner := f.String("allow-install-owner", "", "仅inspect：明确确认x-ui两个安装目录的数字UID，不授权执行/应用")
 	confirm := f.Bool("confirm-read", false, "明确同意读取现有核心配置")
 	selected := f.String("inbound", "", "检测到的入口ID")
 	expected := f.String("expected-sha256", "", "检测时源摘要")
@@ -38,7 +40,19 @@ func runIngress(args []string, input io.Reader, output io.Writer) error {
 	if e != nil {
 		return e
 	}
-	raw, e := ingress.ReadSource(source)
+	var raw []byte
+	if *owner != "" {
+		if args[0] != "inspect" {
+			return errors.New("--allow-install-owner只授权只读摘要，不允许prepare或应用")
+		}
+		uid, err := strconv.ParseUint(*owner, 10, 32)
+		if err != nil || uid == 0 {
+			return errors.New("安装目录所有者必须是明确非root数字UID")
+		}
+		raw, e = ingress.ReadPanelSource(source, uint32(uid))
+	} else {
+		raw, e = ingress.ReadSource(source)
+	}
 	if e != nil {
 		return e
 	}
@@ -46,6 +60,10 @@ func runIngress(args []string, input io.Reader, output io.Writer) error {
 		report, e := ingress.Inspect(source, raw)
 		if e != nil {
 			return e
+		}
+		ingress.ObserveListeners(&report)
+		if *owner != "" {
+			report.Warnings = append(report.Warnings, "管理员明确确认安装目录UID="+*owner+"作只读摘要；不信任该目录的二进制、不授权候选生成/应用，仍需要隔离迁移或后续受控接入。")
 		}
 		enc := json.NewEncoder(output)
 		enc.SetIndent("", "  ")

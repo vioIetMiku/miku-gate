@@ -4,6 +4,7 @@ import { api } from './api';
 
 type Source = { id: string; core: string; path: string; panel_managed: boolean };
 type Inbound = {
+  listener: string;
   id: string;
   tag: string;
   protocol: string;
@@ -137,7 +138,12 @@ export function IngressInventory() {
                       </strong>
                       <p>
                         {inbound.listen}:{inbound.port} · {inbound.transport} + {inbound.security}
-                        {inbound.vision ? ' + Vision' : ''} · 客户端 {inbound.clients}
+                        {inbound.vision ? ' + Vision' : ''} · 客户端 {inbound.clients} ·{' '}
+                        {inbound.listener === 'matching_address_port'
+                          ? '观察到同地址/端口监听（归属未核验）'
+                          : inbound.listener === 'not_observed'
+                            ? '未观察到匹配监听'
+                            : '监听未知'}
                       </p>
                       <p className="muted">{inbound.reason}</p>
                     </div>

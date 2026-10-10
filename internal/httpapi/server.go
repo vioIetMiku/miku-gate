@@ -89,7 +89,11 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 			if err != nil {
 				return ingress.Report{}, err
 			}
-			return ingress.Inspect(source, raw)
+			report, err := ingress.Inspect(source, raw)
+			if err == nil {
+				ingress.ObserveListeners(&report)
+			}
+			return report, err
 		}
 	}
 	a := &Server{ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}

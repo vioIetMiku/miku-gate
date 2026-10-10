@@ -193,3 +193,5 @@ scripts/            构建、真实 HTTP smoke 与浏览器测试辅助
 VPN Gate官方配置的显式旧数据通道支持与静态节点检查见 [VPNGATE_COMPATIBILITY.md](docs/VPNGATE_COMPATIBILITY.md)；main/dev.7开发中，不等于公共节点已连通。
 
 独立OpenVPN执行器、三个UID及节点快照使用说明见 [OPENVPN_RUNTIME.md](docs/OPENVPN_RUNTIME.md)；dev.8开发中，完整运行验收尚未结束。
+
+想先核对最终产品方向，请看 [最终功能对齐稿](docs/FINAL_FEATURES.md)。它区分目标功能、默认行为与当前已完成实现，不用预览版替代完整交付。

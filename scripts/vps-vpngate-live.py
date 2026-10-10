@@ -56,14 +56,18 @@ class Daemon:
              stderr=subprocess.STDOUT, start_new_session=True)
         self.reader = threading.Thread(target=self.read, daemon=True)
         self.reader.start()
-        deadline = time.monotonic() + 8
-        while time.monotonic() < deadline:
-            if "隔离VPN服务已监听" in self.text():
-                return
-            live.require(self.process.poll() is None, "root VPN daemon failed its preflight")
-            time.sleep(0.05)
-        self.close()
-        raise RuntimeError("root daemon readiness timeout")
+        try:
+            deadline = time.monotonic() + 8
+            while time.monotonic() < deadline:
+                if "隔离VPN服务已监听" in self.text():
+                    return
+                live.require(self.process.poll() is None, "root VPN daemon failed its preflight")
+                time.sleep(0.05)
+            raise RuntimeError("root daemon readiness timeout")
+        except BaseException:
+            with contextlib.suppress(Exception):
+                self.close()
+            raise
 
     def read(self):
         for line in self.process.stdout:

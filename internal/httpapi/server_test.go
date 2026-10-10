@@ -52,6 +52,9 @@ func TestAuthenticatedLifecycle(t *testing.T) {
 	if w := request("GET", "/api/exits/missing_exit/network-plan", "", "", ""); w.Code != 401 {
 		t.Fatal("anonymous network plan exposed")
 	}
+	if w := request("GET", "/api/host/inventory", "", "", ""); w.Code != 401 {
+		t.Fatal("anonymous inventory exposed")
+	}
 	w := request("POST", "/api/auth/login", `{"username":"admin","password":"safe-password"}`, "", "")
 	if w.Code != 200 {
 		t.Fatal(w.Body.String())
@@ -63,6 +66,12 @@ func TestAuthenticatedLifecycle(t *testing.T) {
 	var login map[string]string
 	json.Unmarshal(w.Body.Bytes(), &login)
 	csrf = login["csrf"]
+	if w := request("GET", "/api/host/inventory", "", "", ""); w.Code != 200 || !strings.Contains(w.Body.String(), `"read_only":true`) {
+		t.Fatal("authenticated inventory unavailable")
+	}
+	if w := request("GET", "/api/host/inventory", "", "", "https://evil.example"); w.Code != 403 {
+		t.Fatal("cross-origin inventory accepted")
+	}
 	body := `{"name":"日本开发","country":"JP","policy":"any","port":20001}`
 	if w = request("POST", "/api/exits", body, "", ""); w.Code != 403 {
 		t.Fatal("missing CSRF accepted")

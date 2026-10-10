@@ -1,14 +1,16 @@
 # Miku Gate
 
-**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.8`。**
+**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.9`。**
 
 > 当前可运行的是带认证的本机代理上游网关：HTTP/SOCKS入口 → 用户提供的SOCKS5、HTTP或HTTPS代理。完整VPN网关仍在开发。
 >
-> 保存上游后，“启动”会实际验证代理/TLS/DNS路径，再开放固定的127.0.0.1认证入口；失败不会使用宿主直连后备。OpenVPN已接入独立root执行器/非rootworker和Web节点绑定，修正后的完整运行验收仍在进行，不能视作公共节点已可用。Xray/sing-box加密入口、域名与交互安装向导尚未完成。未配置上游时仍返回 `409 executor_unavailable`，不会冒充VPN已连接。
+> 保存上游后，“启动”会实际验证代理/TLS/DNS路径，再开放固定的127.0.0.1认证入口；失败不会使用宿主直连后备。Linux OpenVPN 已接入独立 root 执行器/非 root worker 和 Web 节点绑定，并在授权 VPS 实测一个官方公共节点通过；不保证全库可用。Xray/sing-box加密入口、域名与交互安装向导尚未完成。未配置上游时仍返回 `409 executor_unavailable`，不会冒充VPN已连接。
 
 > 升级提示：dev.8 数据库 schema 升为 5（dev.6为3），上游凭据用独立的数据库同名 `.key` 文件加密。升级前停止旧服务并备份完整数据目录（数据库、WAL及密钥）；旧版本不能直接打开升级后的数据库。丢失密钥时不重新生成冒充恢复。
 
-已发布压缩包：[v0.1.0-dev.6 代理上游预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.6)。提供Linux amd64/arm64、Windows amd64及校验文件；[实际VPS/发行验收](docs/validation/2026-10-10-proxy-runtime.md)。旧dev.2标签与资产保留，main继续完整网关开发。
+最新已发布：[v0.1.0-dev.8 隔离 VPN Gate 出口预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.8)，含三平台压缩包及校验文件。[公共节点验收](docs/validation/2026-10-10-public-vpngate.md)。主线新增的只读主机检测见 [HOST_INVENTORY](docs/HOST_INVENTORY.md)，尚未包含于 dev.8 资产。
+
+上一发布：[v0.1.0-dev.6 代理上游预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.6)。提供Linux amd64/arm64、Windows amd64及校验文件；[实际VPS/发行验收](docs/validation/2026-10-10-proxy-runtime.md)。旧dev.2标签与资产保留，main继续完整网关开发。
 
 ## 如何使用本机代理上游
 
@@ -27,15 +29,14 @@
 - 持久化事件记录：数据库保留最近 500 条，界面展示最近 100 条。
 - 手动获取 VPN Gate 官方 HTTPS 列表，进行大小限制、CSV 解析、OpenVPN 指令白名单校验。
 - 节点源失败保留原缓存，候选不被自动标记为已连接、住宅或可信。
-- 系统环境只读诊断；深浅主题、中文界面、桌面与移动布局。
+- 系统环境只读诊断和 Linux 既有面板/核心常见位置检测（不接管）；深浅主题、中文界面、桌面与移动布局。
 - 出口隔离计划预览；稳定的实例 / 出口资源标识；计划不执行系统命令。
 - 独立 Linux sandbox plan / inspect / prepare / cleanup 命令：仅全阻断隔离实验，显式 --apply、归属校验和失败回滚；dev.2 首轮与 dev.3 低资源边界实验已通过临时 Ubuntu runner 验证；该早期记录不是VPN/VPS验收，见 [验证记录](docs/validation/2026-10-09-linux-quarantine.md)；后续目标VPS受控复核见 [独立记录](docs/validation/2026-10-09-vps-lab.md)。
-- 独立的 HTTP CONNECT / HTTP 转发 / SOCKS5 TCP 协议库及测试，已在私有测试监听上接通HTTP/SOCKS/HTTPS上游与隧道外DoH，**现已接入显式的生产Web启动路径（仅代理上游，OpenVPN仍未接线）**。
+- 独立的 HTTP CONNECT / HTTP 转发 / SOCKS5 TCP 协议库及测试，已在私有测试监听上接通HTTP/SOCKS/HTTPS上游与隧道外DoH，**现已接入显式的 Web 启动路径；Linux OpenVPN 使用独立授权执行器接线**。
 
 ## 尚未实现
 
-- 长驻 VPN 协调器、TUN、OpenVPN 与现有代理核心的集成（隔离 IPC 已实现）。
-- 真正的 VPN 建连、隧道 DNS、内核断线保护、自动换线。
+- 自动重连、自动换线与长期容量/稳定性验收（基本 VPN 建连、隧道 DNS、内核断线保护已实现并有实际证据）。
 - 节点实测、住宅类型情报、严格住宅策略的运行时执行。
 - SOCKS5 UDP、Xray、节点订阅、热备和多服务器管理。
 - 生产安装器、在线升级、备份恢复和 Docker 发布。
@@ -47,7 +48,7 @@
 先打开 PowerShell，进入项目目录：
 
 ```powershell
-Set-Location 'F:\codex\vpngate\miku-gate'
+Set-Location 'F:\codex\miku-vpngate\miku-gate'
 ```
 
 本工作区已经准备了项目内 Go 工具链、前端依赖和 Windows 构建产物；没有修改系统 PATH。首次使用自己的数据目录时执行：

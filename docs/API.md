@@ -149,3 +149,7 @@ VPN选择请求字段：`node_id`、`peer_name`、`allow_legacy`、`confirm`。�
 概览新增`vpn_runtime_configured`与`vpn_verified_count`；只有确有活动会话且全都通过当前namespace/TUN/规则/TLS/DNS核验时`protection_verified`才为true。混合代理模式不能被标成全局内核保护。实际UI和部署链路验收仍按独立记录追踪。
 
 自动身份保存使用use_verified_identity:true，浏览器不提供peer_fingerprint或证书私钥。先POST身份检查，再在5分钟内保存对应快照；过期或节点/配置变化时返回409 identity_check_required。schema v5保存精确指纹，见[服务器身份流程](VPN_SERVER_IDENTITY.md)。
+
+## dev.9：只读主机清单
+
+`GET /api/host/inventory`：已认证、同源的手动只读检测；返回检测时间、平台、发行版、TUN/systemd、依赖和固定常见面板/核心路径/单元证据。6秒总预算、15秒短缓存、同时一个检测，繁忙返回429 `inventory_busy`。不接受路径/命令参数，不读取配置/数据库/私钥内容，`reuse_ready` 固定 false。Windows 返回 `supported:false`，不会冒充 VPS 结果。详见 HOST_INVENTORY.md。

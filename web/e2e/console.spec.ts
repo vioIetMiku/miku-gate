@@ -159,6 +159,37 @@ test('本机控制台：登录、配置、阻止假启动、移动布局和会�
   await expect(page.getByRole('button', { name: '查看 美国开发环境', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '系统与诊断', exact: true }).click();
   await expect(page.getByText('特权网络执行器', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '主机与已有服务' })).toBeVisible();
+  const inventoryResponse = page.waitForResponse((r) => r.url().endsWith('/api/host/inventory'));
+  await page.getByRole('button', { name: '检测已有服务' }).click();
+  const inventory = await inventoryResponse;
+  expect(inventory.status()).toBe(200);
+  const metadata = await inventory.json();
+  expect(metadata.read_only).toBe(true);
+  await expect(page.getByText('普通用户只读视图', { exact: false })).toBeVisible();
+  if (metadata.supported) {
+    await page.getByText('3x-ui / x-ui（同路径家族，尚未识别分支）', { exact: true }).click();
+    await expect(page.getByText('/etc/x-ui/x-ui.db', { exact: true })).toBeVisible();
+  } else {
+    await expect(page.getByText('主机安装检测仅支持 Linux；当前结果不是 VPS 清单。')).toBeVisible();
+  }
+  await page.screenshot({
+    path: '../artifacts/host-inventory-desktop.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('button', { name: '检测已有服务' })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({
+    path: '../artifacts/host-inventory-mobile.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
   await page.getByRole('button', { name: '概览', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('button', { name: '打开导航' })).toBeVisible();

@@ -21,6 +21,7 @@ import (
 	"mikugate/internal/domain"
 	"mikugate/internal/executoripc"
 	"mikugate/internal/gateway"
+	"mikugate/internal/hostinventory"
 	"mikugate/internal/netexec"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
@@ -43,6 +44,8 @@ type Options struct {
 	VPN                 *vpnipc.Client
 }
 type Server struct {
+	hostSlot        chan struct{}
+	hostReport      *hostinventory.Report
 	nodeIdentities  map[string]domain.NodeIdentity
 	identitySlot    chan struct{}
 	lastIdentity    time.Time
@@ -74,7 +77,7 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 	if inspect == nil {
 		inspect = vpngate.InspectIdentity
 	}
-	a := &Server{nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	a := &Server{hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]any{"version": domain.Version, "status": a.mode()})
@@ -133,6 +136,7 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 		}
 		write(w, 200, v)
 	}))
+	mux.HandleFunc("GET /api/host/inventory", a.auth(a.hostInventory))
 	mux.HandleFunc("GET /api/diagnostics", a.auth(func(w http.ResponseWriter, r *http.Request, s domain.Session) { write(w, 200, diagnostics.Inspect()) }))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { fail(w, 404, "not_found", "接口不存在") })
 	mux.HandleFunc("/", a.static)

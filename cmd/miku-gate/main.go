@@ -21,6 +21,7 @@ import (
 	"mikugate/internal/domain"
 	"mikugate/internal/executoripc"
 	"mikugate/internal/gateway"
+	"mikugate/internal/hostinventory"
 	"mikugate/internal/httpapi"
 	"mikugate/internal/runlock"
 	"mikugate/internal/security"
@@ -47,7 +48,7 @@ func run() error {
 		return tunnel.RunWorker()
 	}
 	if len(os.Args) < 2 {
-		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | instance | serve | doctor | version | sandbox | executor | vpn-executor\n支持本机认证代理上游；生产 OpenVPN 接线与安装向导开发中。")
+		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | instance | serve | doctor | inventory | version | sandbox | executor | vpn-executor\n支持本机认证代理上游；Linux 隔离 OpenVPN 已接线；交互安装与加密入口开发中。")
 		return nil
 	}
 	if os.Args[1] == "version" {
@@ -62,6 +63,16 @@ func run() error {
 	}
 	if os.Args[1] == "sandbox" {
 		return runSandbox(os.Args[2:], os.Stdout)
+	}
+	if os.Args[1] == "inventory" {
+		if len(os.Args) != 2 {
+			return errors.New("inventory 不接受路径或命令参数")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+		defer cancel()
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(hostinventory.Inspect(ctx))
 	}
 	if os.Args[1] == "doctor" {
 		enc := json.NewEncoder(os.Stdout)

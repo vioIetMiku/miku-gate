@@ -1,6 +1,6 @@
 # 隔离 OpenVPN 会话与业务 worker
 
-> dev.8开发：独立`vpn-executor`、会话/worker、加密节点快照和Web绑定已接线，完整目标Linux验证仍在进行。**不能把已有私有AEAD/CBC实验当成本实现已经通过，更不能宣称公共VPN节点已连通。** 正式执行结果在独立验收文档记录。
+> dev.8 已发布。正式 CLI/API/IPC/worker 已在授权 VPS 连接一个官方公共节点，并核验出口、HTTPS 和停止行为；见[公共验收](validation/2026-10-10-public-vpngate.md)。下方早期接线记录保留原时间点的限制；不保证所有节点、自动换线或完整安装目标已完成。
 
 ## 不修改宿主路由的路径
 

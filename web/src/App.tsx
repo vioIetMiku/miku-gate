@@ -1,3 +1,4 @@
+import { HostInventory } from './HostInventory';
 import { VPNSettings } from './VPNSettings';
 import { NodeProfileView } from './NodeProfileView';
 import { Modal } from './Modal';
@@ -635,7 +636,7 @@ export default function App() {
             <span className="status-dot amber" />
             <div>
               <strong>控制台开发版</strong>
-              <p>VPN 数据面尚未接入</p>
+              <p>隔离 VPN 需单独启用</p>
             </div>
           </div>
           <button className="account" onClick={() => void logout()} disabled={actionBusy}>
@@ -1146,6 +1147,7 @@ export default function App() {
           )}
           {page === 'system' && (
             <>
+              <HostInventory />
               <section className="panel">
                 <div className="section-heading">
                   <div>
@@ -1197,9 +1199,9 @@ export default function App() {
                       <Check size={17} />
                       隔离计划预览与独立 Linux 沙箱助手
                     </li>
-                    <li className="muted">
-                      <Clock size={17} />
-                      隔离OpenVPN监督进程与独立低权限worker
+                    <li>
+                      <Check size={17} />
+                      Linux 隔离 OpenVPN 与独立低权限 worker
                     </li>
                     <li className="muted">
                       <Clock size={17} />

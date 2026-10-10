@@ -83,6 +83,9 @@ try {
   check((await request(`/api/exits/${id}/sandbox`)).status, 503, 'no implicit privileged sandbox inspection');
   check((await request(`/api/exits/${id}/sandbox/prepare`, 'POST', { confirm: true })).status, 503, 'no implicit privileged preparation');
   check((await request(`/api/exits/${id}/sandbox/prepare`, 'POST', {})).status, 400, 'sandbox action requires confirmation');
+  const inventory = await request('/api/host/inventory').then(r => r.json());
+  check(inventory.read_only, true, 'host inventory is read-only');
+  check(inventory.components.every(c => c.reuse_ready === false), true, 'inventory cannot authorize reuse');
   check((await request('/api/diagnostics').then(r => r.json())).executor_available, false, 'diagnostics are honest');
   check((await request(`/api/exits/${id}`, 'DELETE')).status, 204, 'delete isolated test configuration');
   check((await request('/api/exits').then(r => r.json())).length, 0, 'configuration deleted');

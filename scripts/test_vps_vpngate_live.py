@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest import mock
+import io
 SPEC=importlib.util.spec_from_file_location("public_vpn",Path(__file__).with_name("vps-vpngate-live.py"))
 public=importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(public)
@@ -19,4 +21,14 @@ class PublicVPNBudget(unittest.TestCase):
             self.assertIn("--reuid=65534",args)
             self.assertIn("--no-new-privs",args)
         self.assertIn("--vpn-executor",control.argv("serve"))
+    def test_daemon_constructor_failure_reaps_and_closes_output(self):
+        process=mock.Mock()
+        process.stdout=io.BytesIO(b"failed preflight\n")
+        process.poll.return_value=1
+        with mock.patch.object(public.subprocess,"Popen",return_value=process):
+            with self.assertRaisesRegex(RuntimeError,"failed its preflight"):
+                public.Daemon(Path("/verified/miku-gate"),"test")
+        process.wait.assert_called_once()
+        self.assertTrue(process.stdout.closed)
+
 if __name__=="__main__":unittest.main()

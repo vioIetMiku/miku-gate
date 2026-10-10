@@ -107,7 +107,9 @@ func (s *server) handle(parent context.Context, conn *net.UnixConn) {
 		}
 		s.exits[req.ExitID] = true
 		s.mu.Unlock()
-		defer func() { s.mu.Lock(); delete(s.exits, req.ExitID); s.mu.Unlock() }()
+		var releaseOnce sync.Once
+		releaseExit := func() { releaseOnce.Do(func() { s.mu.Lock(); delete(s.exits, req.ExitID); s.mu.Unlock() }) }
+		defer releaseExit()
 		profile, err := tunnel.NormalizeWithOptions(req.Profile, req.IP, tunnel.NormalizeOptions{AllowVPNGateLegacy: req.Legacy, ExpectedPeerName: req.PeerName})
 		req.Profile = ""
 		if err != nil {
@@ -133,7 +135,14 @@ func (s *server) handle(parent context.Context, conn *net.UnixConn) {
 		s.mu.Lock()
 		s.sessions[token] = owned
 		s.mu.Unlock()
-		defer func() { engine.Close(); s.mu.Lock(); delete(s.sessions, token); s.mu.Unlock(); close(owned.done) }()
+		defer func() {
+			engine.Close()
+			s.mu.Lock()
+			delete(s.sessions, token)
+			s.mu.Unlock()
+			releaseExit()
+			close(owned.done)
+		}()
 		info := engine.Info()
 		if reply(conn, response{Token: token, Info: &info}) != nil {
 			return

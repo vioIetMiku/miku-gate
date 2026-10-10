@@ -83,7 +83,7 @@ class GuardTests(unittest.TestCase):
 
     def test_fixed_suite_inventory(self):
         self.assertEqual({key: len(value[2]) for key, value in guard.SUITES.items()},
-                         {"netexec": 7, "ipc": 4, "openvpn": 3})
+                         {"netexec": 7, "ipc": 4, "openvpn": 3, "vpn-runtime": 1})
         for name, pattern, tests in guard.SUITES.values():
             self.assertNotIn("/", name)
             for test in tests:

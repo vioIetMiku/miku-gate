@@ -1,0 +1,51 @@
+name: Full VPN runtime lab (manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: full-vpn-runtime-lab
+  cancel-in-progress: false
+jobs:
+  vpn-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install private-laboratory dependencies on the disposable runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openvpn iproute2 nftables util-linux
+      - name: Build the actual CLI code and integration harness without privilege
+        run: |
+          mkdir -p .cache
+          go test -c -trimpath -o .cache/runtime.test ./cmd/miku-gate
+      - name: Run real unprivileged HTTP to root IPC to isolated VPN under a bounded scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemd-run --quiet --scope --collect \
+            --unit="miku-vpn-full-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --property=CPUQuota=100% --property=MemoryMax=384M \
+            --property=MemorySwapMax=0 --property=TasksMax=64 \
+            --property=RuntimeMaxSec=180s \
+            /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 \
+              MIKU_GATE_NETNS_TEST=1 MIKU_GATE_VPN_RUNTIME_TEST=1 \
+              MIKU_GATE_LAB_EXEC_ROOT=/usr/local/lib/miku-gate-lab-exec \
+              GOMAXPROCS=1 GOMEMLIMIT=128MiB \
+              "$PWD/.cache/runtime.test" -test.v -test.parallel=1 \
+                -test.run='^TestLinuxVPNRuntime' -test.timeout=150s \
+            2>&1 | tee .cache/vpn-runtime-result.txt
+      - name: Retain only the bounded laboratory result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-runtime-result
+          path: .cache/vpn-runtime-result.txt
+          if-no-files-found: warn
+          retention-days: 14

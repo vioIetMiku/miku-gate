@@ -61,3 +61,13 @@ miku-gate vpn-executor info --instance=实例ID
 修正后需要新精确源码重跑TCP/UDP及完整Web/IPC链路；旧失败日志保留。当前dev.8尚未发布，不替换dev.6资产；公共VPN节点、加密入口、域名和安装目标也未因这些接线而视为完成。
 
 最新复测：1f9c278的TCP/UDP独立会话、实际低权限/NoNewPrivs和正常/强制关闭已在VPS通过，见[独立会话验收](validation/2026-10-10-openvpn-session.md)。完整Web/VPN IPC/公共节点路径仍未被本用例覆盖，继续保留相关验收门槛。
+
+## 完整CLI链路的受控验收入口
+
+新增`TestLinuxVPNRuntimeControlPlane`：从实际CLI代码启动普通UID65534控制服务与独立root VPN执行器，浏览器对应的真实HTTP API选择加密快照并启动，通过根执行器建立低权限OpenVPN/worker会话。测试在匿名私有网络中自建DNS和HTTPS目标，为普通控制服务设置只在测试进程内生效的CA路径。没有替换gateway工厂、VPN IPC协议或worker实现，也没有修改宿主信任库。
+
+该用例覆盖实际业务TLS请求、运行中修改拒绝、root错误调用UID拒绝、正常停止、控制服务SIGKILL、独立VPN服务退出、恢复配置后显式重启和入口凭据轮换。它仍是私有端点/自建证书的受控测试，不代表公共VPN Gate、公开共享客户端证书或独立外网出口已通过。
+
+手动工作流`Full VPN runtime lab (manual)`与VPS守护脚本的`vpn-runtime`套件执行这条旅程；普通单元测试跳过特权实验。执行结果必须单独记录，不能用“已新增测试”代替实际运行。
+
+根会话停止应在释放同一出口预约后才回复完成；修正了停止与紧接着重启之间的预约竞争，仍保留每出口只能有一个会话的约束。

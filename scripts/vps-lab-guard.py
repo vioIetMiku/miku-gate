@@ -36,6 +36,7 @@ LAB_ROOTS = (
     "/run/miku-gate-lab-exec", LAB_EXEC_ROOT,
 )
 SUITES = {
+    "vpn-runtime": ("runtime.test", "^TestLinuxVPNRuntime", {"TestLinuxVPNRuntimeControlPlane"}),
     "netexec": ("netexec.test", "^TestLinuxLab", {
         "TestLinuxLabQuarantineAndHostIsolation", "TestLinuxLabRefusesReplacedNamespace",
         "TestLinuxLabRollsBackFailedPreparation", "TestLinuxLabRefusesActiveProcess",
@@ -219,7 +220,7 @@ def passed_tests(output):
 
 def run_test(binary, pattern, logfile):
     env = {**CLEAN_ENV, "MIKU_GATE_NETNS_TEST": "1", "MIKU_GATE_LAB_BUDGET": "1",
-           "MIKU_GATE_OPENVPN_TEST": "1", "GOMAXPROCS": "1", "GOMEMLIMIT": "192MiB",
+           "MIKU_GATE_OPENVPN_TEST": "1", "MIKU_GATE_VPN_RUNTIME_TEST": "1", "GOMAXPROCS": "1", "GOMEMLIMIT": "192MiB",
            "MIKU_GATE_LAB_EXEC_ROOT": LAB_EXEC_ROOT}
     argv = [str(binary), "-test.v", "-test.parallel=1", "-test.run=" + pattern, "-test.timeout=3m"]
     fd = os.open(logfile, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)

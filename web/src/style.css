@@ -1907,3 +1907,8 @@ label input:disabled {
     flex-wrap: wrap;
   }
 }
+
+.ingress-content .confirm-check {
+  flex-direction: row;
+  font-weight: 400;
+}

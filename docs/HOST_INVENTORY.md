@@ -22,3 +22,5 @@ Linux 上执行 `miku-gate inventory`，或登录控制台 → 系统与诊断 �
 ## 验证
 
 单元测试覆盖文件/权限/符号链接的不确定性、已安装但未授权复用、信息最小化、元数据枚举、取消及不支持平台；API 测试覆盖认证/Origin、缓存和并行限制。真实 HTTP smoke 与 Chrome 旅程覆盖点击检测、响应、桌面/390px 布局。Linux 主机实测记录应另按精确提交保存。
+
+2026-10-11 精确提交 `42e9e66` 已在授权 VPS 通过普通 UID 与 root 两视图，实际识别 x-ui 和 Nginx，宿主快照不变；见[验收](validation/2026-10-11-host-inventory.md)。

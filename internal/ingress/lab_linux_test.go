@@ -56,7 +56,7 @@ func labCertificates(t *testing.T, dir string) (string, string, string) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	ca := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "Miku private ingress lab CA"}, NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature}
+	ca := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "Miku private ingress lab CA"}, NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(72 * time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature}
 	caDER, e := x509.CreateCertificate(rand.Reader, ca, ca, &key.PublicKey, key)
 	if e != nil {
 		t.Fatal(e)

@@ -212,6 +212,40 @@ test('本机控制台：登录、配置、阻止假启动、移动布局和会�
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
 
+  const managedSection = page.locator('section', {
+    has: page.getByRole('heading', { name: '新建受管入口' }),
+  });
+  await expect(
+    managedSection.getByRole('combobox', { name: '入口加密方式' }).getByRole('option'),
+  ).toHaveCount(3);
+  await managedSection.getByRole('textbox', { name: '客户端连接地址' }).fill('192.0.2.10');
+  await managedSection.getByRole('textbox', { name: 'TLS 证书域名' }).fill('entry.example');
+  await expect(managedSection.getByRole('button', { name: '自动查找域名证书' })).toBeDisabled();
+  await managedSection.getByRole('button', { name: '预览受管入口计划' }).click();
+  await expect(managedSection).toContainText('尚未应用 / 尚未核心校验');
+  await managedSection.getByRole('combobox', { name: '受管核心' }).selectOption('sing-box');
+  await managedSection
+    .getByRole('combobox', { name: '入口加密方式' })
+    .selectOption('vless-reality-vision');
+  await expect(
+    managedSection.getByRole('combobox', { name: 'REALITY 目标' }).getByRole('option'),
+  ).toHaveCount(11);
+  await expect(managedSection.getByRole('button', { name: '检测 REALITY 目标' })).toBeDisabled();
+  await managedSection.getByRole('combobox', { name: 'REALITY 目标' }).selectOption('custom');
+  await managedSection.getByRole('textbox', { name: '自定义 REALITY 域名' }).fill('target.example');
+  await managedSection.getByRole('button', { name: '预览受管入口计划' }).click();
+  await expect(managedSection).toContainText('服务器名称 target.example');
+  // No public target probes or certificate file reads in the browser regression.
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({
+    path: '../artifacts/managed-ingress-mobile.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole('button', { name: '概览', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('button', { name: '打开导航' })).toBeVisible();

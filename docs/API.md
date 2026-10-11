@@ -158,3 +158,13 @@ VPN选择请求字段：`node_id`、`peer_name`、`allow_legacy`、`confirm`。�
 
 - `GET /api/host/ingress/sources`：认证后返回四个固定来源，不接受任意文件路径。
 - `POST /api/host/ingress/inspect`：JSON `source` 与 `confirm_read:true`，需要会话、CSRF和同源；单并行、3秒限频。返回摘要、不返回UUID/密码/私钥/原始配置。不可读/权限或类型不合规/严格JSON不支持为422 `ingress_unavailable`。只读检测，不保存复用绑定、不改写/重启。详见 EXISTING_INGRESS.md。
+
+## dev.9：新建受管入口预览与后端素材检查
+
+- `GET /api/ingress/templates`：三种两核心模板；认证。
+- `POST /api/ingress/preview`：ManagedRequest参数合法性/计划；认证+CSRF，不生成秘密、不应用。
+- `GET /api/ingress/reality/candidates`：十个待检测域名，不承诺可用。
+- `POST /api/ingress/reality/probe`：hostname、confirm_network:true；单域名TCP443/system trust TLS1.3 X25519 h2，5秒预算，拒绝私网/任意端口；状态明确host-network引导探测，非VPN出口。
+- `POST /api/ingress/certificate`：hostname、confirm_read:true；常见受控ACME路径，返回有效期/摘要，不返回私钥。
+
+后两项共享单并行和3秒限频，均需认证、CSRF与同源。完整server/client/URI只由本机私有bundle命令生成，不作为API响应。详见MANAGED_INGRESS.md。

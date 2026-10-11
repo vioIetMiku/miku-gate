@@ -12,6 +12,12 @@ import (
 )
 
 func runIngress(args []string, input io.Reader, output io.Writer) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "templates", "reality-candidates", "reality-check", "certificate", "managed":
+			return runManagedIngress(args, input, output)
+		}
+	}
 	if len(args) == 1 && args[0] == "sources" {
 		return json.NewEncoder(output).Encode(ingress.Sources())
 	}

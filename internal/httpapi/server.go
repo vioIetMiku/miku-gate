@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"mikugate/internal/certassets"
 	"mikugate/internal/diagnostics"
 	"mikugate/internal/domain"
 	"mikugate/internal/executoripc"
@@ -39,6 +40,8 @@ type SandboxClient interface {
 	Capabilities(context.Context) (executoripc.Capabilities, error)
 }
 type Options struct {
+	DiscoverCertificate func(string) (certassets.Discovery, *certassets.Asset, error)
+	ProbeReality        func(context.Context, string) (ingress.RealityTarget, error)
 	InspectIngress      func(ingress.Source) (ingress.Report, error)
 	InspectNodeIdentity func(context.Context, domain.Node) (domain.NodeIdentity, error)
 	Sandbox             SandboxClient
@@ -46,28 +49,32 @@ type Options struct {
 	VPN                 *vpnipc.Client
 }
 type Server struct {
-	ingressSlot     chan struct{}
-	lastIngress     time.Time
-	inspectIngress  func(ingress.Source) (ingress.Report, error)
-	hostSlot        chan struct{}
-	hostReport      *hostinventory.Report
-	nodeIdentities  map[string]domain.NodeIdentity
-	identitySlot    chan struct{}
-	lastIdentity    time.Time
-	inspectIdentity func(context.Context, domain.Node) (domain.NodeIdentity, error)
-	gateway         *gateway.Manager
-	vpnClient       *vpnipc.Client
-	sandbox         SandboxClient
-	sandboxSlot     chan struct{}
-	store           *store.Store
-	assets          fs.FS
-	dummyHash       string
-	authSlots       chan struct{}
-	writeSlots      chan struct{}
-	refreshSlot     chan struct{}
-	mu              sync.Mutex
-	attempts        map[string]attempt
-	lastRefresh     time.Time
+	assetSlot           chan struct{}
+	lastAsset           time.Time
+	discoverCertificate func(string) (certassets.Discovery, *certassets.Asset, error)
+	probeReality        func(context.Context, string) (ingress.RealityTarget, error)
+	ingressSlot         chan struct{}
+	lastIngress         time.Time
+	inspectIngress      func(ingress.Source) (ingress.Report, error)
+	hostSlot            chan struct{}
+	hostReport          *hostinventory.Report
+	nodeIdentities      map[string]domain.NodeIdentity
+	identitySlot        chan struct{}
+	lastIdentity        time.Time
+	inspectIdentity     func(context.Context, domain.Node) (domain.NodeIdentity, error)
+	gateway             *gateway.Manager
+	vpnClient           *vpnipc.Client
+	sandbox             SandboxClient
+	sandboxSlot         chan struct{}
+	store               *store.Store
+	assets              fs.FS
+	dummyHash           string
+	authSlots           chan struct{}
+	writeSlots          chan struct{}
+	refreshSlot         chan struct{}
+	mu                  sync.Mutex
+	attempts            map[string]attempt
+	lastRefresh         time.Time
 }
 
 func New(s *store.Store, assets fs.FS) (http.Handler, error) {
@@ -96,7 +103,15 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 			return report, err
 		}
 	}
-	a := &Server{ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	discover := options.DiscoverCertificate
+	if discover == nil {
+		discover = certassets.Discover
+	}
+	reality := options.ProbeReality
+	if reality == nil {
+		reality = ingress.ProbeReality
+	}
+	a := &Server{assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]any{"version": domain.Version, "status": a.mode()})
@@ -155,6 +170,11 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 		}
 		write(w, 200, v)
 	}))
+	mux.HandleFunc("GET /api/ingress/templates", a.auth(a.ingressTemplates))
+	mux.HandleFunc("POST /api/ingress/preview", a.auth(a.ingressPreview))
+	mux.HandleFunc("GET /api/ingress/reality/candidates", a.auth(a.realityCandidates))
+	mux.HandleFunc("POST /api/ingress/reality/probe", a.auth(a.realityProbe))
+	mux.HandleFunc("POST /api/ingress/certificate", a.auth(a.certificateDiscover))
 	mux.HandleFunc("GET /api/host/ingress/sources", a.auth(a.ingressSources))
 	mux.HandleFunc("POST /api/host/ingress/inspect", a.auth(a.ingressInspect))
 	mux.HandleFunc("GET /api/host/inventory", a.auth(a.hostInventory))

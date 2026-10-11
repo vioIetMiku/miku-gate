@@ -1,3 +1,4 @@
+import { ManagedIngress } from './ManagedIngress';
 import { IngressInventory } from './IngressInventory';
 import { HostInventory } from './HostInventory';
 import { VPNSettings } from './VPNSettings';
@@ -1150,6 +1151,7 @@ export default function App() {
             <>
               <HostInventory />
               <IngressInventory />
+              <ManagedIngress />
               <section className="panel">
                 <div className="section-heading">
                   <div>

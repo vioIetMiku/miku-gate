@@ -86,6 +86,13 @@ try {
   check((await request('/api/host/ingress/sources').then(r => r.json())).length, 4, 'fixed ingress config sources');
   check((await request('/api/host/ingress/inspect', 'POST', { source: 'x-ui', confirm_read: false })).status, 400, 'no config read without explicit consent');
   check((await request('/api/host/ingress/inspect', 'POST', { source: '/etc/shadow', confirm_read: true })).status, 400, 'arbitrary ingress paths rejected');
+  check((await request('/api/ingress/templates').then(r => r.json())).length, 3, 'three managed ingress templates');
+  check((await request('/api/ingress/reality/candidates').then(r => r.json())).length, 10, 'ten explicitly unverified REALITY candidates');
+  const managedPreview = await request('/api/ingress/preview', 'POST', { core: 'xray', template: 'vless-reality-vision', address: '192.0.2.10', port: 8443, server_name: 'target.example', reality_hostname: 'target.example' }).then(r => r.json());
+  check(managedPreview.applied, false, 'managed preview cannot claim applied');
+  check(managedPreview.udp_blocked, true, 'managed plan specifies UDP drop');
+  check((await request('/api/ingress/certificate', 'POST', { hostname: 'entry.example', confirm_read: false })).status, 400, 'certificate files require explicit read consent');
+  check((await request('/api/ingress/reality/probe', 'POST', { hostname: '127.0.0.1', confirm_network: true })).status, 400, 'private REALITY target refused before network');
   const inventory = await request('/api/host/inventory').then(r => r.json());
   check(inventory.read_only, true, 'host inventory is read-only');
   check(inventory.components.every(c => c.reuse_ready === false), true, 'inventory cannot authorize reuse');

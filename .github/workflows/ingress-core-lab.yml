@@ -35,7 +35,7 @@ jobs:
           git rev-parse HEAD
           .cache/ingress-lab/xray version
           .cache/ingress-lab/sing-box version
-      - name: Run actual TLS Vision ingress through Miku SOCKS in private loopback network
+      - name: Run existing and generated TLS Vision/REALITY/Trojan through Miku SOCKS
         shell: bash
         run: |
           set -euo pipefail
@@ -58,7 +58,7 @@ jobs:
               exec /usr/bin/setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs \
                 /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C \
                 MIKU_GATE_INGRESS_TEST=1 MIKU_GATE_XRAY="$1/xray" MIKU_GATE_SINGBOX="$1/sing-box" GOMAXPROCS=1 GOMEMLIMIT=96MiB \
-                "$1/ingress.test" -test.v -test.run "^TestLinuxIngressCoreRouting$" -test.timeout=90s
+                "$1/ingress.test" -test.v -test.run "^TestLinux(IngressCoreRouting|ManagedCoreTemplates)$" -test.timeout=180s
             ' sh "$stage" 2>&1 | tee .cache/ingress-lab/result.txt
       - name: Save only bounded assertions and source results
         if: always()

@@ -1912,3 +1912,69 @@ label input:disabled {
   flex-direction: row;
   font-weight: 400;
 }
+
+.managed-ingress {
+  margin-bottom: 20px;
+}
+.managed-content {
+  padding: 0 21px 21px;
+}
+.managed-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.managed-content label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  margin: 12px 0;
+}
+.managed-content input:not([type='checkbox']),
+.managed-content select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+.managed-content .managed-confirm {
+  flex-direction: row;
+  align-items: flex-start;
+  font-weight: 400;
+  line-height: 1.7;
+}
+.managed-confirm input {
+  width: auto;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.managed-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+.managed-preview {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.managed-content p {
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .managed-content {
+    padding: 0 14px 18px;
+  }
+  .managed-form-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

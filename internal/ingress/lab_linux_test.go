@@ -201,7 +201,9 @@ func socksConnect(t *testing.T, port int, host string, target int) (net.Conn, er
 	if e != nil {
 		return nil, e
 	}
-	c.SetDeadline(time.Now().Add(2 * time.Second))
+	// Xray's REALITY target cold-start record preflight waits up to five seconds.
+	// A two-second client fixture deadline races initialization, not TLS trust.
+	c.SetDeadline(time.Now().Add(8 * time.Second))
 	fail := func(e error) (net.Conn, error) { c.Close(); return nil, e }
 	if _, e = c.Write([]byte{5, 1, 0}); e != nil {
 		return fail(e)
@@ -261,7 +263,9 @@ func udpThrough(t *testing.T, port int, target *net.UDPAddr) bool {
 		return false
 	}
 	defer c.Close()
-	c.SetDeadline(time.Now().Add(2 * time.Second))
+	// Xray's REALITY target cold-start record preflight waits up to five seconds.
+	// A two-second client fixture deadline races initialization, not TLS trust.
+	c.SetDeadline(time.Now().Add(8 * time.Second))
 	c.Write([]byte{5, 1, 0})
 	var method [2]byte
 	if _, e = io.ReadFull(c, method[:]); e != nil || method != [2]byte{5, 0} {

@@ -9,6 +9,7 @@ import (
 	"regexp"
 
 	"mikugate/internal/secretstore"
+	"mikugate/internal/security"
 )
 
 // MaintenanceInspection contains only nonsecret assertions. It never creates a
@@ -88,4 +89,29 @@ func InspectMaintenance(path string) (MaintenanceInspection, error) {
 	result.IntegrityValid = true
 	result.ProtectedRecordsVerified = true
 	return result, nil
+}
+
+// VerifyExitProxy reads only the selected logical exit while the live control
+// service owns its writer lease. Panel preparation must not migrate or write DB.
+func VerifyExitProxy(path, id, username, password string, port int) error {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	info, err := os.Lstat(absolute)
+	if err != nil || !info.Mode().IsRegular() {
+		return errors.New("出口数据库无效")
+	}
+	uri := url.URL{Scheme: "file", OmitHost: true, Path: filepath.ToSlash(absolute), RawQuery: "mode=ro"}
+	db, err := sql.Open("sqlite", uri.String())
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var actualPort int
+	var actualUser, hash string
+	if db.QueryRow("SELECT port,username,password_hash FROM exits WHERE id=?", id).Scan(&actualPort, &actualUser, &hash) != nil || actualPort != port || actualUser != username || !security.VerifyPassword(hash, password) {
+		return errors.New("面板出口与实际逻辑出口凭据/端口不匹配")
+	}
+	return nil
 }

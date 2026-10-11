@@ -64,6 +64,10 @@ class CoreClient:
             self.process.kill();self.process.wait(timeout=3)
             raise RuntimeError("owned core client failed orderly stop") from None
 
+def step(core,phase):
+    # Closed set lifecycle observations, no credentials/config/IPs.
+    print("ENCRYPTED_VPN_STEP " + json.dumps({"core":core,"phase":phase}),flush=True)
+
 def encrypted_path(control,created,state):
     exit_id=created["exit"]["id"];prefix="/api/exits/"+exit_id
     observations=[]
@@ -71,9 +75,11 @@ def encrypted_path(control,created,state):
     for core in ("xray","sing-box"):
         # Saving must reserve a stopped exit: no config/auth recipient mutation
         # while the previous real VPN listener is running.
+        step(core,"stopping-exit-for-save")
         control.request("POST",prefix+"/stop",expect=204)
         port=free_port();client_port=free_port()
         request={"core":core,"template":"vless-reality-vision","address":"127.0.0.1","listen":"127.0.0.1","port":port,"server_name":"www.microsoft.com","reality_hostname":"www.microsoft.com"}
+        step(core,"saving-verified-material")
         saved=control.request("PUT",prefix+"/ingress",{"request":request,"exit_password":created["password"],"confirm":True,"confirm_network":True},expect=200)
         live.require(saved["configured"] and not saved["applied"],"save pretended applied")
         revealed=control.request("POST",prefix+"/ingress/client",{"confirm":True},expect=200)
@@ -83,11 +89,14 @@ def encrypted_path(control,created,state):
         # Prove durable identity through actual control process restart. No
         # privileged executor replacement; root daemon remains the same instance.
         before_uri=revealed["uri"]
+        step(core,"restarting-control-checking-persistence")
         control.stop();control.start()
         persisted=control.request("POST",prefix+"/ingress/client",{"confirm":True},expect=200)
         live.require(persisted["uri"]==before_uri,"control restart replaced client credentials")
+        step(core,"starting-isolated-vpn")
         running=control.request("POST",prefix+"/start",expect=200)
         live.require(running["proof"]["kernel_verified"] and running["proof"]["dns_verified"],"restored VPN proof missing")
+        step(core,"starting-owned-core")
         core_state=control.request("POST",prefix+"/ingress/start",{"confirm":True},expect=200)
         live.require(core_state["phase"]=="running" and core_state["listener_owned"] and core_state["core_validated"] and not core_state["data_verified"],"native runtime overstated evidence")
         user="private-client";password=secrets.token_urlsafe(18)
@@ -96,15 +105,20 @@ def encrypted_path(control,created,state):
             inbound["port"]=client_port;inbound["settings"]={"auth":"password","accounts":[{"user":user,"pass":password}],"udp":False}
         else:
             inbound["listen_port"]=client_port;inbound["users"]=[{"username":user,"password":password}]
+        step(core,"starting-generated-client")
         client=CoreClient(control.cores[core],core,json.dumps(config).encode(),client_port)
         try:
+            step(core,"business-https-through-encrypted-path")
             body=live.fetch_via(("127.0.0.1",client_port),"example.com","/",user,password,socks=True)
             live.require(b"Example Domain" in body,"encrypted ingress business HTTPS failed")
+            step(core,"checking-business-public-exit-ip")
             raw_ip=live.fetch_via(("127.0.0.1",client_port),"api.ipify.org","/",user,password,socks=True).decode().strip()
             ip=ipaddress.ip_address(raw_ip)
             live.require(ip.version==4 and ip.is_global and raw_ip==running["proof"]["exit_ip"],"encrypted business path exit IP mismatched VPN proof")
+            step(core,"checking-live-mutation-lock")
             status,_=control.call("PUT",prefix+"/ingress",{"request":request,"exit_password":created["password"],"confirm":True,"confirm_network":True})
             live.require(status==409,"live ingress changed without stop")
+            step(core,"checking-exit-stop-revokes-core")
             control.request("POST",prefix+"/stop",expect=204)
             live.require(live.connection_refused(("127.0.0.1",port)),"encrypted entrance survived explicit exit stop")
             runtime=control.request("GET",prefix+"/ingress/runtime",expect=200)

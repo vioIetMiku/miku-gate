@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-11",
+  "source": "362daa7b19001a09edce154ba14b488cd6dfb350",
+  "official_panel_version": "v3.9.0",
+  "official_panel_archive_sha256": "d7cbe0bf6358ee0d2117c24fd2efb483502e411d38e2ea59bd0bf5e7a3e39390",
+  "run": 38126941080,
+  "job": 114433154872,
+  "conclusion": "success",
+  "actual_duration_seconds": 2.18,
+  "assertions": {
+    "panel_version": "v3.9.0",
+    "ordinary_uid": true,
+    "isolated_loopback_only": true,
+    "real_login_csrf": true,
+    "real_persistent_save": true,
+    "panel_process_restart_preserved_route": true,
+    "client_uuid_and_other_inbounds_preserved": true,
+    "real_tls_vision_client_to_miku_authenticated_proxy": true,
+    "proxy_stop_no_direct_fallback": true,
+    "persistent_rollback_verified": true,
+    "public_vpn_connected": false,
+    "user_vps_modified": false
+  },
+  "verify_run": 38126926056,
+  "verify_conclusion": "success",
+  "preserved_failure": {
+    "source": "4b30f7fe7d370c67d99add74b651842644ed2e78",
+    "run": 38125723601,
+    "job": 114429573198,
+    "cause": "Official persistent save moved internal stats/API rule to index0; exact unique API normalization now preserved, not ignored."
+  },
+  "not_proven": [
+    "other 3x-ui versions",
+    "actual user existing-panel host coexistence/public client to real VPN",
+    "existing independent Xray/sing-box persistent config",
+    "public ACME/root renewal actual lifecycle",
+    "installed long-running VPN/actual public automatic failover"
+  ]
+}

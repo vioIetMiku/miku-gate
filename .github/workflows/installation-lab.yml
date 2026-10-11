@@ -130,6 +130,17 @@ jobs:
                 "$1/core-runtime.test" -test.v -test.run "^TestLinuxManagedNativeRuntime$" -test.timeout=60s
             ' sh "$MIKU_INSTALL_STAGE" "$control_uid" "$control_gid" \
             2>&1 | tee .cache/installation-lab/installed-core-runtime.txt
+      - name: Verify confidential paired backup and installed HTTPS service restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Neither archive nor initialization log is published. Only closed
+          # boolean assertions are uploaded; this is not a restore test.
+          sudo python3 -B scripts/verify-installed-backup.py \
+            --private-init-log "$PWD/.cache/installation-lab/private-install.log" \
+            --maintenance-script "$PWD/scripts/miku-maintain.py" \
+            --output /var/backups/miku-gate-ci-private/snapshot.tar.gz \
+            2>&1 | tee .cache/installation-lab/backup-result.txt
       - name: Retain bounded non-secret assertion output only
         if: always()
         uses: actions/upload-artifact@v4
@@ -141,5 +152,6 @@ jobs:
             .cache/installation-lab/service-result.txt
             .cache/installation-lab/vpn-service-result.txt
             .cache/installation-lab/installed-core-runtime.txt
+            .cache/installation-lab/backup-result.txt
           if-no-files-found: warn
           retention-days: 14

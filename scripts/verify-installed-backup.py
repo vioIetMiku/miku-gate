@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Disposable CI verifier: encrypted installed data survives checked backup.
+
+No initialization password/config/key is printed, uploaded or sent in arguments
+other than the explicit local private initialization-log path.
+"""
+import argparse
+import hashlib
+import http.client
+import json
+import os
+from pathlib import Path
+import re
+import socket
+import ssl
+import stat
+import subprocess
+import tarfile
+
+class VerifyError(RuntimeError):pass
+
+def require(value,message):
+    if not value:raise VerifyError(message)
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--private-init-log',required=True)
+    parser.add_argument('--maintenance-script',required=True)
+    parser.add_argument('--output',required=True)
+    args=parser.parse_args()
+    require(os.geteuid()==0,'disposable installed verification needs root coordinator')
+    state=json.loads(Path('/etc/miku-gate/install-state.json').read_text())
+    log=Path(args.private_init_log);info=log.lstat()
+    require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and stat.S_IMODE(info.st_mode)==0o600 and info.st_size<=1<<20,'private initialization log bound/permissions')
+    match=re.search(r'密码：([^\r\n]+)',log.read_text(encoding='utf-8'))
+    require(match is not None,'initialization credential absent')
+    password=match[1];cookie='';csrf=''
+    cp=Path('/var/lib/miku-gate/data/management/certificate.pem')
+    context=ssl.create_default_context(cafile=str(cp)) if state['certificate_summary']['bootstrap'] else ssl.create_default_context()
+    hostname=state['domain'] or state['ip'];authority=hostname+':'+str(state['port'])
+    def request(method,path,body=None,expected=200):
+        with socket.create_connection(('127.0.0.1',state['port']),timeout=4) as raw:
+            with context.wrap_socket(raw,server_hostname=hostname) as secure:
+                require(hashlib.sha256(secure.getpeercert(binary_form=True)).hexdigest()==state['certificate_summary']['leaf_sha256'],'installed certificate identity drift')
+                content=json.dumps(body).encode() if body is not None else b''
+                headers='Host: '+authority+'\r\nOrigin: '+state['origin']+'\r\nContent-Length: '+str(len(content))+'\r\nConnection: close\r\n'
+                if body is not None:headers+='Content-Type: application/json\r\n'
+                if cookie:headers+='Cookie: '+cookie+'\r\n'
+                if csrf:headers+='X-CSRF-Token: '+csrf+'\r\n'
+                secure.sendall((method+' '+path+' HTTP/1.1\r\n'+headers+'\r\n').encode()+content)
+                response=http.client.HTTPResponse(secure);response.begin();payload=response.read(65537)
+                require(response.status==expected and len(payload)<=65536,'bounded installed HTTPS API failed: '+method+' '+path.rsplit('/',1)[-1])
+                return json.loads(payload) if payload else None,response.getheader('Set-Cookie')
+    session,session_cookie=request('POST','/api/auth/login',{'username':'admin','password':password})
+    cookie=session_cookie.split(';',1)[0];csrf=session['csrf']
+    created,_=request('POST','/api/exits',{'name':'private backup consistency fixture','country':'JP'})
+    id=created['exit']['id'];secret='backup-fixture-'+os.urandom(12).hex()
+    request('PUT','/api/exits/'+id+'/upstream',{'kind':'socks5','host':'127.0.0.1','port':9,'username':'backup-fixture','password':secret,'allow_loopback':True,'dns':'cloudflare'},expected=204)
+    before,_=request('GET','/api/exits/'+id+'/upstream')
+    require(before['configured'] and before['has_password'] and 'password' not in before,'saved upstream metadata leaked private data')
+    key=Path('/var/lib/miku-gate/data/miku-gate.db.key')
+    require(key.is_file(),'paired credential key absent')
+    original_key_sha=hashlib.sha256(key.read_bytes()).hexdigest()
+    output=Path(args.output);output.parent.mkdir(mode=0o700,exist_ok=False)
+    os.chmod(output.parent,0o700)
+    response=subprocess.run(['/usr/bin/python3','-B',args.maintenance_script,'backup','--output='+str(output),'--confirm-backup','--confirm-stop'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=90)
+    require(response.returncode==0,'maintenance backup/restart failed; private diagnostic retained only locally')
+    require(len(response.stdout)<16384 and len(response.stderr)<16384,'maintenance output exceeded budget')
+    require(stat.S_IMODE(output.stat().st_mode)==0o600,'confidential archive permissions')
+    with tarfile.open(output,'r:gz') as archive:
+        members={m.name:m for m in archive.getmembers()}
+        require('data/miku-gate.db' in members and 'data/miku-gate.db.key' in members and 'BACKUP.json' in members,'paired database/key missing from archive')
+        manifest=json.loads(archive.extractfile('BACKUP.json').read())
+        require(manifest['instance']==state['instance'] and manifest['schema']==6 and manifest['encrypted_record_count']>0 and not manifest['restore_verified'],'backup identity/state overstated')
+        require(hashlib.sha256(archive.extractfile('data/miku-gate.db.key').read()).hexdigest()==original_key_sha,'archive mismatched vault key')
+        database=archive.extractfile('data/miku-gate.db').read()
+        require(secret.encode() not in database,'upstream recoverable secret plaintext in DB')
+    require(hashlib.sha256(key.read_bytes()).hexdigest()==original_key_sha,'backup replaced live vault identity')
+    after,_=request('GET','/api/exits/'+id+'/upstream')
+    require(after==before,'encrypted upstream not recoverable after ordinary service restart')
+    request('DELETE','/api/exits/'+id,expected=204)
+    print('INSTALLED_BACKUP_VERIFIED '+json.dumps({'paired_encrypted_db_key_verified':True,'private_archive_mode':'0600','ordinary_service_https_restart_verified':True,'data_identity_retained':True,'raw_private_material_returned':False,'restore_verified':False,'vpn_mode':state['vpn']},sort_keys=True))
+
+if __name__=='__main__':
+    try:main()
+    except (VerifyError,OSError,ValueError,KeyError,subprocess.TimeoutExpired) as exc:
+        print('INSTALLED_BACKUP_FAILED '+type(exc).__name__,file=__import__('sys').stderr);__import__('sys').exit(1)

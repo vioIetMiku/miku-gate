@@ -230,5 +230,91 @@ func TestLinuxManagementHTTPSDomainCLI(t *testing.T) {
 	if response.StatusCode != 200 || len(response.Cookies()) == 0 || !response.Cookies()[0].Secure {
 		t.Fatal("domain TLS login/secure cookie")
 	}
-	t.Log("Observed actual domain HTTPS CLI, SAN and CA verification with process-only private root, canonical Host/Origin and secure login; no bootstrap/insecure flag or host trust mutation. Domain ACME/public DNS ownership not tested.")
+
+	// Exercise the actual installed-account TLS provider through authenticated
+	// APIs. Neither PEM nor credential values are included in test output.
+	loginBody, err := io.ReadAll(io.LimitReader(response.Body, 65536))
+	if err != nil {
+		t.Fatal("read login")
+	}
+	var session map[string]string
+	if json.Unmarshal(loginBody, &session) != nil {
+		t.Fatal("login session")
+	}
+	cookie := response.Cookies()[0]
+	call := func(method, path string, input any) (int, []byte) {
+		var encoded []byte
+		if input != nil {
+			encoded, _ = json.Marshal(input)
+		}
+		req, _ := http.NewRequest(method, origin+path, strings.NewReader(string(encoded)))
+		req.AddCookie(cookie)
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-CSRF-Token", session["csrf"])
+		res, err := client.Do(req)
+		if err != nil {
+			return 0, nil
+		}
+		defer res.Body.Close()
+		raw, _ := io.ReadAll(io.LimitReader(res.Body, 65536))
+		return res.StatusCode, raw
+	}
+	code, meta := call("POST", "/api/ingress/certificate", map[string]any{"hostname": "management.test", "confirm_read": true})
+	if code != 200 || !strings.Contains(string(meta), `"selected_provider":"management-domain-copy"`) || strings.Contains(string(meta), "PRIVATE KEY") {
+		t.Fatal("ordinary control did not reuse verified management certificate without leaking private key")
+	}
+	_, asset, err := management.DomainAsset(mustManagementEndpoint(t, origin), cp, kp, "management.test")
+	// The test process itself has not imported the child-only test CA; this
+	// read must remain unverified, not inherit trust from an HTTP success flag.
+	if err != nil || asset != nil {
+		t.Fatal("child trust wrongly transferred to test coordinator")
+	}
+	for _, bad := range []string{"other.test", "127.0.0.1"} {
+		if _, _, err := management.DomainAsset(mustManagementEndpoint(t, origin), cp, kp, bad); err == nil {
+			t.Fatal("cross-identity reuse")
+		}
+	}
+	code, made := call("POST", "/api/exits", map[string]any{"name": "TLS certificate reuse lab", "country": "JP"})
+	if code != 201 {
+		t.Fatal("create logical exit")
+	}
+	var created struct {
+		Exit struct {
+			ID string `json:"id"`
+		} `json:"exit"`
+		Password string `json:"password"`
+	}
+	if json.Unmarshal(made, &created) != nil {
+		t.Fatal("created response")
+	}
+	time.Sleep(3100 * time.Millisecond) // explicit file-operation throttle
+	code, saved := call("PUT", "/api/exits/"+created.Exit.ID+"/ingress", map[string]any{
+		"request":       map[string]any{"core": "xray", "template": "vless-tls-vision", "address": "management.test", "listen": "127.0.0.1", "port": 28443, "server_name": "management.test"},
+		"exit_password": created.Password, "confirm": true, "confirm_read": true,
+	})
+	if code != 200 || !strings.Contains(string(saved), `"configured":true`) || strings.Contains(string(saved), "PRIVATE KEY") {
+		t.Fatal("save domain TLS entrance")
+	}
+	code, imported := call("POST", "/api/exits/"+created.Exit.ID+"/ingress/client", map[string]any{"confirm": true})
+	if code != 200 || !strings.Contains(string(imported), "vless://") || strings.Contains(string(imported), "PRIVATE KEY") || strings.Contains(string(imported), created.Password) {
+		t.Fatal("safe TLS client import")
+	}
+	if code, _ := call("DELETE", "/api/exits/"+created.Exit.ID+"/ingress", nil); code != 204 {
+		t.Fatal("remove temporary ingress")
+	}
+	if code, _ := call("DELETE", "/api/exits/"+created.Exit.ID, nil); code != 204 {
+		t.Fatal("remove temporary exit")
+	}
+	t.Log("Observed actual domain HTTPS CLI and same-domain managed certificate reuse by ordinary account, authenticated encrypted TLS entrance save/client import without PEM or exit password leakage; process-only private CA, no bootstrap/insecure or host trust mutation. Public ACME/DNS ownership and data forwarding not tested.")
+
+}
+
+func mustManagementEndpoint(t *testing.T, origin string) management.Endpoint {
+	t.Helper()
+	ep, err := management.ParseOrigin(origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ep
 }

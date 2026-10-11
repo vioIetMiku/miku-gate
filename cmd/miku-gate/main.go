@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"mikugate/internal/certassets"
 	"mikugate/internal/coreruntime"
 	"mikugate/internal/diagnostics"
 	"mikugate/internal/domain"
@@ -217,6 +218,22 @@ func run() error {
 	options.PublicOrigin = *publicOrigin
 	if managementTLS != nil {
 		options.ManagementIdentity = &managementIdentity
+		endpoint, err := management.ParseOrigin(*publicOrigin)
+		if err != nil {
+			return err
+		}
+		if !endpoint.IP && managementIdentity.SystemTrusted {
+			options.DiscoverCertificate = func(host string) (certassets.Discovery, *certassets.Asset, error) {
+				normalized, err := certassets.Hostname(host)
+				if err != nil {
+					return certassets.Discovery{}, nil, err
+				}
+				if normalized == endpoint.Hostname {
+					return management.DomainAsset(endpoint, *tlsCertificate, *tlsKey, normalized)
+				}
+				return certassets.Discover(normalized)
+			}
+		}
 	}
 	if *vpnExecutor {
 		if *controlOnly {

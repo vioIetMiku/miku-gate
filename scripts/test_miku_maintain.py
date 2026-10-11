@@ -38,7 +38,7 @@ class ConfidentialBackupSafety(unittest.TestCase):
                 self.assertFalse(result['restore_verified']);self.assertEqual(result['member_count'],3)
                 with self.assertRaises(maintenance.BackupError):maintenance.create_archive(destination,files,{'instance':'a'*22,'schema':6})
     def test_known_fixed_destinations_exclude_other_services(self):
-        self.assertEqual(len(maintenance.FILES),4)
+        self.assertEqual(len(maintenance.FILES),6)
         self.assertNotIn('nginx',str(maintenance.FILES))
 class InstalledBackupFixtureContract(unittest.TestCase):
     def test_real_api_creation_status_and_unprivileged_loopback_port(self):
@@ -123,5 +123,33 @@ class PairedMaintenanceSafety(unittest.TestCase):
             with self.assertRaisesRegex(maintenance.BackupError,'RECOVERY_RESTART_UNCONFIRMED'):maintenance.recover_transaction()
             self.assertGreaterEqual(block.call_count,2)
             self.assertFalse(any(call.args[0]==maintenance.JOURNAL for call in remove.call_args_list))
+
+
+class CertificateRefreshSafety(unittest.TestCase):
+    def test_no_renewal_or_restart_without_domain_and_authorization(self):
+        state={'domain':'','certificate_summary':{'bootstrap':True}}
+        with mock.patch.object(maintenance.install,'run') as run:
+            with self.assertRaises(maintenance.BackupError):maintenance.certificate_candidate(state,True)
+            run.assert_not_called()
+        state={'domain':'entry.example','certificate_summary':{'bootstrap':False}}
+        with mock.patch.object(maintenance.install,'run') as run:
+            with self.assertRaises(maintenance.BackupError):maintenance.certificate_candidate(state,True)
+            run.assert_not_called()
+    def test_occupied_80_never_stops_existing_service(self):
+        state={'domain':'entry.example','certificate_summary':{'bootstrap':False,'not_after':'2026-01-01T00:00:00Z'},'certificate_automation':{'enabled':True,'renew':True}}
+        with mock.patch.object(maintenance.install,'source_certificate',return_value=None),mock.patch.object(maintenance.install,'port_available',return_value=False),mock.patch.object(maintenance.install,'run') as run:
+            with self.assertRaises(maintenance.BackupError):maintenance.certificate_candidate(state,True)
+            run.assert_not_called()
+    def test_unchanged_certificate_has_no_write_backup_stop_or_restart(self):
+        state={'instance':'a'*22,'certificate_summary':{'leaf_sha256':'b'*64},'certificate_automation':{'enabled':True,'renew':False}}
+        args=SimpleNamespace(archive=None,archive_sha256=None,distribution=None,confirm_backup=False,confirm_upgrade=False,confirm_rollback=False,confirm_recover=False,leave_stopped=False,scheduled=True,output=None,confirm_stop=False,confirm_certificate_refresh=False,renew=False)
+        with mock.patch.object(maintenance,'certificate_candidate',return_value=(b'cert',b'key',{'leaf_sha256':'b'*64})),mock.patch.object(maintenance,'stop_services') as stop,mock.patch.object(maintenance,'snapshot') as snap,contextlib.redirect_stdout(io.StringIO()):
+            maintenance.run_certificate_refresh(args,state);stop.assert_not_called();snap.assert_not_called()
+    def test_scheduled_requires_prior_install_consent(self):
+        state={'certificate_automation':{'enabled':False}}
+        args=SimpleNamespace(archive=None,archive_sha256=None,distribution=None,confirm_backup=False,confirm_upgrade=False,confirm_rollback=False,confirm_recover=False,leave_stopped=False,scheduled=True,output=None,confirm_stop=False,confirm_certificate_refresh=False,renew=False)
+        with mock.patch.object(maintenance,'certificate_candidate') as candidate:
+            with self.assertRaises(maintenance.BackupError):maintenance.run_certificate_refresh(args,state)
+            candidate.assert_not_called()
 
 if __name__=='__main__':unittest.main()

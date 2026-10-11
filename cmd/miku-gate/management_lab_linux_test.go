@@ -3,18 +3,22 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"io"
 	"math/big"
 	"mikugate/internal/management"
+	"mikugate/internal/store"
 	"net"
 	"net/http"
 	"os"
@@ -199,7 +203,13 @@ func TestLinuxManagementHTTPSDomainCLI(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
-	t.Cleanup(func() { cancel(); <-done })
+	stopped := false
+	t.Cleanup(func() {
+		if !stopped {
+			cancel()
+			<-done
+		}
+	})
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caRaw}))
 	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, ServerName: "management.test", MinVersion: tls.VersionTLS12}, DialContext: func(ctx context.Context, n, a string) (net.Conn, error) {
@@ -300,13 +310,84 @@ func TestLinuxManagementHTTPSDomainCLI(t *testing.T) {
 	if code != 200 || !strings.Contains(string(imported), "vless://") || strings.Contains(string(imported), "PRIVATE KEY") || strings.Contains(string(imported), created.Password) {
 		t.Fatal("safe TLS client import")
 	}
+	// Real ordinary CLI refresh after stopping the lease owner. The private CA
+	// remains scoped to child processes; no system trust or public ACME mutation.
+	initialDB, err := store.Open(filepath.Join(data, "miku-gate.db"))
+	if err != nil {
+		t.Fatal("inspect initial material")
+	}
+	initialMaterial, _, _, err := initialDB.Managed(created.Exit.ID)
+	instance, instanceErr := initialDB.InstanceID()
+	initialDB.Close()
+	if err != nil || instanceErr != nil {
+		t.Fatal("initial encrypted TLS identity")
+	}
+	oldDigest := sha256.Sum256(der)
+	rotateKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	rotateLeaf := *leaf
+	rotateLeaf.SerialNumber = big.NewInt(13)
+	rotateDER, err := x509.CreateCertificate(rand.Reader, &rotateLeaf, ca, &rotateKey.PublicKey, key)
+	if err != nil {
+		t.Fatal("new domain certificate")
+	}
+	rotateEncoded, _ := x509.MarshalPKCS8PrivateKey(rotateKey)
+	rotateCP, rotateKP := filepath.Join(root, "rotated-certificate.pem"), filepath.Join(root, "rotated-private.key")
+	rotateCertificate := append(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rotateDER}), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caRaw})...)
+	os.WriteFile(rotateCP, rotateCertificate, 0600)
+	os.WriteFile(rotateKP, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: rotateEncoded}), 0600)
+	cancel()
+	<-done
+	stopped = true
+	transport.CloseIdleConnections()
+	refresh := exec.Command(binary, "management", "refresh-ingress", "--confirm", "--data="+data, "--expected-instance="+instance, "--expected-leaf="+hex.EncodeToString(oldDigest[:]), "--origin="+origin, "--certificate="+rotateCP, "--key="+rotateKP)
+	refresh.Env = append(os.Environ(), "SSL_CERT_FILE="+cap, "SSL_CERT_DIR="+filepath.Join(root, "empty"))
+	refreshed, err := refresh.Output()
+	if err != nil || !strings.Contains(string(refreshed), `"updated_ingress_count":1`) || !strings.Contains(string(refreshed), `"identities_preserved":true`) || strings.Contains(string(refreshed), "PRIVATE KEY") || bytes.Contains(refreshed, []byte(created.Password)) {
+		t.Fatal("actual stopped ordinary CLI certificate refresh")
+	}
+	renewedDB, err := store.Open(filepath.Join(data, "miku-gate.db"))
+	if err != nil {
+		t.Fatal("inspect refreshed material")
+	}
+	renewedMaterial, _, _, err := renewedDB.Managed(created.Exit.ID)
+	renewedDB.Close()
+	if err != nil || renewedMaterial.Identity != initialMaterial.Identity || renewedMaterial.Proxy != initialMaterial.Proxy || renewedMaterial.Request != initialMaterial.Request || !bytes.Equal(renewedMaterial.CertificatePEM, rotateCertificate) {
+		t.Fatal("renewal changed identities/bindings or did not persist certificate")
+	}
+	ctx, cancel = context.WithCancel(context.Background())
+	cmd = exec.CommandContext(ctx, binary, "serve", "--data", data, "--listen=127.0.0.1:"+port, "--public-origin="+origin, "--tls-certificate="+rotateCP, "--tls-key="+rotateKP)
+	cmd.Env = append(os.Environ(), "SSL_CERT_FILE="+cap, "SSL_CERT_DIR="+filepath.Join(root, "empty"))
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	if cmd.Start() != nil {
+		cancel()
+		t.Fatal("restart rotated domain HTTPS")
+	}
+	done = make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	stopped = false
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		res, e := client.Get(origin + "/api/health")
+		if e == nil {
+			res.Body.Close()
+			if res.StatusCode == 200 {
+				break
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	code, rotatedImport := call("POST", "/api/exits/"+created.Exit.ID+"/ingress/client", map[string]any{"confirm": true})
+	if code != 200 || !bytes.Equal(imported, rotatedImport) {
+		t.Fatal("actual rotated HTTPS did not preserve client import")
+	}
 	if code, _ := call("DELETE", "/api/exits/"+created.Exit.ID+"/ingress", nil); code != 204 {
 		t.Fatal("remove temporary ingress")
 	}
 	if code, _ := call("DELETE", "/api/exits/"+created.Exit.ID, nil); code != 204 {
 		t.Fatal("remove temporary exit")
 	}
-	t.Log("Observed actual domain HTTPS CLI and same-domain managed certificate reuse by ordinary account, authenticated encrypted TLS entrance save/client import without PEM or exit password leakage; process-only private CA, no bootstrap/insecure or host trust mutation. Public ACME/DNS ownership and data forwarding not tested.")
+	t.Log("Observed actual domain HTTPS CLI and same-domain managed certificate reuse by ordinary account, authenticated encrypted TLS entrance save/client import without PEM or exit password leakage; process-only private CA, no bootstrap/insecure or host trust mutation. Actual stopped ordinary CLI certificate refresh, encrypted material and client identity preserved, rotated HTTPS/client import passed. Public ACME/DNS ownership and data forwarding not tested.")
 
 }
 

@@ -62,4 +62,9 @@ class InstallerPlanningSafety(unittest.TestCase):
         self.assertEqual(len(install.CORE_ASSETS),4)
         for (core,arch),item in install.CORE_ASSETS.items():
             self.assertIn(arch,('amd64','arm64'));self.assertEqual(len(item[3]),64);self.assertNotIn('..',item[5]);self.assertLess(item[4],48<<20)
+class CertificateTimerPlanning(unittest.TestCase):
+    def test_units_have_fixed_command_budgets_and_persistent_schedule(self):
+        units=install.certificate_units();service=units['miku-gate-certificate.service'];timer=units['miku-gate-certificate.timer']
+        self.assertIn('certificate-refresh --scheduled',service);self.assertIn('MemoryMax=256M',service);self.assertIn('User=root',service)
+        self.assertIn('Persistent=yes',timer);self.assertIn('RandomizedDelaySec=30m',timer);self.assertNotIn('certbot renew',service);self.assertNotIn('nginx',service+timer)
 if __name__=='__main__':unittest.main()

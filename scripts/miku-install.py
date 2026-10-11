@@ -118,7 +118,7 @@ def hostname(value):
     raise InstallError('域名不能填数字IP')
 
 def initial_paths():
-    return [LIB,ETC,VAR,UNITS/'miku-gate.service',UNITS/'miku-gate-vpn.service']
+    return [LIB,ETC,VAR,UNITS/'miku-gate.service',UNITS/'miku-gate-vpn.service',UNITS/'miku-gate-certificate.service',UNITS/'miku-gate-certificate.timer']
 
 def refusal_preflight():
     for p in initial_paths():require(not p.exists() and not p.is_symlink(),'已存在Miku资源，拒绝首次安装覆盖：'+str(p)+'；升级/恢复另行确认')
@@ -259,6 +259,38 @@ def unit_text(binary,data,origin,port,cert,key,bootstrap,vpn,instance,uids,cores
         units['miku-gate-vpn.service']='''[Unit]\nDescription=Miku Gate isolated VPN executor\nConditionPathExists=!/etc/miku-gate/maintenance-block\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nUser=root\nUMask=0077\nExecStart='''+' '.join(command)+'''\nRestart=on-failure\nRestartSec=5\nTimeoutStopSec=15\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nProtectKernelTunables=yes\nProtectKernelModules=yes\nProtectControlGroups=yes\nReadWritePaths=/run/miku-gate-vpnipc\nCPUQuota=100%\nMemoryMax=256M\nMemorySwapMax=0\nTasksMax=64\n\n[Install]\nWantedBy=multi-user.target\n'''
     return units
 
+def certificate_units():
+    service="""[Unit]
+Description=Miku Gate verified certificate renewal and copy refresh
+ConditionPathExists=/etc/miku-gate/install-state.json
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 -B /usr/local/lib/miku-gate/miku-maintain.py certificate-refresh --scheduled
+TimeoutStartSec=300
+CPUQuota=100%
+MemoryMax=256M
+MemorySwapMax=0
+TasksMax=32
+"""
+    timer="""[Unit]
+Description=Miku Gate certificate check timer
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00
+RandomizedDelaySec=30m
+Persistent=yes
+Unit=miku-gate-certificate.service
+
+[Install]
+WantedBy=timers.target
+"""
+    return {'miku-gate-certificate.service':service,'miku-gate-certificate.timer':timer}
+
 def verify_served_management(plan,cert_path,certificate_summary):
     import http.client,time
     context=ssl.create_default_context()
@@ -336,9 +368,12 @@ def apply(binary_raw,expected,plan,prompt):
             info=p.lstat();require(stat.S_ISDIR(info.st_mode) and info.st_uid==0 and not info.st_mode&0o022 and not p.is_symlink(),'VPN IPC根路径不安全')
         units=unit_text(copied,data,plan['origin'],plan['port'],cert,key,certificate['mode']=='ip-bootstrap',plan['vpn'],instance,uids,cores)
         for name,text in units.items():p=UNITS/name;exclusive(p,text.encode(),0o644);created.append(p)
+        if plan.get('certificate_automation',{}).get('enabled'):
+            for name,text in certificate_units().items():
+                target=UNITS/name;exclusive(target,text.encode(),0o644);created.append(target)
         state={k:v for k,v in plan.items() if k!='certificate'};state.update(binary_sha256=expected,maintenance_sha256={name:digest(raw) for name,raw in helpers.items()},instance=instance,core_sources=core_reports,certificate_summary=summary,certificate_source=certificate,users=uids)
         exclusive(ETC/'install-state.json',json.dumps(state,ensure_ascii=False,indent=2).encode());created.append(ETC/'install-state.json')
-        run([trusted_tool('systemd-analyze'),'verify',*[str(UNITS/n) for n in units]])
+        run([trusted_tool('systemd-analyze'),'verify',*[str(UNITS/n) for n in units],*([str(UNITS/n) for n in certificate_units()] if plan.get('certificate_automation',{}).get('enabled') else [])])
         run([trusted_tool('systemctl'),'daemon-reload'])
         if prompt.yes('start_services','是否启用开机启动并立即启动这些明确Miku服务？',True):
             for name in (['miku-gate-vpn.service'] if plan['vpn'] else [])+['miku-gate.service']:
@@ -347,12 +382,14 @@ def apply(binary_raw,expected,plan,prompt):
             run([trusted_tool('systemctl'),'is-active','--quiet','miku-gate.service'])
             verify_served_management(plan,cert,summary)
             if plan['vpn']:verify_vpn_executor(copied,instance,uids)
+        if plan.get('certificate_automation',{}).get('enabled') and 'miku-gate.service' in started:
+            started.append('miku-gate-certificate.timer');run([trusted_tool('systemctl'),'enable','--now','miku-gate-certificate.timer'])
         print('维护状态：sudo python3 -B /usr/local/lib/miku-gate/miku-maintain.py status')
         print('管理地址：'+plan['origin'])
         print('证书指纹SHA256：'+summary['leaf_sha256'])
         if certificate['mode']=='ip-bootstrap':print('这是自签IP引导证书，浏览器不默认信任。通过已信任SSH通道/安装输出核对指纹或导入certificate.pem后再输入密码，不能忽略证书警告。')
         print('未改防火墙：若外网不可达，请在现有防火墙/云安全组明确开放TCP '+str(plan['port'])+'；未开放出口认证代理端口。')
-        print('已检测的既有面板保持原配置。TLS申请续期、管理证书受管副本热更新、既有面板持久复用与升级/回滚仍需后续完善。')
+        print('已检测的既有面板保持原配置。同域名证书定时刷新需明确授权，会短暂停止Miku连接并保留入口身份；既有面板持久复用、公网完整部署与卸载继续完善。')
         return state
     except BaseException:
         # Stop only exact units created by this attempt. Retain private state,
@@ -414,8 +451,15 @@ def main(argv=None,prompt=None):
     require(choice in ('xray','sing-box','both','none'),'核心选择无效')
     cores=['xray','sing-box'] if choice=='both' else [] if choice=='none' else [choice]
     certificate=certificate_plan(binary,prompt,domain,ip,args.plan_only)
+    automation={'enabled':False,'renew':False}
+    if domain:
+        automation['enabled']=prompt.yes('automatic_certificate_refresh','是否每12小时检查同域名证书并在验证/备份后更新管理和TLS入口？更换时短暂停止Miku连接，保留客户端身份。',True)
+        if automation['enabled']:
+            own_certbot=certificate['mode']=='domain-issue'
+            certbot_source=own_certbot or '/etc/letsencrypt/archive/' in certificate.get('cert','')
+            automation['renew']=certbot_source and prompt.yes('automatic_certbot_renew','是否授权仅此域名Certbot renew？可能运行root已有renewal配置/hook；不停止原80端口服务；拒绝时只同步已有工具更新的证书。',own_certbot)
     authority=domain or ip;origin='https://'+authority+(':'+str(port) if port!=443 else '')
-    plan={'arch':arch,'vpn':vpn,'ip':ip,'domain':domain,'origin':origin,'port':port,'cores':cores,'reuse_requested':reuse,'certificate':certificate,'write_paths':[str(x) for x in initial_paths()],'host_routes_changed':False,'existing_service_configs_changed':False,'firewall_changed':False}
+    plan={'arch':arch,'vpn':vpn,'ip':ip,'domain':domain,'origin':origin,'port':port,'cores':cores,'reuse_requested':reuse,'certificate':certificate,'certificate_automation':automation,'write_paths':[str(x) for x in initial_paths()],'host_routes_changed':False,'existing_service_configs_changed':False,'firewall_changed':False}
     if release:plan['distribution']={k:release[k] for k in ('version','source','platform')}
     print('明确安装计划：'+json.dumps({k:v for k,v in plan.items() if k!='certificate'},ensure_ascii=False,indent=2))
     print('账号：'+', '.join(USERS if vpn else USERS[:1])+'；管理384MiB/VPN256MiB上限，默认同时1出口（不是容量承诺）。')

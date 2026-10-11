@@ -9,6 +9,7 @@ import argparse
 import contextlib
 import hashlib
 import gzip
+import datetime
 import importlib.util
 import io
 import json
@@ -28,6 +29,8 @@ FILES={
  'binary/miku-gate':Path('/usr/local/lib/miku-gate/miku-gate'),
  'units/miku-gate.service':Path('/etc/systemd/system/miku-gate.service'),
  'units/miku-gate-vpn.service':Path('/etc/systemd/system/miku-gate-vpn.service'),
+ 'units/miku-gate-certificate.service':Path('/etc/systemd/system/miku-gate-certificate.service'),
+ 'units/miku-gate-certificate.timer':Path('/etc/systemd/system/miku-gate-certificate.timer'),
 }
 DATA=Path('/var/lib/miku-gate/data')
 DATABASE=('miku-gate.db','miku-gate.db-wal','miku-gate.db-shm','miku-gate.db.key','.serve.lock')
@@ -150,6 +153,7 @@ def collect(state):
     resources=[]
     for member,path in FILES.items():
         if member.endswith('miku-gate-vpn.service') and not state['vpn']:continue
+        if '/miku-gate-certificate.' in member and not state.get('certificate_automation',{}).get('enabled'):continue
         raw,info=safe_path(path,0,0o755 if member=='binary/miku-gate' else 0o600 if member.endswith('install-state.json') else 0o644)
         resources.append((member,raw,info.st_uid,info.st_gid,stat.S_IMODE(info.st_mode)))
     for name in state.get('maintenance_sha256',{}):
@@ -323,7 +327,7 @@ def data_lease(state):
 
 def destinations(state):
     uid,gid=state['users']['miku-gate']
-    targets={name:(path,0,0,0o755 if name=='binary/miku-gate' else 0o600 if name.endswith('install-state.json') else 0o644) for name,path in FILES.items() if state['vpn'] or not name.endswith('miku-gate-vpn.service')}
+    targets={name:(path,0,0,0o755 if name=='binary/miku-gate' else 0o600 if name.endswith('install-state.json') else 0o644) for name,path in FILES.items() if (state['vpn'] or not name.endswith('miku-gate-vpn.service')) and (state.get('certificate_automation',{}).get('enabled') or '/miku-gate-certificate.' not in name)}
     for name in ('miku-install.py','miku-maintain.py'):targets['binary/'+name]=(FILES['binary/miku-gate'].with_name(name),0,0,0o644)
     for name in DATABASE:targets['data/'+name]=(DATA/name,uid,gid,0o600)
     for directory in CERT_DIRS:
@@ -349,10 +353,11 @@ def decode_snapshot(raw,state):
     manifest=json.loads(members.pop('BACKUP.json')[0]);old=json.loads(members['installation/install-state.json'][0])
     require(isinstance(manifest,dict) and manifest.get('format')==1 and manifest.get('schema')==6 and manifest.get('instance')==state['instance'],'备份格式/schema/实例不匹配')
     require(isinstance(old,dict),'备份安装登记无效');check_identity(old)
-    for name in ('instance','users','vpn','cores','origin','port','domain','ip'):
+    for name in ('instance','users','vpn','cores','origin','port','domain','ip','certificate_automation'):
         require(old.get(name)==state.get(name),'只允许同一安装的配套回滚，不迁移账号/地址/核心')
     required={'installation/install-state.json','binary/miku-gate','binary/miku-install.py','binary/miku-maintain.py','units/miku-gate.service','data/miku-gate.db','data/management/certificate.pem','data/management/private.key'}
     if state['vpn']:required.add('units/miku-gate-vpn.service')
+    if state.get('certificate_automation',{}).get('enabled'):required.update('units/'+name for name in install.certificate_units())
     require(isinstance(manifest.get('encrypted_record_count'),int) and manifest['encrypted_record_count']>=0,'备份加密行登记无效')
     if manifest['encrypted_record_count']>0:required.add('data/miku-gate.db.key')
     require(required<=set(members),'备份缺配套程序/维护工具/数据库/key/证书')
@@ -368,6 +373,7 @@ def decode_snapshot(raw,state):
     helpers=old.get('maintenance_sha256');require(isinstance(helpers,dict) and set(helpers)=={'miku-install.py','miku-maintain.py'},'备份维护协调器不完整；旧无协调器备份不自动升级恢复')
     for name,expected in helpers.items():require(hashlib.sha256(members['binary/'+name][0]).hexdigest()==expected,'备份协调器摘要不匹配')
     expected_units=install.unit_text(FILES['binary/miku-gate'],DATA,old['origin'],old['port'],DATA/'management/certificate.pem',DATA/'management/private.key',old['certificate_summary']['bootstrap'],old['vpn'],old['instance'],old['users'],{core:FILES['binary/miku-gate'].with_name(core) for core in old['cores']})
+    if state.get('certificate_automation',{}).get('enabled'):expected_units.update(install.certificate_units())
     for name,unit in expected_units.items():
         legacy=unit.replace('ConditionPathExists=!/etc/miku-gate/maintenance-block\n','')
         require(members['units/'+name][0] in (unit.encode(),legacy.encode()),'备份服务不是已知固定安装模板，拒绝root命令注入')
@@ -464,7 +470,7 @@ def install_startup_guard(state):
 
 def recover_transaction():
     raw,_=safe_path(JOURNAL,0,0o600);journal=json.loads(raw)
-    require(journal.get('format')==1 and journal.get('operation') in ('upgrade','rollback'),'恢复事务格式无效')
+    require(journal.get('format')==1 and journal.get('operation') in ('upgrade','rollback','certificate-refresh'),'恢复事务格式无效')
     state=journal['state'];check_identity(state)
     units=['miku-gate.service']+(['miku-gate-vpn.service'] if state['vpn'] else [])
     require(isinstance(journal.get('active'),list) and set(journal['active'])<=set(units),'恢复日志不允许操作未知单元')
@@ -538,27 +544,157 @@ def run_change(args,state):
         raise failure
     print('MIKU_CHANGE_RESULT '+json.dumps({'operation':args.command,'instance':new['instance'],'binary_sha256':new['binary_sha256'],'backup':backup['file'],'backup_sha256':backup['archive_sha256'],'paired_restore_verified':args.command=='rollback','service_restart_verified':True,'units_or_core_choices_changed':False,'live_gateway_connections_restored':False},sort_keys=True))
 
+
+def certificate_candidate(state,renew=False):
+    domain=state.get('domain')
+    require(domain and not state['certificate_summary'].get('bootstrap'),'自动刷新仅已信任域名，不自动更换用户已信任的IP自签身份')
+    found=install.source_certificate(FILES['binary/miku-gate'],domain)
+    already_updated=found is not None and found[2]['leaf_sha256']!=state['certificate_summary']['leaf_sha256']
+    if renew:
+        require(state.get('certificate_automation',{}).get('renew'),'安装未授权自动Certbot续期；先配置授权')
+        expiry=datetime.datetime.fromisoformat(state['certificate_summary']['not_after'].replace('Z','+00:00'))
+        if not already_updated and expiry-datetime.datetime.now(datetime.timezone.utc)<=datetime.timedelta(days=30):
+            # Standalone installations must never stop an existing webserver to
+            # renew. For externally managed webroot/DNS certs, sync only by default.
+            require(install.port_available(80),'80端口已有服务，拒绝自动standalone续期；原服务未停止')
+            install.run([install.trusted_tool('certbot'),'renew','--cert-name='+domain,'--quiet'],timeout=240)
+            found=install.source_certificate(FILES['binary/miku-gate'],domain)
+    require(found is not None,'未发现当前系统信任/同域名/钥匙匹配的证书，保持原副本')
+    certificate,key,summary=found
+    # Original renewal symlinks were resolved inside the known provider bound;
+    # pin both files through trusted ownership/perms and exact content checks.
+    cert_raw,_=safe_path(certificate,0,max_bytes=128<<10)
+    key_raw,_=safe_path(key,0,max_bytes=128<<10)
+    require(not key.stat().st_mode&0o077,'源私钥必须root私有')
+    repeated=json.loads(install.run([str(FILES['binary/miku-gate']),'management','inspect','--origin='+state['origin'],'--certificate='+str(certificate),'--key='+str(key)]))
+    require(repeated['leaf_sha256']==summary['leaf_sha256'] and repeated['system_trusted'] and not repeated['bootstrap'],'源证书在发现后漂移')
+    return cert_raw,key_raw,summary
+
+def scheduled_output():
+    directory=FILES['installation/install-state.json'].parent/'certificate-updates'
+    if not directory.exists():install.make_dir(directory,0o700)
+    info=directory.lstat()
+    require(directory.resolve(strict=True)==directory and info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700,'证书事务快照目录不可信')
+    snapshots=list(directory.iterdir())
+    require(all(p.is_file() and not p.is_symlink() and re.fullmatch(r'before-certificate-[0-9]+\.tar\.gz',p.name) for p in snapshots) and len(snapshots)<8,'证书私有快照达到8份或有未知文件，请先明确归档/清理；不自动删除密钥备份')
+    return directory/('before-certificate-'+str(time.time_ns())+'.tar.gz')
+
+def run_certificate_refresh(args,state):
+    require(not any((args.archive,args.archive_sha256,args.distribution,args.confirm_backup,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover,args.leave_stopped)),'证书刷新不能混用升级/回滚参数')
+    automation=state.get('certificate_automation',{})
+    if args.scheduled:
+        require(automation.get('enabled') and not args.output and not args.confirm_stop and not args.confirm_certificate_refresh and not args.renew,'定时任务仅使用安装时明确授权模式')
+        renew=automation.get('renew',False)
+    else:
+        require(args.confirm_certificate_refresh and args.confirm_stop and args.output,'证书刷新需明确--confirm-certificate-refresh --confirm-stop --output')
+        renew=args.renew
+    cert_raw,key_raw,summary=certificate_candidate(state,renew)
+    if summary['leaf_sha256']==state['certificate_summary']['leaf_sha256']:
+        print('MIKU_CERTIFICATE_RESULT '+json.dumps({'changed':False,'instance':state['instance'],'leaf_sha256':summary['leaf_sha256'],'services_restarted':False},sort_keys=True));return
+    out=check_output(scheduled_output() if args.scheduled else args.output)
+    units=['miku-gate.service']+(['miku-gate-vpn.service'] if state['vpn'] else [])
+    active=[unit for unit in units if service_active(unit)]
+    require('miku-gate.service' in active,'证书刷新只在已运行管理服务上验证，不自动启动原停用安装')
+    original=None;changed=False;backup=None;updated_count=0
+    new=json.loads(json.dumps(state));new['certificate_summary']=summary
+    try:
+        stop_services(state)
+        with data_lease(state):
+            original,backup=snapshot(out,state)
+            write_journal(state,active,backup,'certificate-refresh');changed=True
+            set_startup_block();install_startup_guard(state)
+            uid,gid=state['users']['miku-gate']
+            replace_owned(DATA/'management/certificate.pem',cert_raw,uid,gid,0o600)
+            replace_owned(DATA/'management/private.key',key_raw,uid,gid,0o600)
+        # The real CLI must acquire the SAME control lease itself. Root global
+        # maintenance lock and stopped known services still protect the window.
+        report=json.loads(install.run([install.trusted_tool('setpriv'),'--reuid='+str(uid),'--regid='+str(gid),'--clear-groups','--no-new-privs',str(FILES['binary/miku-gate']),'management','refresh-ingress','--data='+str(DATA),'--expected-instance='+state['instance'],'--expected-leaf='+state['certificate_summary']['leaf_sha256'],'--origin='+state['origin'],'--certificate='+str(DATA/'management/certificate.pem'),'--key='+str(DATA/'management/private.key'),'--confirm']))
+        require(report['instance']==state['instance'] and report['leaf_sha256']==summary['leaf_sha256'] and report['identities_preserved'] and not report['private_material_returned'],'真实TLS入口刷新结果不一致')
+        updated_count=report['updated_ingress_count']
+        with data_lease(state):
+            replace_owned(FILES['installation/install-state.json'],json.dumps(new,ensure_ascii=False,indent=2).encode(),0,0,0o600)
+            validate_recovered(new)
+        remove_owned(STARTUP_BLOCK,0,0o600)
+        restart_services(new,active)
+        remove_owned(JOURNAL,0,0o600)
+    except BaseException as failure:
+        if changed:
+            try:
+                set_startup_block();stop_services(state)
+                with data_lease(state):restore_resources(original,state);validate_recovered(state)
+                remove_owned(STARTUP_BLOCK,0,0o600)
+                install.run([install.trusted_tool('systemctl'),'daemon-reload']);restart_services(state,active)
+                remove_owned(JOURNAL,0,0o600)
+            except BaseException:
+                try:set_startup_block();stop_services(state)
+                except BaseException:pass
+                raise BackupError('CERTIFICATE_RECOVERY_REQUIRED：保留配套快照与日志，明确recover。') from None
+            raise BackupError('CERTIFICATE_REFRESH_FAILED_PAIRED_ROLLBACK_VERIFIED：恢复旧证书/DB/key；失败类别='+type(failure).__name__) from None
+        try:restart_services(state,active)
+        except BaseException:raise BackupError('CERTIFICATE_RESTART_UNCONFIRMED：未应用新证书。') from None
+        raise failure
+    print('MIKU_CERTIFICATE_RESULT '+json.dumps({'changed':True,'instance':state['instance'],'leaf_sha256':summary['leaf_sha256'],'not_after':summary['not_after'],'updated_ingress_count':updated_count,'identities_preserved':True,'service_restart_verified':True,'business_sessions_auto_restarted':False,'backup_sha256':backup['archive_sha256']},sort_keys=True))
+
+
+def configure_certificate_automation(args,state):
+    require(args.confirm_certificate_automation and not any((args.output,args.archive,args.archive_sha256,args.distribution,args.confirm_stop,args.confirm_backup,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover,args.confirm_certificate_refresh,args.scheduled,args.leave_stopped)),'定时更新授权需明确--confirm-certificate-automation，不混用其他变更')
+    require(state.get('domain') and not state['certificate_summary'].get('bootstrap'),'不自动更换IP引导证书信任身份')
+    require(not(args.disable_certificate_automation and args.renew),'停用不能同时授权续期')
+    known=install.certificate_units();enabled=not args.disable_certificate_automation
+    for name,text in known.items():
+        path=FILES['units/'+name]
+        if path.exists() or path.is_symlink():
+            raw,_=safe_path(path,0,0o644);require(raw==text.encode(),'证书单元已有未知内容，拒绝接管')
+        elif not enabled:raise BackupError('没有已登记定时单元，不冒充停用成功')
+    new=json.loads(json.dumps(state));new['certificate_automation']={'enabled':enabled,'renew':bool(enabled and args.renew)}
+    if enabled:
+        install.trusted_tool('python3')
+        if args.renew:
+            source=state.get('certificate_source',{})
+            require(source.get('mode')=='domain-issue' or '/etc/letsencrypt/archive/' in source.get('cert',''),'仅已有此域名Certbot来源支持明确续期；其他工具只能同步')
+            install.trusted_tool('certbot')
+        for name,text in known.items():
+            path=FILES['units/'+name]
+            if not path.exists():install.exclusive(path,text.encode(),0o644)
+        install.run([install.trusted_tool('systemd-analyze'),'verify',*[str(FILES['units/'+name]) for name in known]])
+        # Save explicit consent before allowing the fixed scheduled command.
+        replace_owned(FILES['installation/install-state.json'],json.dumps(new,ensure_ascii=False,indent=2).encode(),0,0,0o600)
+        install.run([install.trusted_tool('systemctl'),'daemon-reload'])
+        install.run([install.trusted_tool('systemctl'),'enable','--now','miku-gate-certificate.timer'])
+    else:
+        install.run([install.trusted_tool('systemctl'),'disable','--now','miku-gate-certificate.timer'])
+        replace_owned(FILES['installation/install-state.json'],json.dumps(new,ensure_ascii=False,indent=2).encode(),0,0,0o600)
+    print('MIKU_CERTIFICATE_AUTOMATION '+json.dumps({'instance':state['instance'],'enabled':enabled,'renew_authorized':new['certificate_automation']['renew'],'management_service_restarted':False},sort_keys=True))
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('status','backup','upgrade','rollback','recover'))
+    parser.add_argument('command',choices=('status','backup','upgrade','rollback','recover','certificate-refresh','certificate-automation'))
     parser.add_argument('--output');parser.add_argument('--confirm-stop',action='store_true');parser.add_argument('--confirm-backup',action='store_true');parser.add_argument('--leave-stopped',action='store_true')
     parser.add_argument('--distribution');parser.add_argument('--confirm-upgrade',action='store_true')
     parser.add_argument('--archive');parser.add_argument('--archive-sha256');parser.add_argument('--confirm-rollback',action='store_true');parser.add_argument('--confirm-recover',action='store_true')
+    parser.add_argument('--confirm-certificate-refresh',action='store_true');parser.add_argument('--renew',action='store_true');parser.add_argument('--scheduled',action='store_true')
+    parser.add_argument('--confirm-certificate-automation',action='store_true');parser.add_argument('--disable-certificate-automation',action='store_true')
     args=parser.parse_args(argv)
     require(sys.platform=='linux' and os.geteuid()==0,'维护仅已授权Linux root协调，控制服务仍普通账号')
     if args.command=='status':
-        require(not any((args.output,args.confirm_stop,args.confirm_backup,args.leave_stopped,args.distribution,args.archive,args.archive_sha256,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover)),'status只读，无变更参数')
+        require(not any((args.output,args.confirm_stop,args.confirm_backup,args.leave_stopped,args.distribution,args.archive,args.archive_sha256,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover,args.confirm_certificate_refresh,args.renew,args.scheduled,args.confirm_certificate_automation,args.disable_certificate_automation)),'status只读，无变更参数')
         pending=JOURNAL.exists()
         state=installed_state() if not pending else json.loads(safe_path(JOURNAL,0,0o600)[0])['state']
-        print(json.dumps({'instance':state['instance'],'origin':state['origin'],'vpn':state['vpn'],'cores':state['cores'],'control_active':service_active('miku-gate.service'),'backup_required_before_upgrade':True,'upgrade_restore_implemented':True,'recovery_required':pending},ensure_ascii=False));return
+        print(json.dumps({'instance':state['instance'],'origin':state['origin'],'vpn':state['vpn'],'cores':state['cores'],'control_active':service_active('miku-gate.service'),'backup_required_before_upgrade':True,'upgrade_restore_implemented':True,'recovery_required':pending,'certificate_automation':state.get('certificate_automation',{'enabled':False,'renew':False})},ensure_ascii=False));return
     with maintenance_lock():
         if args.command=='recover':
-            require(args.confirm_recover and args.confirm_stop and not any((args.output,args.archive,args.archive_sha256,args.distribution,args.confirm_backup,args.confirm_upgrade,args.confirm_rollback,args.leave_stopped)),'recover需明确--confirm-recover --confirm-stop且无外部目标')
+            require(args.confirm_recover and args.confirm_stop and not any((args.output,args.archive,args.archive_sha256,args.distribution,args.confirm_backup,args.confirm_upgrade,args.confirm_rollback,args.leave_stopped,args.confirm_certificate_refresh,args.renew,args.scheduled,args.confirm_certificate_automation,args.disable_certificate_automation)),'recover需明确--confirm-recover --confirm-stop且无外部目标')
             recover_transaction();return
         require(not JOURNAL.exists() and not JOURNAL.is_symlink() and not STARTUP_BLOCK.exists() and not STARTUP_BLOCK.is_symlink(),'已有维护事务，先明确recover，不能叠加更改')
         state=installed_state()
+        if args.command=='certificate-automation':
+            configure_certificate_automation(args,state);return
+        require(not args.confirm_certificate_automation and not args.disable_certificate_automation,'定时授权参数不能用于其他更改')
+        if args.command=='certificate-refresh':
+            run_certificate_refresh(args,state);return
+        require(not args.confirm_certificate_refresh and not args.renew and not args.scheduled,'证书专属参数不能用于其他更改')
         if args.command=='backup':
-            require(not any((args.archive,args.archive_sha256,args.distribution,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover)),'备份不混用升级/回滚参数')
+            require(not any((args.archive,args.archive_sha256,args.distribution,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover,args.confirm_certificate_refresh,args.renew,args.scheduled,args.confirm_certificate_automation,args.disable_certificate_automation)),'备份不混用升级/回滚参数')
             run_backup(args,state)
         else:run_change(args,state)
 

@@ -102,8 +102,8 @@ def select_candidates(nodes):
             and node.get("source") == "https://www.vpngate.net/api/iphone/"][:2]
 
 
-def exercise(binary, data):
-    control = UserControl(binary, data)
+def exercise(binary, data, control_factory=UserControl, on_connected=None):
+    control = control_factory(binary, data)
     daemon = None
     attempts = []
     exit_id = None
@@ -167,6 +167,8 @@ def exercise(binary, data):
                          and proof["kernel_verified"] and proof["dns_verified"], "VPN start returned incomplete runtime proof")
             ip = ipaddress.ip_address(proof["exit_ip"])
             live.require(ip.version == 4 and ip.is_global, "no verified public exit IPv4")
+            if on_connected is not None:
+                summary["encrypted_ingress"] = on_connected(control, created, state)
             body = live.fetch_via(("127.0.0.1", port), "example.com", "/", created["exit"]["username"], created["password"])
             live.require(b"Example Domain" in body, "actual authenticated VPN business request failed")
             control.request("POST", exit_prefix + "/probe", expect=200)

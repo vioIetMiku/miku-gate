@@ -36,5 +36,25 @@ class LiveAcceptanceSafety(unittest.TestCase):
         with self.assertRaises(EOFError):
             live.exact(Fake(b"x"), 2)
 
+class SOCKSCoreReplyCompatibility(unittest.TestCase):
+    class Fake:
+        def __init__(self, data): self.data = data
+        def recv(self, n):
+            value, self.data = self.data[:n], self.data[n:]
+            return value
+    def test_core_bound_addresses_are_not_required_to_be_zero(self):
+        replies = (b"\x05\x00\x00\x01\x7f\x00\x00\x01\x12\x34",
+                   b"\x05\x00\x00\x04" + b"\x00" * 15 + b"\x01\x12\x34",
+                   b"\x05\x00\x00\x03\x03abc\x12\x34")
+        for reply in replies:
+            sock = self.Fake(reply + b"payload")
+            live.socks_reply(sock)
+            self.assertEqual(sock.data, b"payload")
+    def test_rejection_truncation_and_unknown_types_fail_closed(self):
+        for reply in (b"\x05\x01\x00\x01" + b"\x00" * 6, b"\x05\x00\x00\x09",
+                      b"\x05\x00\x00\x03\x00", b"\x05\x00\x00\x01\x7f"):
+            with self.assertRaises((RuntimeError, EOFError)):
+                live.socks_reply(self.Fake(reply))
+
 if __name__ == "__main__":
     unittest.main()

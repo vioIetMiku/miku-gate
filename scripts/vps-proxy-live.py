@@ -314,6 +314,25 @@ class Control:
         require(crash or process.returncode == 0, "control service did not exit cleanly")
 
 
+def socks_reply(sock):
+    # The BND address is core-specific metadata, not necessarily zero IPv4.
+    # Consume all valid RFC1928 reply address forms without trusting it as a
+    # business destination or introducing local DNS resolution.
+    reply = exact(sock, 4)
+    require(reply[:3] == b"\x05\x00\x00", "frontend SOCKS connect rejected")
+    if reply[3] == 1:
+        count = 6
+    elif reply[3] == 4:
+        count = 18
+    elif reply[3] == 3:
+        length = exact(sock, 1)[0]
+        require(length > 0, "empty SOCKS bound domain")
+        count = length + 2
+    else:
+        raise RuntimeError("invalid SOCKS bound address type")
+    exact(sock, count)
+
+
 def tunnel(address, host, port, username, password, socks=False):
     sock = socket.create_connection(address, timeout=12)
     try:
@@ -325,7 +344,7 @@ def tunnel(address, host, port, username, password, socks=False):
             require(exact(sock, 2) == b"\x01\x00", "frontend rejected the generated credential")
             name = host.encode()
             sock.sendall(b"\x05\x01\x00\x03" + bytes([len(name)]) + name + struct.pack("!H", port))
-            require(exact(sock, 10) == b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00", "frontend SOCKS connect failed")
+            socks_reply(sock)
         else:
             auth = base64.b64encode((username + ":" + password).encode()).decode()
             authority = host + ":" + str(port)

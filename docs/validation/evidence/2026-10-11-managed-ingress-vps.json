@@ -1,0 +1,67 @@
+{
+  "binary_sha256": "7460e1585f5762ab3b2c8b0df8e0eb3c00955635ab3d3709fdb7bac6ea9232bf",
+  "bundles": [
+    {
+      "applied": false,
+      "client_import_present": true,
+      "core": "xray",
+      "core_started": false,
+      "exclusive_creation_verified": true,
+      "private_modes_verified": true,
+      "server_sha256": "bf9929f605b3c22549ea399abf03380fa3a332d78a41914cebaf99ea64296c1d",
+      "stdout_secrets_absent": true,
+      "success": true
+    },
+    {
+      "applied": false,
+      "client_import_present": true,
+      "core": "sing-box",
+      "core_started": false,
+      "exclusive_creation_verified": true,
+      "private_modes_verified": true,
+      "server_sha256": "dcd2ac8bdf401dea9c9f30d3eb675f8dab99272bd38746a4a3f6786a85018810",
+      "stdout_secrets_absent": true,
+      "success": true
+    }
+  ],
+  "configured_limits": {
+    "cpu": "1",
+    "memory": "128MiB",
+    "seconds_per_command": 15,
+    "swap": "0",
+    "tasks": 32
+  },
+  "host_after_sha256": "28b01f8c9d24a081af2ca5a75167b9afeae5dcff5877030b549cef35cb6cd427",
+  "host_before_sha256": "28b01f8c9d24a081af2ca5a75167b9afeae5dcff5877030b549cef35cb6cd427",
+  "host_unchanged": true,
+  "resource_limits_observed": false,
+  "retained_errors": [],
+  "run_id": "managed-77242eb-6202fb2c6f",
+  "source": "77242eb4fa05e3a1a4fae66e417a7d0bc848f144",
+  "success": true,
+  "targets": [
+    {
+      "address_sha256": "85fefa576aaa0a152a8bdc36e6ea1f7c8875b9eb792f498f895eca7d09a206d8",
+      "alpn": "h2",
+      "checked_at": "2026-10-11T01:27:05.250232744Z",
+      "curve": "X25519",
+      "hostname": "www.microsoft.com",
+      "path": "VPS host-network TLS bootstrap; not VPN traffic",
+      "port": 443,
+      "success": true,
+      "tls_version": "1.3"
+    },
+    {
+      "address_sha256": "64f40109ea00f4f50600b836ec207ef28fe36bd1f1085ae4cc123cd7af9a0d24",
+      "alpn": "h2",
+      "checked_at": "2026-10-11T01:27:05.479717801Z",
+      "curve": "X25519",
+      "hostname": "www.cloudflare.com",
+      "path": "VPS host-network TLS bootstrap; not VPN traffic",
+      "port": 443,
+      "success": true,
+      "tls_version": "1.3"
+    }
+  ],
+  "raw_log_sha256": "c7eff1ee4f35b7398ed1785a180e8ea6619355934fa0f1b7a971b2565d566b3b"
+}

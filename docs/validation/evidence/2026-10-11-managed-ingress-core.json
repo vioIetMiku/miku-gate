@@ -1,0 +1,32 @@
+{
+  "source": "a300500565c80129cf33be1ffb54f490a8ee182a",
+  "workflow_run": 38102651417,
+  "job": 114361602726,
+  "verify_run": 38102648859,
+  "success": true,
+  "log_sha256": "d30664c1975db7af4dfa2b88962fa00a740cad9bdf44d06aa056f8e99171df77",
+  "managed_elapsed_seconds": 13.95,
+  "existing_elapsed_seconds": 2.75,
+  "cases_seconds": {
+    "xray/vless-tls-vision": 1.78,
+    "xray/vless-reality-vision": 6.78,
+    "xray/trojan-tls": 2.78,
+    "sing-box/vless-tls-vision": 0.87,
+    "sing-box/vless-reality-vision": 0.87,
+    "sing-box/trojan-tls": 0.87
+  },
+  "scope": "private loopback network, actual generated official core clients/server and production proxy.Server with fixture-only business Dial; not public VPN or user panel application",
+  "core_versions": {
+    "xray": "26.3.27",
+    "sing-box": "1.14.3"
+  },
+  "resource_limits_observed": false,
+  "prior_failed_runs": [
+    38101599248,
+    38101916205,
+    38102142720,
+    38102377584,
+    38102509382
+  ],
+  "fix": "private cover target closed at3s before Xray 5s cold-start preflight; retain cover15s and bounded client8s, no product trust weakening"
+}

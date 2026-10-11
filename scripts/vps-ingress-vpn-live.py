@@ -138,6 +138,9 @@ def encrypted_path(control,created,state):
         step(core,"starting-isolated-vpn")
         running=control.request("POST",prefix+"/start",expect=200)
         live.require(running["proof"]["kernel_verified"] and running["proof"]["dns_verified"],"restored VPN proof missing")
+        step(core,"verifying-direct-loopback-exit-before-encryption")
+        baseline=live.fetch_via(("127.0.0.1",created["exit"]["port"]),"example.com","/",created["exit"]["username"],created["password"])
+        live.require(b"Example Domain" in baseline,"restarted direct VPN frontend business failed")
         step(core,"starting-owned-core")
         core_state=control.request("POST",prefix+"/ingress/start",{"confirm":True},expect=200)
         live.require(core_state["phase"]=="running" and core_state["listener_owned"] and core_state["core_validated"] and not core_state["data_verified"],"native runtime overstated evidence")
@@ -169,7 +172,7 @@ def encrypted_path(control,created,state):
             observations.append({"core":core,"template":"vless-reality-vision","native_listener_owned":True,"business_https_verified":True,"exit_ip_matches_vpn":True,"exit_ipv4_sha256":hashlib.sha256(raw_ip.encode()).hexdigest(),"client_identity_survives_restart":True,"mutation_refused":True,"exit_stop_revokes_core":True,"listener_public":False})
         except BaseException:
             phase=control.request("GET",prefix+"/ingress/runtime",expect=200)
-            print("ENCRYPTED_VPN_DIAGNOSTICS "+json.dumps({"core":core,"client_categories":client.diagnostics(),"owned_runtime_phase":phase["phase"],"owned_pid_listener":phase.get("listener_owned",False)}),flush=True)
+            print("ENCRYPTED_VPN_DIAGNOSTICS "+json.dumps({"core":core,"client_categories":client.diagnostics(),"owned_runtime_phase":phase["phase"],"owned_pid_listener":phase.get("listener_owned",False),"owned_core_categories":phase.get("diagnostic_categories",[])}),flush=True)
             raise
         finally:client.close()
         control.request("DELETE",prefix+"/ingress",expect=204)

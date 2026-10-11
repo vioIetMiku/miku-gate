@@ -20,16 +20,17 @@ var ErrCore = errors.New("受管核心配置校验/启动/监听归属未通过�
 var ErrExit = errors.New("逻辑出口必须已运行且健康，不能把未启动出口当可用")
 
 type State struct {
-	ExitID        string    `json:"exit_id"`
-	Phase         string    `json:"phase"`
-	Core          string    `json:"core,omitempty"`
-	Listen        string    `json:"listen,omitempty"`
-	PID           int       `json:"pid,omitempty"`
-	CoreValidated bool      `json:"core_validated"`
-	ListenerOwned bool      `json:"listener_owned"`
-	DataVerified  bool      `json:"data_verified"`
-	StartedAt     time.Time `json:"started_at,omitempty"`
-	Reason        string    `json:"reason"`
+	DiagnosticCategories []string  `json:"diagnostic_categories,omitempty"`
+	ExitID               string    `json:"exit_id"`
+	Phase                string    `json:"phase"`
+	Core                 string    `json:"core,omitempty"`
+	Listen               string    `json:"listen,omitempty"`
+	PID                  int       `json:"pid,omitempty"`
+	CoreValidated        bool      `json:"core_validated"`
+	ListenerOwned        bool      `json:"listener_owned"`
+	DataVerified         bool      `json:"data_verified"`
+	StartedAt            time.Time `json:"started_at,omitempty"`
+	Reason               string    `json:"reason"`
 }
 type Source interface {
 	Managed(string) (ingress.ManagedMaterial, string, bool, error)
@@ -110,7 +111,11 @@ func (m *Manager) Snapshot(id string) (State, bool) {
 	if e == nil {
 		return State{}, false
 	}
-	return e.state, true
+	state := e.state
+	if diagnostics, ok := e.process.(interface{ DiagnosticCategories() []string }); ok {
+		state.DiagnosticCategories = diagnostics.DiagnosticCategories()
+	}
+	return state, true
 }
 func (m *Manager) Start(ctx context.Context, id string) (State, error) {
 	m.mu.Lock()

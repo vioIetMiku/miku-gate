@@ -7,12 +7,12 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -86,8 +86,9 @@ func nativeRunner(options Options) Runner {
 			c.Dir = "/"
 			c.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "GOMAXPROCS=1", "GOMEMLIMIT=64MiB"}
 			c.Stdin = bytes.NewReader(raw)
-			c.Stdout = io.Discard
-			c.Stderr = io.Discard
+			diag := new(safeCoreLogs)
+			c.Stdout = diag
+			c.Stderr = diag
 			c.WaitDelay = time.Second
 			c.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
 			return c
@@ -149,15 +150,48 @@ func nativeRunner(options Options) Runner {
 	}
 }
 
+type safeCoreLogs struct {
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+func (d *safeCoreLogs) Write(raw []byte) (int, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.counts == nil {
+		d.counts = map[string]int{}
+	}
+	for _, category := range []string{"failed", "invalid", "authentication", "certificate", "timeout", "refused", "REALITY", "verification", "accepted", "TCP", "read", "EOF", "TLS"} {
+		if strings.Contains(string(raw), category) {
+			d.counts[category]++
+		}
+	}
+	return len(raw), nil
+}
+func (d *safeCoreLogs) Summary() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	labels := make([]string, 0, len(d.counts))
+	for label, count := range d.counts {
+		labels = append(labels, label+"="+strconv.Itoa(count))
+	}
+	sort.Strings(labels)
+	return labels
+}
+
 type nativeProcess struct {
-	cmd     *exec.Cmd
-	done    chan struct{}
-	waitErr error
-	once    sync.Once
+	diagnostics *safeCoreLogs
+	cmd         *exec.Cmd
+	done        chan struct{}
+	waitErr     error
+	once        sync.Once
 }
 
 func startOwned(ctx context.Context, cmd *exec.Cmd) (*nativeProcess, error) {
 	p := &nativeProcess{cmd: cmd, done: make(chan struct{})}
+	if diagnostics, ok := cmd.Stderr.(*safeCoreLogs); ok {
+		p.diagnostics = diagnostics
+	}
 	ready := make(chan error, 1)
 	go func() {
 		runtime.LockOSThread()
@@ -276,4 +310,11 @@ func processRestricted(pid int) bool {
 		}
 	}
 	return true
+}
+
+func (p *nativeProcess) DiagnosticCategories() []string {
+	if p.diagnostics == nil {
+		return nil
+	}
+	return p.diagnostics.Summary()
 }

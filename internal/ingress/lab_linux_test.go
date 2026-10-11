@@ -76,7 +76,7 @@ func labCertificates(t *testing.T, dir string) (string, string, string) {
 		t.Fatal(e)
 	}
 	certFile, keyFile, caFile := filepath.Join(dir, "server.pem"), filepath.Join(dir, "server.key"), filepath.Join(dir, "ca.pem")
-	for path, data := range map[string][]byte{certFile: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), keyFile: pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encoded}), caFile: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})} {
+	for path, data := range map[string][]byte{certFile: append(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})...), keyFile: pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encoded}), caFile: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})} {
 		if e = os.WriteFile(path, data, 0600); e != nil {
 			t.Fatal(e)
 		}
@@ -116,7 +116,7 @@ func (d *coreDiagnostics) Write(raw []byte) (int, error) {
 		d.counts = map[string]int{}
 	}
 	// fixed categories only; no raw logs, keys, UUIDs or configs enter CI output.
-	for _, item := range []struct{ needle, label string }{{"REALITY verification failed", "reality_verification_failed"}, {"processed invalid connection", "invalid_connection"}, {"failed to read", "read_failed"}, {"failed to connect", "connect_failed"}, {"authentication", "authentication_error"}, {"TLS", "tls_log"}, {"REALITY", "reality_log"}, {"connection refused", "connection_refused"}, {"EOF", "eof"}, {"timeout", "timeout"}, {"invalid", "invalid_input"}, {"failed", "failure_log"}} {
+	for _, item := range []struct{ needle, label string }{{"REALITY verification failed", "reality_verification_failed"}, {"processed invalid connection", "invalid_connection"}, {"failed to read", "read_failed"}, {"failed to connect", "connect_failed"}, {"authentication", "authentication_error"}, {"TLS", "tls_log"}, {"REALITY", "reality_log"}, {"connection refused", "connection_refused"}, {"EOF", "eof"}, {"timeout", "timeout"}, {"invalid", "invalid_input"}, {"failed", "failure_log"}, {"payload[0]", "reality_record_padding"}, {"invalid key", "invalid_key"}, {"invalid user", "invalid_user"}, {"invalid flow", "invalid_flow"}, {"invalid response", "invalid_response"}, {"invalid signature", "invalid_signature"}, {"invalid padding", "invalid_padding"}, {"target sent incorrect", "target_serverhello_incomplete"}, {"handshake did not complete", "target_handshake_incomplete"}, {"server name mismatch", "server_name_mismatch"}, {"validation criteria not met", "reality_authentication_rejected"}} {
 		if strings.Contains(string(raw), item.needle) {
 			d.counts[item.label]++
 		}

@@ -400,6 +400,9 @@ func (m *Manager) Check(ctx context.Context, id string) (State, error) {
 	err := m.probe(ctx, e)
 	state, exists := m.Snapshot(id)
 	if !exists {
+		if err != nil {
+			return State{ExitID: id, Phase: "stopped"}, err
+		}
 		return State{ExitID: id, Phase: "stopped"}, ErrClosed
 	}
 	return state, err
@@ -439,6 +442,12 @@ func (m *Manager) probe(ctx context.Context, e *entry) error {
 		e.state.Reason = Reason(err)
 	}
 	id := e.state.ExitID
+	// Health failure withdraws the listener/session immediately, so recovery
+	// never probes/starts a replacement while old business forwarding lives.
+	if err != nil {
+		e.state.ProxyListening = false
+		e.cancel()
+	}
 	m.mu.Unlock()
 	if wasHealthy != (err == nil) && e.ctx.Err() == nil {
 		level, kind := "info", "exit.upstream_recovered"

@@ -7,6 +7,7 @@ import {
   ShieldWarning,
   Trash,
 } from '@phosphor-icons/react';
+import { RecoverySettings } from './RecoverySettings';
 import { IPIntelligence } from './IPIntelligence';
 import { Modal } from './Modal';
 import {
@@ -449,6 +450,7 @@ export function RuntimeView({ exitID, changed }: { exitID: string; changed: () =
           {error}
         </div>
       )}
+      <RecoverySettings exitID={exitID} />
       {intelligenceOpen && (
         <IPIntelligence
           selection={{ kind: 'exit', id: exitID, name: '当前实测公网出口' }}

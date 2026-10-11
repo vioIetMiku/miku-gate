@@ -353,6 +353,9 @@ func (s *Store) DeleteExit(id string) error {
 	if n == 0 {
 		return domain.ErrNotFound
 	}
+	if _, err = tx.Exec("DELETE FROM metadata WHERE key=?", "recovery-v1:"+id); err != nil {
+		return err
+	}
 	if err = event(tx, "info", "exit.deleted", "已删除出口配置", id); err != nil {
 		return err
 	}

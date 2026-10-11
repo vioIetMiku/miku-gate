@@ -29,14 +29,24 @@ func (a *Server) stopped(fn func(http.ResponseWriter, *http.Request, domain.Sess
 			}
 			return a.gateway.WithStopped(r.PathValue("id"), func() error { fn(w, r, session); return nil })
 		}
-		if a.cores != nil {
-			if err := a.cores.WithStopped(r.PathValue("id"), operation); err != nil {
-				a.coreError(w, err)
+		locked := func() error {
+			if a.cores != nil {
+				return a.cores.WithStopped(r.PathValue("id"), operation)
 			}
-			return
+			return operation()
 		}
-		if err := operation(); err != nil {
-			a.runtimeError(w, err)
+		var err error
+		if a.recovery != nil {
+			err = a.recovery.Control(r.Context(), r.PathValue("id"), locked)
+		} else {
+			err = locked()
+		}
+		if err != nil {
+			if a.cores != nil {
+				a.coreError(w, err)
+			} else {
+				a.runtimeError(w, err)
+			}
 		}
 	}
 }

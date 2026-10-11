@@ -291,29 +291,45 @@ func TestPortConflictKeepsExistingListener(t *testing.T) {
 		t.Fatal("session leaked on collision")
 	}
 }
-func TestHealthDegradesAndRecoversWithoutChangingListener(t *testing.T) {
+func TestHealthFailureWithdrawsListenerBeforeExplicitReconnection(t *testing.T) {
 	source := newSource(t)
 	var bad atomic.Bool
-	session := &fakeSession{probe: func(context.Context) (Proof, error) {
-		if bad.Load() {
-			return Proof{}, upstream.ErrDNS
-		}
-		return Proof{Kind: "socks5", ProtectionMode: "proxy_only", DNSVerified: true}, nil
-	}}
-	m := managerFor(t, source, Options{Factory: func(context.Context, domain.Exit, *domain.UpstreamConfig) (Session, error) { return session, nil }})
-	start, err := m.Start(t.Context(), "one")
-	if err != nil {
-		t.Fatal(err)
+	factory := func(context.Context, domain.Exit, *domain.UpstreamConfig) (Session, error) {
+		return &fakeSession{probe: func(context.Context) (Proof, error) {
+			if bad.Load() {
+				return Proof{}, upstream.ErrDNS
+			}
+			return Proof{Kind: "socks5", ProtectionMode: "proxy_only", DNSVerified: true}, nil
+		}}, nil
+	}
+	m := managerFor(t, source, Options{Factory: factory})
+	start, e := m.Start(t.Context(), "one")
+	if e != nil {
+		t.Fatal(e)
 	}
 	bad.Store(true)
-	state, err := m.Check(t.Context(), "one")
-	if !errors.Is(err, upstream.ErrDNS) || state.Phase != "degraded" || state.Healthy || !state.ProxyListening || state.Proof.DNSVerified {
-		t.Fatal("false health", state, err)
+	state, e := m.Check(t.Context(), "one")
+	if !errors.Is(e, upstream.ErrDNS) || state.Healthy || state.ProxyListening || state.Proof.DNSVerified {
+		t.Fatal("failed health still forwarded", state, e)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if _, ok := m.Snapshot("one"); !ok {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if _, ok := m.Snapshot("one"); ok {
+		t.Fatal("failed health still owns old session")
+	}
+	if connection, e := net.DialTimeout("tcp4", start.Listen, 100*time.Millisecond); e == nil {
+		connection.Close()
+		t.Fatal("failed listener still accepts")
 	}
 	bad.Store(false)
-	state, err = m.Check(t.Context(), "one")
-	if err != nil || state.Phase != "running" || state.Listen != start.Listen {
-		t.Fatal("recovery changed logical entry", state, err)
+	state, e = m.Start(t.Context(), "one")
+	if e != nil || !state.Healthy || !state.ProxyListening {
+		t.Fatal("explicit reconnect not verified", state, e)
 	}
 }
 func TestStrictResidentialDoesNotInventEvidence(t *testing.T) {

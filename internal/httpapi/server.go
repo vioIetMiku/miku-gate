@@ -30,6 +30,7 @@ import (
 	"mikugate/internal/management"
 	"mikugate/internal/netexec"
 	"mikugate/internal/paneladapter"
+	"mikugate/internal/recovery"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
 	"mikugate/internal/vpngate"
@@ -45,6 +46,8 @@ type SandboxClient interface {
 	Capabilities(context.Context) (executoripc.Capabilities, error)
 }
 type Options struct {
+	RecoveryCreated           func(*recovery.Manager)
+	RecoveryContext           context.Context
 	PanelFactory              func(paneladapter.Endpoint) (paneladapter.Runtime, error)
 	LookupIntelligence        func(context.Context, string) (ipintel.Report, error)
 	ResolveIntelligenceDomain func(context.Context, string) ([]netip.Addr, error)
@@ -60,6 +63,7 @@ type Options struct {
 	VPN                       *vpnipc.Client
 }
 type Server struct {
+	recovery                  *recovery.Manager
 	panelFactory              func(paneladapter.Endpoint) (paneladapter.Runtime, error)
 	panelPreviews             map[string]panelPreview
 	panelOperations           chan struct{}
@@ -154,7 +158,15 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 		panelFactory = paneladapter.New
 	}
 	a := &Server{panelFactory: panelFactory, panelPreviews: map[string]panelPreview{}, panelOperations: make(chan struct{}, 1), intelligenceSlot: make(chan struct{}, 1), intelligenceLookupFunc: intel, resolveIntelligenceDomain: resolver, managementIdentity: options.ManagementIdentity, publicEndpoint: publicEndpoint, cores: options.Cores, assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	if options.RecoveryContext != nil {
+		a.createRecovery(options.RecoveryContext)
+		if options.RecoveryCreated != nil && a.recovery != nil {
+			options.RecoveryCreated(a.recovery)
+		}
+	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/exits/{id}/recovery", a.auth(a.getRecovery))
+	mux.HandleFunc("PUT /api/exits/{id}/recovery", a.auth(a.saveRecovery))
 	mux.HandleFunc("POST /api/host/panel/inspect", a.auth(a.panelInspect))
 	mux.HandleFunc("POST /api/host/panel/plan", a.auth(a.panelPlan))
 	mux.HandleFunc("POST /api/host/panel/apply", a.auth(a.panelApply))
@@ -486,7 +498,7 @@ func (a *Server) deleteExit(w http.ResponseWriter, r *http.Request, s domain.Ses
 	}
 	w.WriteHeader(204)
 }
-func (a *Server) startExit(w http.ResponseWriter, r *http.Request, s domain.Session) {
+func (a *Server) startExitLocked(w http.ResponseWriter, r *http.Request, s domain.Session) {
 	if a.gateway != nil {
 		if !a.acquireSandbox(w) {
 			return
@@ -522,7 +534,7 @@ func (a *Server) startExit(w http.ResponseWriter, r *http.Request, s domain.Sess
 	}
 	fail(w, 409, "executor_unavailable", reason)
 }
-func (a *Server) stopExit(w http.ResponseWriter, r *http.Request, s domain.Session) {
+func (a *Server) stopExitLocked(w http.ResponseWriter, r *http.Request, s domain.Session) {
 	if a.cores != nil {
 		if err := a.cores.Stop(r.Context(), r.PathValue("id")); err != nil {
 			a.coreError(w, err)

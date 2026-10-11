@@ -28,6 +28,7 @@ import (
 	"mikugate/internal/hostinventory"
 	"mikugate/internal/httpapi"
 	"mikugate/internal/management"
+	"mikugate/internal/recovery"
 	"mikugate/internal/runlock"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
@@ -225,6 +226,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	var options httpapi.Options
+	options.RecoveryContext = ctx
+	var automaticRecovery *recovery.Manager
+	options.RecoveryCreated = func(manager *recovery.Manager) { automaticRecovery = manager }
 	options.PublicOrigin = *publicOrigin
 	if managementTLS != nil {
 		options.ManagementIdentity = &managementIdentity
@@ -303,6 +307,9 @@ func run() error {
 	handler, err := httpapi.NewWithOptions(s, assets, options)
 	if err != nil {
 		return err
+	}
+	if automaticRecovery != nil {
+		defer automaticRecovery.Close()
 	}
 	server := &http.Server{TLSConfig: managementTLS, Addr: *listen, Handler: handler, BaseContext: func(net.Listener) context.Context { return ctx }, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
 	listener, err := net.Listen("tcp", *listen)

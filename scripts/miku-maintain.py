@@ -71,6 +71,12 @@ def installed_state():
         require(users[name]==[account.pw_uid,account.pw_gid] and account.pw_uid>0,'安装账号与登记身份不匹配')
     raw,_=safe_path(FILES['binary/miku-gate'],0,0o755)
     require(hashlib.sha256(raw).hexdigest()==state['binary_sha256'],'安装程序已漂移，不自动备份为可信状态')
+    helpers=state.get('maintenance_sha256')
+    if helpers is not None:
+        require(isinstance(helpers,dict) and set(helpers)=={'miku-install.py','miku-maintain.py'},'维护协调器登记不完整')
+        for name,expected_hash in helpers.items():
+            raw,_=safe_path(FILES['binary/miku-gate'].with_name(name),0,0o644)
+            require(hashlib.sha256(raw).hexdigest()==expected_hash,'维护协调器已漂移，不自动认定可信')
     require(DATA.resolve(strict=True)==DATA and DATA.stat().st_uid==users['miku-gate'][0] and stat.S_IMODE(DATA.stat().st_mode)==0o700,'数据目录归属异常')
     return state
 
@@ -107,6 +113,9 @@ def collect(state):
         if member.endswith('miku-gate-vpn.service') and not state['vpn']:continue
         raw,info=safe_path(path,0,0o755 if member=='binary/miku-gate' else 0o600 if member.endswith('install-state.json') else 0o644)
         resources.append((member,raw,info.st_uid,info.st_gid,stat.S_IMODE(info.st_mode)))
+    for name in state.get('maintenance_sha256',{}):
+        raw,info=safe_path(FILES['binary/miku-gate'].with_name(name),0,0o644)
+        resources.append(('binary/'+name,raw,info.st_uid,info.st_gid,0o644))
     # Inspect through the same ordinary identity, so sqlite cannot leave a
     # root-owned WAL/SHM file in the control account's private data directory.
     inspector=r"""import json,sqlite3,sys

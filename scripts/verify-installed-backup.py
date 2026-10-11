@@ -22,6 +22,14 @@ class VerifyError(RuntimeError):pass
 def require(value,message):
     if not value:raise VerifyError(message)
 
+def create_private_fixture(request):
+    created,_=request('POST','/api/exits',{'name':'private backup consistency fixture','country':'JP'},expected=201)
+    id=created['exit']['id'];secret='backup-fixture-'+os.urandom(12).hex()
+    request('PUT','/api/exits/'+id+'/upstream',{'kind':'socks5','host':'127.0.0.1','port':19090,'username':'backup-fixture','password':secret,'allow_loopback':True,'dns':'cloudflare'},expected=204)
+    before,_=request('GET','/api/exits/'+id+'/upstream')
+    require(before['configured'] and before['has_password'] and 'password' not in before,'saved upstream metadata leaked private data')
+    return id,secret,before
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--private-init-log',required=True)
@@ -49,15 +57,11 @@ def main():
                 if csrf:headers+='X-CSRF-Token: '+csrf+'\r\n'
                 secure.sendall((method+' '+path+' HTTP/1.1\r\n'+headers+'\r\n').encode()+content)
                 response=http.client.HTTPResponse(secure);response.begin();payload=response.read(65537)
-                require(response.status==expected and len(payload)<=65536,'bounded installed HTTPS API failed: '+method+' '+path.rsplit('/',1)[-1])
+                require(response.status==expected and len(payload)<=65536,'bounded installed HTTPS API failed: '+method+' '+path.rsplit('/',1)[-1]+' status='+str(response.status)+' expected='+str(expected))
                 return json.loads(payload) if payload else None,response.getheader('Set-Cookie')
     session,session_cookie=request('POST','/api/auth/login',{'username':'admin','password':password})
     cookie=session_cookie.split(';',1)[0];csrf=session['csrf']
-    created,_=request('POST','/api/exits',{'name':'private backup consistency fixture','country':'JP'})
-    id=created['exit']['id'];secret='backup-fixture-'+os.urandom(12).hex()
-    request('PUT','/api/exits/'+id+'/upstream',{'kind':'socks5','host':'127.0.0.1','port':9,'username':'backup-fixture','password':secret,'allow_loopback':True,'dns':'cloudflare'},expected=204)
-    before,_=request('GET','/api/exits/'+id+'/upstream')
-    require(before['configured'] and before['has_password'] and 'password' not in before,'saved upstream metadata leaked private data')
+    id,secret,before=create_private_fixture(request)
     key=Path('/var/lib/miku-gate/data/miku-gate.db.key')
     require(key.is_file(),'paired credential key absent')
     original_key_sha=hashlib.sha256(key.read_bytes()).hexdigest()
@@ -84,4 +88,5 @@ def main():
 if __name__=='__main__':
     try:main()
     except (VerifyError,OSError,ValueError,KeyError,subprocess.TimeoutExpired) as exc:
-        print('INSTALLED_BACKUP_FAILED '+type(exc).__name__,file=__import__('sys').stderr);__import__('sys').exit(1)
+        detail=str(exc) if isinstance(exc,VerifyError) else 'external error; no raw diagnostics'
+        print('INSTALLED_BACKUP_FAILED '+type(exc).__name__+': '+detail,file=__import__('sys').stderr);__import__('sys').exit(1)

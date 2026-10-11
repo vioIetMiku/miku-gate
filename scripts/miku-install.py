@@ -137,6 +137,46 @@ def validate_binary(path,expected):
     raw=p.read_bytes();require(digest(raw)==expected,'本地程序与明确提供校验值不匹配')
     return p.resolve(strict=True),raw
 
+DISTRIBUTION_SCRIPTS=('install-vps.sh','miku-install.py','miku-maintain.py')
+
+def release_metadata(raw,arch):
+    require(len(raw)<=16384,'发行元数据过大')
+    meta=json.loads(raw)
+    require(isinstance(meta,dict) and meta.get('format')==1,'只支持新版已校验发行包；旧包请明确提供--binary和--sha256')
+    require(meta.get('platform')=='linux-'+arch,'发行包平台与当前VPS不匹配')
+    require(isinstance(meta.get('version'),str) and re.fullmatch(r'v0\.[0-9]+\.[0-9]+(?:-dev\.[0-9]+)?',meta['version']) is not None,'发行版本格式无效')
+    require(isinstance(meta.get('source'),str) and re.fullmatch(r'[a-f0-9]{40}',meta['source']) is not None,'发行源码提交无效')
+    require(isinstance(meta.get('binary_sha256'),str) and re.fullmatch(r'[a-f0-9]{64}',meta['binary_sha256']) is not None,'发行程序摘要无效')
+    hashes=meta.get('script_sha256')
+    require(isinstance(hashes,dict) and set(hashes)==set(DISTRIBUTION_SCRIPTS) and all(isinstance(v,str) and re.fullmatch(r'[a-f0-9]{64}',v) for v in hashes.values()),'安装/维护脚本校验清单不完整')
+    return meta
+
+def distribution_binary(directory,arch):
+    base=Path(directory)
+    require(base.is_absolute() and base.resolve(strict=True)==base,'发行包目录须无链接的绝对路径')
+    # Metadata and scripts must satisfy the same root ownership/path policy as
+    # the verified executable. The archive hash remains the external trust root.
+    metadata=base/'BUILD.json'
+    require(metadata.lstat().st_size<=16384,'发行元数据过大')
+    _,raw=validate_binary(str(metadata),digest(metadata.read_bytes()))
+    meta=release_metadata(raw,arch)
+    for name,expected in meta['script_sha256'].items():
+        validate_binary(str(base/'scripts'/name),expected)
+    binary,raw=validate_binary(str(base/'bin/miku-gate'),meta['binary_sha256'])
+    require(len(raw)==meta.get('binary_bytes'),'发行程序长度与元数据不匹配')
+    return binary,raw,meta
+
+def maintenance_tools():
+    # Capture reviewed source before any project write. Never execute an
+    # ordinary user's mutable maintenance coordinator as root after installing.
+    result={}
+    for name in ('miku-install.py','miku-maintain.py'):
+        path=Path(__file__).resolve(strict=True).with_name(name)
+        require(path.lstat().st_size<=256<<10,'维护协调器过大')
+        _,raw=validate_binary(str(path),digest(path.read_bytes()))
+        result[name]=raw
+    return result
+
 class HTTPSRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,req,fp,code,msg,headers,newurl):
         u=urllib.parse.urlparse(newurl)
@@ -253,12 +293,15 @@ def apply(binary_raw,expected,plan,prompt):
     refusal_preflight()
     require(port_available(plan['port']),'管理端口已被占用，不抢占已有服务')
     core_downloads={core:core_bytes(core,plan['arch']) for core in plan['cores']}
+    helpers=maintenance_tools()
     created=[];started=[];users_created=[]
     print('开始明确同意的安装：软件包/ACME证书若已安装或签发不会自动卸载/撤销；本安装器不改宿主路由、防火墙或现有面板。')
     try:
         # Exact first-install resources only; never replace preexisting paths.
         for p,mode in [(LIB,0o755),(ETC,0o700),(VAR,0o755)]:make_dir(p,mode);created.append(p)
         copied=LIB/'miku-gate';exclusive(copied,binary_raw,0o755);created.append(copied);require(digest(copied.read_bytes())==expected,'安装程序hash不匹配')
+        for name,raw in helpers.items():
+            target=LIB/name;exclusive(target,raw,0o644);created.append(target)
         for user in (USERS if plan['vpn'] else USERS[:1]):
             run([trusted_tool('useradd'),'--system','--no-create-home','--shell','/usr/sbin/nologin','--user-group',user]);users_created.append(user)
         uids={u:(pwd.getpwnam(u).pw_uid,pwd.getpwnam(u).pw_gid) for u in users_created}
@@ -293,7 +336,7 @@ def apply(binary_raw,expected,plan,prompt):
             info=p.lstat();require(stat.S_ISDIR(info.st_mode) and info.st_uid==0 and not info.st_mode&0o022 and not p.is_symlink(),'VPN IPC根路径不安全')
         units=unit_text(copied,data,plan['origin'],plan['port'],cert,key,certificate['mode']=='ip-bootstrap',plan['vpn'],instance,uids,cores)
         for name,text in units.items():p=UNITS/name;exclusive(p,text.encode(),0o644);created.append(p)
-        state={k:v for k,v in plan.items() if k!='certificate'};state.update(binary_sha256=expected,instance=instance,core_sources=core_reports,certificate_summary=summary,certificate_source=certificate,users=uids)
+        state={k:v for k,v in plan.items() if k!='certificate'};state.update(binary_sha256=expected,maintenance_sha256={name:digest(raw) for name,raw in helpers.items()},instance=instance,core_sources=core_reports,certificate_summary=summary,certificate_source=certificate,users=uids)
         exclusive(ETC/'install-state.json',json.dumps(state,ensure_ascii=False,indent=2).encode());created.append(ETC/'install-state.json')
         run([trusted_tool('systemd-analyze'),'verify',*[str(UNITS/n) for n in units]])
         run([trusted_tool('systemctl'),'daemon-reload'])
@@ -304,6 +347,7 @@ def apply(binary_raw,expected,plan,prompt):
             run([trusted_tool('systemctl'),'is-active','--quiet','miku-gate.service'])
             verify_served_management(plan,cert,summary)
             if plan['vpn']:verify_vpn_executor(copied,instance,uids)
+        print('维护状态：sudo python3 -B /usr/local/lib/miku-gate/miku-maintain.py status')
         print('管理地址：'+plan['origin'])
         print('证书指纹SHA256：'+summary['leaf_sha256'])
         if certificate['mode']=='ip-bootstrap':print('这是自签IP引导证书，浏览器不默认信任。通过已信任SSH通道/安装输出核对指纹或导入certificate.pem后再输入密码，不能忽略证书警告。')
@@ -333,10 +377,18 @@ def tun_available():return Path('/dev/net/tun').exists()
 
 def main(argv=None,prompt=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--binary',required=True);parser.add_argument('--sha256',required=True);parser.add_argument('--plan-only',action='store_true');parser.add_argument('--answers',help='明确提供的本机答案JSON；没有密码或程序命令字段')
+    parser.add_argument('--binary');parser.add_argument('--sha256');parser.add_argument('--distribution',help='已校验解压发行包的绝对目录；默认安装脚本所在包');parser.add_argument('--plan-only',action='store_true');parser.add_argument('--answers',help='明确提供的本机答案JSON；没有密码或程序命令字段')
     args=parser.parse_args(argv)
     arch=platform_gate()
-    binary,raw=validate_binary(args.binary,args.sha256)
+    require(bool(args.binary)==bool(args.sha256),'--binary和--sha256必须成对提供')
+    require(not (args.binary and args.distribution),'明确程序模式与发行包模式不能混用')
+    release=None
+    if args.binary:
+        binary,raw=validate_binary(args.binary,args.sha256)
+    else:
+        binary,raw,release=distribution_binary(args.distribution or Path(__file__).resolve(strict=True).parent.parent,arch)
+        args.sha256=release['binary_sha256']
+        print('本地发行包：'+release['version']+' / '+release['platform']+' / '+release['source'])
     if prompt is None:
         answers={}
         if args.answers:
@@ -364,6 +416,7 @@ def main(argv=None,prompt=None):
     certificate=certificate_plan(binary,prompt,domain,ip,args.plan_only)
     authority=domain or ip;origin='https://'+authority+(':'+str(port) if port!=443 else '')
     plan={'arch':arch,'vpn':vpn,'ip':ip,'domain':domain,'origin':origin,'port':port,'cores':cores,'reuse_requested':reuse,'certificate':certificate,'write_paths':[str(x) for x in initial_paths()],'host_routes_changed':False,'existing_service_configs_changed':False,'firewall_changed':False}
+    if release:plan['distribution']={k:release[k] for k in ('version','source','platform')}
     print('明确安装计划：'+json.dumps({k:v for k,v in plan.items() if k!='certificate'},ensure_ascii=False,indent=2))
     print('账号：'+', '.join(USERS if vpn else USERS[:1])+'；管理384MiB/VPN256MiB上限，默认同时1出口（不是容量承诺）。')
     if args.plan_only:

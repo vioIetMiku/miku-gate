@@ -43,7 +43,19 @@ jobs:
           sudo install -m 555 .cache/installation-lab/miku-gate "$stage/miku-gate"
           sudo install -m 555 .cache/installation-lab/cli.test "$stage/cli.test"
           sudo install -m 555 .cache/installation-lab/core-runtime.test "$stage/core-runtime.test"
-          sudo install -m 555 scripts/miku-install.py "$stage/miku-install.py"
+          sudo install -d -m 755 "$stage/bin" "$stage/scripts"
+          sudo install -m 555 .cache/installation-lab/miku-gate "$stage/bin/miku-gate"
+          for name in install-vps.sh miku-install.py miku-maintain.py; do
+            sudo install -m 444 "scripts/$name" "$stage/scripts/$name"
+          done
+          python3 - "$stage" "$GITHUB_SHA" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          stage=Path(sys.argv[1]);binary=stage/'bin/miku-gate'
+          meta={'format':1,'version':'v0.1.0-dev.11','source':sys.argv[2],'platform':'linux-amd64','binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'binary_bytes':binary.stat().st_size,'script_sha256':{name:hashlib.sha256((stage/'scripts'/name).read_bytes()).hexdigest() for name in ('install-vps.sh','miku-install.py','miku-maintain.py')}}
+          Path('.cache/installation-lab/BUILD.json').write_text(json.dumps(meta))
+          PY
+          sudo install -m 444 .cache/installation-lab/BUILD.json "$stage/BUILD.json"
           echo "MIKU_INSTALL_STAGE=$stage" >> "$GITHUB_ENV"
       - name: Actual ordinary-user IP HTTPS CLI, Host Origin and Secure session
         shell: bash
@@ -67,7 +79,7 @@ jobs:
           PY
           sha=$(sha256sum "$MIKU_INSTALL_STAGE/miku-gate" | cut -d' ' -f1)
           sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 \
-            python3 -B "$MIKU_INSTALL_STAGE/miku-install.py" --binary "$MIKU_INSTALL_STAGE/miku-gate" --sha256 "$sha" \
+            sh "$MIKU_INSTALL_STAGE/scripts/install-vps.sh" \
               --plan-only --answers "$PWD/.cache/installation-lab/answers.json" | tee .cache/installation-lab/plan-result.txt
           test ! -e /usr/local/lib/miku-gate
           test ! -e /etc/miku-gate
@@ -82,7 +94,7 @@ jobs:
           # Output contains the disposable one-time admin password: retain only a
           # private local file, never print or upload this initialization log.
           sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 \
-            python3 -B "$MIKU_INSTALL_STAGE/miku-install.py" --binary "$MIKU_INSTALL_STAGE/miku-gate" --sha256 "$sha" \
+            sh "$MIKU_INSTALL_STAGE/scripts/install-vps.sh" \
               --answers "$PWD/.cache/installation-lab/answers.json" > .cache/installation-lab/private-install.log 2>&1
           chmod 600 .cache/installation-lab/private-install.log
           sudo systemctl is-active --quiet miku-gate.service

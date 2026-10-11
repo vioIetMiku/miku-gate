@@ -36,4 +36,16 @@ class ConfidentialBackupSafety(unittest.TestCase):
         self.assertEqual(len(maintenance.FILES),4)
         self.assertNotIn('restore',maintenance.main.__doc__ or '')
         self.assertNotIn('nginx',str(maintenance.FILES))
+class InstalledBackupFixtureContract(unittest.TestCase):
+    def test_real_api_creation_status_and_unprivileged_loopback_port(self):
+        spec=importlib.util.spec_from_file_location('backup_verify',Path(__file__).with_name('verify-installed-backup.py'))
+        verifier=importlib.util.module_from_spec(spec);spec.loader.exec_module(verifier)
+        view={'configured':True,'has_password':True}
+        request=mock.Mock(side_effect=[({'exit':{'id':'fixture-id'}},None),(None,None),(view,None)])
+        id,secret,before=verifier.create_private_fixture(request)
+        self.assertEqual(id,'fixture-id');self.assertEqual(before,view);self.assertTrue(secret.startswith('backup-fixture-'))
+        self.assertEqual(request.call_args_list[0].kwargs['expected'],201)
+        body=request.call_args_list[1].args[2]
+        self.assertGreaterEqual(body['port'],1024);self.assertEqual(body['host'],'127.0.0.1');self.assertTrue(body['allow_loopback'])
+
 if __name__=='__main__':unittest.main()

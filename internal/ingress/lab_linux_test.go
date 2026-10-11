@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -103,6 +104,7 @@ func labClientConfig(core string, port, server int) map[string]any {
 }
 
 type coreDiagnostics struct {
+	recent string
 	mu     sync.Mutex
 	counts map[string]int
 	bytes  int
@@ -112,6 +114,21 @@ func (d *coreDiagnostics) Write(raw []byte) (int, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.bytes += len(raw)
+	// Fixture-only output: omit startup lines, redact all long encoded tokens,
+	// UUIDs and file paths before retaining a bounded readable failure message.
+	for _, line := range strings.Split(string(raw), "\n") {
+		if !(strings.Contains(line, "failed") || strings.Contains(line, "invalid") || strings.Contains(line, "REALITY:")) {
+			continue
+		}
+		line = regexp.MustCompile(`[A-Za-z0-9_+/=-]{24,}`).ReplaceAllString(line, "<redacted-token>")
+		line = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}`).ReplaceAllString(line, "<redacted-id>")
+		line = regexp.MustCompile(`/[^ ]+`).ReplaceAllString(line, "<path>")
+		if len(line) > 640 {
+			line = line[:640]
+		}
+		d.recent = line
+	}
+
 	// Tokens are a closed vocabulary from protocol/runtime diagnostics, not raw
 	// log words (which may be encoded credentials). Case-independent matching.
 	lower := strings.ToLower(string(raw))
@@ -143,7 +160,7 @@ func (d *coreDiagnostics) Summary() string {
 		labels = append(labels, fmt.Sprintf("%s=%d", label, count))
 	}
 	sort.Strings(labels)
-	return fmt.Sprintf("bytes=%d categories=%s", d.bytes, strings.Join(labels, ","))
+	return fmt.Sprintf("bytes=%d categories=%s fixture_error=%q", d.bytes, strings.Join(labels, ","), d.recent)
 }
 
 type coreProcess struct {

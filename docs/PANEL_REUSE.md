@@ -37,3 +37,11 @@ apply需要`--inbound=匿名ID --exit-id=实际逻辑出口ID --expected-templat
 真实回环HTTP面板夹具验证CSRF登录、持久模板读/写、面板自身restart接口与旧模板恢复；管理员API旅程验证读配置同意/认证、脱敏计划、实际活动出口预约、写失败旧状态恢复、应用后生成路由、加密快照与网页回滚。store验证大分块快照、错记录绑定、panel-only缺key不能再生、8份额度、待恢复快照不能删除。新Chromium用实际Miku服务/真实本机面板API夹具，不用mock Miku响应，核对网页登录→CSRF→入口摘要→无健康选择不应用→手机布局。
 
 以上夹具不是官方3x-ui安装或公网端到端业务证明。面板真实版本兼容/外部并发编辑、持久面板入口→实际VPN业务及进程断电恢复仍待验证；独立Xray/sing-box旧服务配置的持久应用/恢复也未被本适配替代。dev.12已发布包不包含网页复用，dev.13主线开发范围另记录。
+
+## 官方面板实装兼容专项
+
+新增手动official-panel-lab，固定3x-ui v3.9.0（官方2026-10-03发布）Linux amd64归档，SHA256=d7cbe0bf6358ee0d2117c24fd2efb483502e411d38e2ea59bd0bf5e7a3e39390、81,815,383字节。仅取确切panel/embedded Xray/geodata普通成员，不运行安装脚本。
+
+在可丢弃Ubuntu匿名网络空间（只有lo）、普通UID65534/NoNewPrivileges，panel私有DB/bin/log独立目录：实际官方CLI初始化本机管理、真实登录/CSRF、通过官方API新建两个保留客户端UUID的TLS/Vision节点；使用Miku生产paneladapter和持久模板生成器保存选定路由，真实客户端→panel Xray→Miku认证SOCKS→受控回环目标验证，panel进程重启后路由/身份仍保留，代理停止无direct后备，最后原模板/节点一致回滚。
+
+没有访问用户VPS面板/宿主DB/服务，不使用公网VPN或TLS insecure，不回显登录密码/客户端私钥，不上传原面板日志。此用例执行前只代表新验收已经接线；实际结果必须按固定源CI读取。其他面板版本、用户真实环境、公网或实际VPN仍不由该专项自动证明。

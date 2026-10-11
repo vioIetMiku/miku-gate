@@ -1,0 +1,70 @@
+name: Official 3x-ui persistent reuse (manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: official-panel-lab
+  cancel-in-progress: false
+jobs:
+  official-panel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Download one exact official panel archive and compile only the new harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/official-panel-lab/bin
+          curl --fail --location --max-time 120 --retry 2 --output .cache/official-panel-lab/panel.tar.gz \
+            https://github.com/MHSanaei/3x-ui/releases/download/v3.9.0/x-ui-linux-amd64.tar.gz
+          echo 'd7cbe0bf6358ee0d2117c24fd2efb483502e411d38e2ea59bd0bf5e7a3e39390  .cache/official-panel-lab/panel.tar.gz' | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import Path
+          import tarfile
+          root=Path('.cache/official-panel-lab')
+          required={'x-ui/x-ui':root/'x-ui','x-ui/bin/xray-linux-amd64':root/'bin/xray-linux-amd64','x-ui/bin/geoip.dat':root/'bin/geoip.dat','x-ui/bin/geosite.dat':root/'bin/geosite.dat'}
+          with tarfile.open(root/'panel.tar.gz','r:gz') as archive:
+              for name,target in required.items():
+                  item=archive.getmember(name)
+                  assert item.isfile() and not item.issym() and not item.islnk() and 0<item.size<=160<<20
+                  raw=archive.extractfile(item).read(item.size+1)
+                  assert len(raw)==item.size
+                  target.write_bytes(raw)
+          PY
+          chmod 755 .cache/official-panel-lab/x-ui .cache/official-panel-lab/bin/xray-linux-amd64
+          go test -c -o .cache/official-panel-lab/panel.test ./internal/paneladapter
+          git rev-parse HEAD
+      - name: Run actual ordinary UID panel and native encrypted client with no external network
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/usr/local/lib/miku-official-panel-lab-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          test ! -e "$stage"
+          sudo install -d -m 755 "$stage" "$stage/bin"
+          sudo install -m 555 .cache/official-panel-lab/x-ui "$stage/x-ui"
+          sudo install -m 555 .cache/official-panel-lab/panel.test "$stage/panel.test"
+          sudo install -m 555 .cache/official-panel-lab/bin/xray-linux-amd64 "$stage/bin/xray-linux-amd64"
+          sudo install -m 444 .cache/official-panel-lab/bin/geoip.dat "$stage/bin/geoip.dat"
+          sudo install -m 444 .cache/official-panel-lab/bin/geosite.dat "$stage/bin/geosite.dat"
+          sudo systemd-run --quiet --scope --collect --unit="miku-official-panel-$GITHUB_RUN_ID" \
+            --property=CPUQuota=100% --property=MemoryMax=512M --property=MemorySwapMax=0 --property=TasksMax=128 \
+            /usr/bin/unshare --net /bin/sh -c '
+              /usr/sbin/ip link set lo up
+              exec /usr/bin/setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs \
+                /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 GOMAXPROCS=1 GOMEMLIMIT=128MiB \
+                MIKU_GATE_OFFICIAL_PANEL_LAB=1 MIKU_GATE_PANEL_BINARY="$1/x-ui" MIKU_GATE_PANEL_ASSETS="$1/bin" MIKU_GATE_XRAY="$1/bin/xray-linux-amd64" \
+                "$1/panel.test" -test.v -test.run "^TestLinuxOfficial3XUIPersistentRoute$" -test.timeout=150s
+            ' sh "$stage" 2>&1 | tee .cache/official-panel-lab/assertions.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: official-panel-persistent-assertions
+          path: .cache/official-panel-lab/assertions.txt
+          retention-days: 14

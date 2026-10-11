@@ -39,3 +39,9 @@
 单元测试覆盖精确Origin/Host/TLS/转发头、Secure会话/退出、IP SAN/隐式信任拒绝/私钥权限/符号链接/独占、依赖拒绝、plan-only无写、端口80冲突不动原服务和unit身份/预算。手动installation-lab新增实际普通UID HTTPS CLI和可丢弃Ubuntu计划/应用/systemd/health旅程。新增测试/代码不等于已执行成功，精确CI或授权VPS执行证据另记录。
 
 用户VPS本阶段先仅plan-only/独立临时HTTPS测试，未在真实VPS系统路径安装或修改现有服务。完整终态R01-R13与原功能范围保留。
+
+## 实际执行结果
+
+1ba9f7e的无VPN/有VPN矩阵实际apply和直接IP/域名CLI均通过；90c77fe在用户已有面板VPS仅只读计划与临时IP HTTPS通过，主机与永久资源不变。见[验收边界/失败记录](validation/2026-10-11-https-install.md)。依然不把执行器capabilities当systemd沙箱数据会话、私有CA当公共ACME、plan-only当永久共存安装完成。
+
+控制台新增“管理访问与证书”安全摘要：真实Origin、当前TLS、明确Host授权、证书指纹/有效期/IP引导提示，不返回私钥，不再用“管理只能永远回环”假文案覆盖新模式。

@@ -1996,3 +1996,24 @@ label input:disabled {
   font: 12px var(--mono);
   resize: vertical;
 }
+
+.management-access {
+  margin-bottom: 20px;
+}
+.management-access-content {
+  padding: 0 21px 21px;
+}
+.management-access-content p {
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.management-access-content code,
+.management-access-content dd {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .management-access-content {
+    padding: 0 14px 18px;
+  }
+}

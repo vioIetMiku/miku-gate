@@ -98,6 +98,10 @@ try {
   check((await request(`/api/exits/${id}/ingress/runtime`).then(r => r.json())).phase, 'stopped', 'durable configuration never claims core active');
   check((await request(`/api/exits/${id}/ingress/start`, 'POST', { confirm: true })).status, 503, 'no implicit core executable');
   check((await request(`/api/exits/${id}/ingress/client`, 'POST', { confirm: false })).status, 400, 'client secrets need explicit reveal consent');
+  const management = await request('/api/management').then(r => r.json());
+  check(management.mode, 'loopback-http', 'default management remains loopback HTTP');
+  check(management.forwarding_headers_trusted, false, 'management identity never trusts forwarding headers');
+  check(management.private_key_returned, false, 'management API never returns private key');
   const inventory = await request('/api/host/inventory').then(r => r.json());
   check(inventory.read_only, true, 'host inventory is read-only');
   check(inventory.components.every(c => c.reuse_ready === false), true, 'inventory cannot authorize reuse');

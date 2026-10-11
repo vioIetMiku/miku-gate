@@ -67,6 +67,10 @@ func TestPublicTLSExactHostOriginSecureCookieAndCSRF(t *testing.T) {
 	}
 	var session map[string]string
 	json.Unmarshal(w.Body.Bytes(), &session)
+	meta := call("GET", "/api/management", "", "entry.example:8443", "", "", true)
+	if meta.Code != 200 || !strings.Contains(meta.Body.String(), `"origin":"https://entry.example:8443"`) || !strings.Contains(meta.Body.String(), `"private_key_returned":false`) {
+		t.Fatal("wrong safe access metadata")
+	}
 	if call("GET", "/api/exits", "", "entry.example:8443", "", "", true).Code != 200 {
 		t.Fatal("session")
 	}

@@ -42,6 +42,7 @@ type SandboxClient interface {
 	Capabilities(context.Context) (executoripc.Capabilities, error)
 }
 type Options struct {
+	ManagementIdentity  *management.CertificateInfo
 	PublicOrigin        string
 	Cores               *coreruntime.Manager
 	DiscoverCertificate func(string) (certassets.Discovery, *certassets.Asset, error)
@@ -53,6 +54,7 @@ type Options struct {
 	VPN                 *vpnipc.Client
 }
 type Server struct {
+	managementIdentity  *management.CertificateInfo
 	publicEndpoint      *management.Endpoint
 	cores               *coreruntime.Manager
 	assetSlot           chan struct{}
@@ -125,7 +127,7 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 	if reality == nil {
 		reality = ingress.ProbeReality
 	}
-	a := &Server{publicEndpoint: publicEndpoint, cores: options.Cores, assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	a := &Server{managementIdentity: options.ManagementIdentity, publicEndpoint: publicEndpoint, cores: options.Cores, assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]any{"version": domain.Version, "status": a.mode()})
@@ -143,6 +145,7 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 		http.SetCookie(w, &http.Cookie{Name: "miku_session", Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, MaxAge: -1})
 		w.WriteHeader(204)
 	}))
+	mux.HandleFunc("GET /api/management", a.auth(a.managementAccess))
 	mux.HandleFunc("GET /api/overview", a.auth(a.overview))
 	mux.HandleFunc("GET /api/exits", a.auth(a.listExits))
 	mux.HandleFunc("POST /api/exits", a.auth(a.createExit))

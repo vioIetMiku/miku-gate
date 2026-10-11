@@ -215,6 +215,9 @@ func run() error {
 	defer stop()
 	var options httpapi.Options
 	options.PublicOrigin = *publicOrigin
+	if managementTLS != nil {
+		options.ManagementIdentity = &managementIdentity
+	}
 	if *vpnExecutor {
 		if *controlOnly {
 			return errors.New("--vpn-executor不能用于纯控制台模式")

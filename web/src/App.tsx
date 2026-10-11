@@ -1,3 +1,4 @@
+import { ManagementAccess } from './ManagementAccess';
 import { ManagedIngress } from './ManagedIngress';
 import { IngressInventory } from './IngressInventory';
 import { HostInventory } from './HostInventory';
@@ -1149,6 +1150,7 @@ export default function App() {
           )}
           {page === 'system' && (
             <>
+              <ManagementAccess />
               <HostInventory />
               <IngressInventory />
               <ManagedIngress />
@@ -1218,7 +1220,7 @@ export default function App() {
                   <dl className="settings-list">
                     <div>
                       <dt>管理监听</dt>
-                      <dd>仅回环地址</dd>
+                      <dd>默认回环；公开访问须明确HTTPS地址</dd>
                     </div>
                     <div>
                       <dt>初始化密码</dt>

@@ -159,6 +159,8 @@ test('本机控制台：登录、配置、阻止假启动、移动布局和会�
   await expect(page.getByRole('button', { name: '查看 美国开发环境', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '系统与诊断', exact: true }).click();
   await expect(page.getByText('特权网络执行器', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '管理访问与证书' })).toBeVisible();
+  await expect(page.getByText('http://127.0.0.1:3940', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: '主机与已有服务' })).toBeVisible();
   const inventoryResponse = page.waitForResponse((r) => r.url().endsWith('/api/host/inventory'));
   await page.getByRole('button', { name: '检测已有服务' }).click();

@@ -4,6 +4,9 @@
 
 ## 当前最新状态
 
+- dev.11直接IP/域名HTTPS实际CLI与无VPN/有VPN首次安装矩阵已在1ba9f7e通过；用户VPS仅plan-only和回环临时IP HTTPS登录/指纹/退出通过，永久资源/宿主快照不变，没有应用永久安装。域名CA为测试子进程私有根，不冒充ACME/DNS已验；systemd内VPN数据面/受管核心下载启动/续期回滚仍待验。见[精确结果与失败修正](validation/2026-10-11-https-install.md)。
+
+
 - dev.11开始直接域名/IP HTTPS管理与显式交互安装：TLS/精确Host-Origin/Secure会话、明确IP自签指纹方案；依赖/域名/已有服务/核心/最终apply逐项确认，专用账号和systemd有界units。不覆盖未知资源，不停现有Nginx/面板。新实际安装/HTTPS实验待回读，见[流程与边界](HTTPS_INSTALLATION.md)。
 
 

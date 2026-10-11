@@ -175,8 +175,8 @@ func (m *Manager) Start(ctx context.Context, id string) (State, error) {
 			stopExit()
 			return ErrCore
 		}
-		e.process = process
 		m.mu.Lock()
+		e.process = process
 		e.state.Phase = "running"
 		e.state.PID = process.PID()
 		e.state.CoreValidated = true

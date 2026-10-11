@@ -110,3 +110,40 @@ func TestManagerFailedOrWrongExitNeverRunsCore(t *testing.T) {
 	}
 	m.Close(context.Background())
 }
+
+func TestSnapshotsConcurrentWithStartupPublish(t *testing.T) {
+	source := materialFixture(t)
+	p := &fakeProcess{done: make(chan struct{})}
+	entered, release := make(chan struct{}), make(chan struct{})
+	m, err := New(context.Background(), source, exitFixture{context.Background(), true}, Options{Runner: func(ctx context.Context, _ string, _ []byte, _ string) (Process, error) {
+		close(entered)
+		select {
+		case <-release:
+			return p, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished := make(chan error, 1)
+	go func() { _, err := m.Start(context.Background(), "exit"); finished <- err }()
+	<-entered
+	snapshotsDone := make(chan struct{})
+	go func() {
+		defer close(snapshotsDone)
+		for i := 0; i < 10000; i++ {
+			m.Snapshot("exit")
+		}
+	}()
+	close(release)
+	if err = <-finished; err != nil {
+		t.Fatal(err)
+	}
+	<-snapshotsDone
+	if err = m.Stop(context.Background(), "exit"); err != nil {
+		t.Fatal(err)
+	}
+	m.Close(context.Background())
+}

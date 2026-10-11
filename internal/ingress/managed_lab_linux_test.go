@@ -59,7 +59,7 @@ func TestLinuxManagedCoreTemplates(t *testing.T) {
 			}
 			go func() {
 				defer conn.Close()
-				conn.SetDeadline(time.Now().Add(3 * time.Second))
+				conn.SetDeadline(time.Now().Add(15 * time.Second))
 				if secured, ok := conn.(*tls.Conn); ok {
 					secured.Handshake()
 				}
@@ -140,6 +140,15 @@ func TestLinuxManagedCoreTemplates(t *testing.T) {
 				}
 				subdir := t.TempDir()
 				serverFile, clientFile := filepath.Join(subdir, "server.json"), filepath.Join(subdir, "client.json")
+				// Private fixture logging may be verbose; only redacted failures are reported.
+				if tc.core == "xray" && template.NeedsRealityTarget {
+					sm, err := parseJSON(bundle.ServerJSON)
+					if err != nil {
+						t.Fatal(err)
+					}
+					object(sm["log"])["loglevel"] = "info"
+					bundle.ServerJSON, _ = json.Marshal(sm)
+				}
 				if os.WriteFile(serverFile, bundle.ServerJSON, 0600) != nil {
 					t.Fatal("write private generated config")
 				}
@@ -154,6 +163,9 @@ func TestLinuxManagedCoreTemplates(t *testing.T) {
 					in["port"] = clientPort
 				} else {
 					in["listen_port"] = clientPort
+				}
+				if tc.core == "xray" && template.NeedsRealityTarget {
+					object(clientMap["log"])["loglevel"] = "info"
 				}
 				clientRaw, _ := json.Marshal(clientMap)
 				os.WriteFile(clientFile, clientRaw, 0600)

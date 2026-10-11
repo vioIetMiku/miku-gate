@@ -152,4 +152,11 @@ class CertificateRefreshSafety(unittest.TestCase):
             with self.assertRaises(maintenance.BackupError):maintenance.run_certificate_refresh(args,state)
             candidate.assert_not_called()
 
+class CertificateUnitSnapshotRestoration(unittest.TestCase):
+    def test_timer_restore_does_not_mutate_canonical_certificate_units(self):
+        state,_=PairedMaintenanceSafety().state();state['certificate_automation']={'enabled':True,'renew':False}
+        resources=[('units/'+name,text.encode(),0,0,0o644) for name,text in maintenance.install.certificate_units().items()]
+        with mock.patch.object(maintenance,'replace_owned') as replace,mock.patch.object(maintenance,'remove_owned'):
+            maintenance.restore_resources(resources,state)
+            self.assertEqual({call.args[0].name:call.args[1] for call in replace.call_args_list},{name:text.encode() for name,text in maintenance.install.certificate_units().items()})
 if __name__=='__main__':unittest.main()

@@ -400,7 +400,7 @@ def restore_resources(resources,state):
         if name=='data/.serve.lock':continue
         path,expected_uid,expected_gid,expected_mode=targets[name]
         require((uid,gid,mode)==(expected_uid,expected_gid,expected_mode),'恢复不能信任归档提供的身份/权限')
-        if name.startswith('units/') and b'ConditionPathExists=!/etc/miku-gate/maintenance-block\n' not in raw:
+        if name in ('units/miku-gate.service','units/miku-gate-vpn.service') and b'ConditionPathExists=!/etc/miku-gate/maintenance-block\n' not in raw:
             # Insert after Description to preserve the canonical unit template.
             lines=raw.splitlines(keepends=True);index=next(i for i,line in enumerate(lines) if line.startswith(b'Description='))+1
             lines.insert(index,b'ConditionPathExists=!/etc/miku-gate/maintenance-block\n');raw=b''.join(lines)

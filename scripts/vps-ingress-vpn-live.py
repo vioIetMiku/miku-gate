@@ -56,7 +56,7 @@ class CoreClient:
                     (b"processed invalid connection", "invalid_reality_connection"),
                     (b"certificate", "certificate_log"), (b"handshake", "handshake_log"),
                     (b"authentication", "authentication_log"), (b"failed", "failure_log"),
-                    (b"refused", "refused"), (b"timeout", "timeout"), (b"password", "password_log"), (b"Vision", "vision_log"), (b"dispatch", "dispatch_log"), (b"splice", "splice_log"), (b"processed invalid", "invalid_connection"), (b"closing", "closing_log"), (b"connection reset", "connection_reset"), (b"EOF", "eof")):
+                    (b"refused", "refused"), (b"timeout", "timeout"), (b"password", "password_log"), (b"Vision", "vision_log"), (b"dispatch", "dispatch_log"), (b"splice", "splice_log"), (b"processed invalid", "invalid_connection"), (b"closing", "closing_log"), (b"connection reset", "connection_reset"), (b"EOF", "eof"), (b"unknown", "unknown_config"), (b"field", "config_field"), (b"users", "users_field"), (b"username", "username_field"), (b"password", "password_field"), (b"utls", "utls_field"), (b"reality", "reality_field"), (b"public_key", "public_key_field"), (b"stdin", "stdin_file"), (b"FATAL", "fatal"), (b"decode", "decode_config"), (b"deprecated", "deprecated_config"), (b"legacy", "legacy_config"), (b"listen", "listen_log"), (b"bind", "bind_error"), (b"permission", "permission_error")):
                 if needle in line:
                     with self.lock: self.categories[category] = self.categories.get(category,0)+1
     def __init__(self,path,core,raw,port):
@@ -74,6 +74,7 @@ class CoreClient:
             raise RuntimeError("generated core client readiness timeout")
         except BaseException:
             with contextlib.suppress(Exception):self.close()
+            print("ENCRYPTED_VPN_CLIENT_START_FAILURE "+json.dumps({"core":core,"exit_code":self.process.returncode,"categories":self.diagnostics()}),flush=True)
             raise
     def close(self):
         if self.process.poll() is None:self.process.terminate()

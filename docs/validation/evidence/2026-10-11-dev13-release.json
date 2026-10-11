@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-11",
+  "source": "376aef83b3298fb430497878862ee1c0af41f551",
+  "verify_run": 38120443665,
+  "verify_job": 114413888457,
+  "verify_conclusion": "success",
+  "release": {
+    "url": "https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.13",
+    "tag": "v0.1.0-dev.13",
+    "commit": "376aef83b3298fb430497878862ee1c0af41f551",
+    "prerelease": true,
+    "private": true,
+    "assets": [
+      {
+        "name": "miku-gate-v0.1.0-dev.13-linux-amd64.tar.gz",
+        "bytes": 11873443,
+        "sha256": "876f27699fd9aad39c80ce0dbf2870409adc1746ba52d1217d5300303ebc103f",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.13/miku-gate-v0.1.0-dev.13-linux-amd64.tar.gz"
+      },
+      {
+        "name": "miku-gate-v0.1.0-dev.13-linux-arm64.tar.gz",
+        "bytes": 11044523,
+        "sha256": "4a8c883b02f36a2aa8802cee4ce678e464f1bfc54b310c88991f083ba90297c9",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.13/miku-gate-v0.1.0-dev.13-linux-arm64.tar.gz"
+      },
+      {
+        "name": "miku-gate-v0.1.0-dev.13-windows-amd64.zip",
+        "bytes": 11616130,
+        "sha256": "46c763bc55b363a27f42173107991d737df261caea4486b177cfa57d9ca225a3",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.13/miku-gate-v0.1.0-dev.13-windows-amd64.zip"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 326,
+        "sha256": "1cec556ff140dade0b1fb0c9c73848dbc4259c42cd3d4bfa326206ff4b00c00a",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.13/SHA256SUMS.txt"
+      }
+    ]
+  },
+  "new_path_checks": {
+    "loopback_panel_api": "Actual local HTTP fixture validates CSRF login, persistent reads/save/restart/readback, old-template restoration; not official installed panel",
+    "admin_panel_api": "Real store/session/gateway runtime with controlled panel factory verifies safe plan, active exit bind, injected failed save restoration, persistent apply and encrypted snapshot rollback",
+    "vault": "schema7 panel-only missing-key fails, chunk authentication/recipient identity, 8 snapshot capacity, pending snapshot cannot be deleted",
+    "new_browser": "Actual CLI/Miku login -> real loopback HTTP/CSRF panel fixture -> safe preview -> missing exit blocks apply -> mobile layout; 2.9s local pass",
+    "uninstall": "source/refusal/exact unit/partial missing-unit recovery tests only; no actual Linux uninstall/re-register execution"
+  },
+  "not_proven": [
+    "official 3x-ui installed version compatibility",
+    "panel encrypted client actual VPN business flow",
+    "process interruption panel recovery in an actual panel",
+    "Linux service removal/re-registration actual journey",
+    "public ACME and root renewal coordinator actual lifecycle",
+    "installed systemd long-running VPN business and automatic failover",
+    "existing independent Xray/sing-box persistent reuse",
+    "cross-host recovery"
+  ]
+}

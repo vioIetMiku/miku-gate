@@ -163,10 +163,10 @@ func TestLinuxManagedCoreTemplates(t *testing.T) {
 						t.Fatal("actual core rejected generated server/client template")
 					}
 				}
-				startCore(t, tc.binary, tc.core, serverFile, ca, serverPort)
-				startCore(t, tc.binary, tc.core, clientFile, ca, clientPort)
+				serverProcess := startCore(t, tc.binary, tc.core, serverFile, ca, serverPort)
+				clientProcess := startCore(t, tc.binary, tc.core, clientFile, ca, clientPort)
 				if !echoThrough(t, clientPort, "managed-target.invalid", targetPort) || dialCalls.Load() != 1 || authCalls.Load() != 1 {
-					t.Fatal("generated encrypted client/server did not reach authenticated Miku frontend")
+					t.Fatalf("generated encrypted client/server did not reach authenticated Miku frontend; auth=%d dial=%d server={%s} client={%s}", authCalls.Load(), dialCalls.Load(), serverProcess.diagnostics.Summary(), clientProcess.diagnostics.Summary())
 				}
 				if udpThrough(t, clientPort, udp.LocalAddr().(*net.UDPAddr)) || udpCalls.Load() != 0 {
 					t.Fatal("managed template leaked UDP direct")

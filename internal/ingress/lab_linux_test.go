@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -101,10 +102,43 @@ func labClientConfig(core string, port, server int) map[string]any {
 	return map[string]any{"log": map[string]any{"level": "error"}, "inbounds": []any{map[string]any{"type": "socks", "listen": "127.0.0.1", "listen_port": port}}, "outbounds": []any{map[string]any{"type": "vless", "server": "127.0.0.1", "server_port": server, "uuid": labUUID, "flow": "xtls-rprx-vision", "tls": map[string]any{"enabled": true, "server_name": "ingress.test", "insecure": false}}}}
 }
 
+type coreDiagnostics struct {
+	mu     sync.Mutex
+	counts map[string]int
+	bytes  int
+}
+
+func (d *coreDiagnostics) Write(raw []byte) (int, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.bytes += len(raw)
+	if d.counts == nil {
+		d.counts = map[string]int{}
+	}
+	// fixed categories only; no raw logs, keys, UUIDs or configs enter CI output.
+	for _, item := range []struct{ needle, label string }{{"REALITY verification failed", "reality_verification_failed"}, {"processed invalid connection", "invalid_connection"}, {"failed to read", "read_failed"}, {"failed to connect", "connect_failed"}, {"authentication", "authentication_error"}, {"TLS", "tls_log"}, {"REALITY", "reality_log"}, {"connection refused", "connection_refused"}, {"EOF", "eof"}, {"timeout", "timeout"}, {"invalid", "invalid_input"}, {"failed", "failure_log"}} {
+		if strings.Contains(string(raw), item.needle) {
+			d.counts[item.label]++
+		}
+	}
+	return len(raw), nil
+}
+func (d *coreDiagnostics) Summary() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	labels := []string{}
+	for label, count := range d.counts {
+		labels = append(labels, fmt.Sprintf("%s=%d", label, count))
+	}
+	sort.Strings(labels)
+	return fmt.Sprintf("bytes=%d categories=%s", d.bytes, strings.Join(labels, ","))
+}
+
 type coreProcess struct {
-	cmd  *exec.Cmd
-	once sync.Once
-	done chan error
+	diagnostics *coreDiagnostics
+	cmd         *exec.Cmd
+	once        sync.Once
+	done        chan error
 }
 
 func coreCommand(ctx context.Context, binary, core, config string, check bool) *exec.Cmd {
@@ -127,9 +161,10 @@ func startCore(t *testing.T, binary, core, config, ca string, port int) *corePro
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := coreCommand(ctx, binary, core, config, false)
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "GOMAXPROCS=1", "GOMEMLIMIT=64MiB", "SSL_CERT_FILE=" + ca, "SSL_CERT_DIR=" + filepath.Dir(ca) + "/empty-cert-directory"}
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	p := &coreProcess{cmd: cmd, done: make(chan error, 1)}
+	diag := new(coreDiagnostics)
+	cmd.Stdout = diag
+	cmd.Stderr = diag
+	p := &coreProcess{diagnostics: diag, cmd: cmd, done: make(chan error, 1)}
 	if e := cmd.Start(); e != nil {
 		cancel()
 		t.Fatal("core start failed")

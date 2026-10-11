@@ -52,7 +52,7 @@ jobs:
             /usr/bin/setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs \
             /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 GOMAXPROCS=1 GOMEMLIMIT=128MiB \
             MIKU_GATE_MANAGEMENT_TEST=1 MIKU_GATE_BINARY="$MIKU_INSTALL_STAGE/miku-gate" \
-            "$MIKU_INSTALL_STAGE/cli.test" -test.v -test.run '^TestLinuxManagementHTTPSCLI$' -test.timeout=45s \
+            "$MIKU_INSTALL_STAGE/cli.test" -test.v -test.run '^TestLinuxManagementHTTPS(Domain)?CLI$' -test.timeout=45s \
             2>&1 | tee .cache/installation-lab/https-result.txt
       - name: Verify plan-only does not create installation resources
         shell: bash

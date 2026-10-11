@@ -4,10 +4,16 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"io"
+	"math/big"
 	"mikugate/internal/management"
 	"net"
 	"net/http"
@@ -131,4 +137,98 @@ func TestLinuxManagementHTTPSCLI(t *testing.T) {
 		t.Fatal("private IP bootstrap called system-trusted")
 	}
 	t.Log("Observed real ordinary UID CLI, IP SAN HTTPS verified by explicit certificate trust without TLS skip, exact Host/Origin, Secure session and logout/revocation. Not external public address reachability.")
+}
+
+func TestLinuxManagementHTTPSDomainCLI(t *testing.T) {
+	if os.Getenv("MIKU_GATE_MANAGEMENT_TEST") != "1" {
+		t.Skip("explicit real domain HTTPS CLI lab")
+	}
+	if os.Geteuid() == 0 {
+		t.Fatal("ordinary UID required")
+	}
+	binary := os.Getenv("MIKU_GATE_BINARY")
+	if !filepath.IsAbs(binary) {
+		t.Fatal("exact binary")
+	}
+	root := t.TempDir()
+	os.Chmod(root, 0700)
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	now := time.Now()
+	ca := &x509.Certificate{SerialNumber: big.NewInt(11), Subject: pkix.Name{CommonName: "private HTTPS domain test CA"}, IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(72 * time.Hour)}
+	caRaw, err := x509.CreateCertificate(rand.Reader, ca, ca, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leafKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	leaf := &x509.Certificate{SerialNumber: big.NewInt(12), DNSNames: []string{"management.test"}, NotBefore: ca.NotBefore, NotAfter: ca.NotAfter, KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	der, err := x509.CreateCertificate(rand.Reader, leaf, ca, &leafKey.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := x509.MarshalPKCS8PrivateKey(leafKey)
+	cp, kp, cap := filepath.Join(root, "certificate.pem"), filepath.Join(root, "private.key"), filepath.Join(root, "ca.pem")
+	os.WriteFile(cp, append(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caRaw})...), 0600)
+	os.WriteFile(kp, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encoded}), 0600)
+	os.WriteFile(cap, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caRaw}), 0600)
+	data := filepath.Join(root, "data")
+	output, err := exec.Command(binary, "init", "--data", data).Output()
+	if err != nil {
+		t.Fatal("init")
+	}
+	matches := regexp.MustCompile(`密码：([^\r\n]+)`).FindSubmatch(output)
+	if len(matches) != 2 {
+		t.Fatal("one-time credential")
+	}
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	ln.Close()
+	origin := "https://management.test:" + port
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, binary, "serve", "--data", data, "--listen", "127.0.0.1:"+port, "--public-origin", origin, "--tls-certificate", cp, "--tls-key", kp, "--control-plane-only")
+	// Trust root injected before x509 initialization only into this child CLI,
+	// never host trust store, and no allow-bootstrap or insecure flag.
+	cmd.Env = append(os.Environ(), "SSL_CERT_FILE="+cap, "SSL_CERT_DIR="+filepath.Join(root, "empty"))
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	if cmd.Start() != nil {
+		cancel()
+		t.Fatal("serve")
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	t.Cleanup(func() { cancel(); <-done })
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caRaw}))
+	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, ServerName: "management.test", MinVersion: tls.VersionTLS12}, DialContext: func(ctx context.Context, n, a string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "tcp4", "127.0.0.1:"+port)
+	}}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 2 * time.Second}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		r, err := client.Get(origin + "/api/health")
+		if err == nil {
+			r.Body.Close()
+			if r.StatusCode == 200 {
+				break
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	body, _ := json.Marshal(map[string]string{"username": "admin", "password": string(matches[1])})
+	request, _ := http.NewRequest("POST", origin+"/api/auth/login", strings.NewReader(string(body)))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", origin)
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal("domain TLS request")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != 200 || len(response.Cookies()) == 0 || !response.Cookies()[0].Secure {
+		t.Fatal("domain TLS login/secure cookie")
+	}
+	t.Log("Observed actual domain HTTPS CLI, SAN and CA verification with process-only private root, canonical Host/Origin and secure login; no bootstrap/insecure flag or host trust mutation. Domain ACME/public DNS ownership not tested.")
 }

@@ -20,4 +20,4 @@ sudo python3 -B /usr/local/lib/miku-gate/miku-maintain.py reinstall-services \
 
 核对同安装身份、名称未被其他服务占用、模板通过systemd-analyze verify后重新注册；不会自动启用开机或启动。管理员核对后再明确systemctl enable/start所需Miku单元。新同名单元有不同内容时拒绝覆盖。数据库/key/证书身份不变。
 
-新增拒绝未确认/精确unit范围用例，不宣称已在用户VPS执行真实卸载/恢复旅程；目前从代码补齐运维入口，下一安装验收需覆盖该新操作。不提供删除数据/密钥命令，以免仓促破坏恢复资料。
+源205f674的installation-lab38123497800两种安装模式已实际执行服务卸载→身份/key/证书保留→恢复注册未自动启动→明确启动后原HTTPS数据可读。仅干净可丢弃Ubuntu amd64，不宣称已在用户已有面板VPS执行。不提供删除数据/密钥命令，以免仓促破坏恢复资料。

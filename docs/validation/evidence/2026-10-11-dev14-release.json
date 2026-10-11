@@ -1,0 +1,92 @@
+{
+  "date": "2026-10-11",
+  "source": "205f67408418ee5f3fc597c0d392fe120d71de6d",
+  "verify_run": 38123495516,
+  "verify_job": 114422908908,
+  "verify_conclusion": "success",
+  "installation_run": 38123497800,
+  "installation_conclusion": "success",
+  "jobs": [
+    {
+      "job": 114422918249,
+      "vpn": true,
+      "assertions": {
+        "data_identity_retained": true,
+        "ordinary_service_https_restart_verified": true,
+        "paired_encrypted_db_key_verified": true,
+        "private_archive_mode": "0600",
+        "raw_private_material_returned": false,
+        "restore_verified": true,
+        "service_removal_and_explicit_registration_verified": true,
+        "upgrade_verified": true,
+        "vpn_mode": true
+      }
+    },
+    {
+      "job": 114422918426,
+      "vpn": false,
+      "assertions": {
+        "data_identity_retained": true,
+        "ordinary_service_https_restart_verified": true,
+        "paired_encrypted_db_key_verified": true,
+        "private_archive_mode": "0600",
+        "raw_private_material_returned": false,
+        "restore_verified": true,
+        "service_removal_and_explicit_registration_verified": true,
+        "upgrade_verified": true,
+        "vpn_mode": false
+      }
+    }
+  ],
+  "release": {
+    "url": "https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.14",
+    "tag": "v0.1.0-dev.14",
+    "commit": "205f67408418ee5f3fc597c0d392fe120d71de6d",
+    "prerelease": true,
+    "private": true,
+    "assets": [
+      {
+        "name": "miku-gate-v0.1.0-dev.14-linux-amd64.tar.gz",
+        "bytes": 11899512,
+        "sha256": "03b11a387a6a9f5c648cd769302f32e47e8a8a9d6b119078441070d8bec31cb3",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.14/miku-gate-v0.1.0-dev.14-linux-amd64.tar.gz"
+      },
+      {
+        "name": "miku-gate-v0.1.0-dev.14-linux-arm64.tar.gz",
+        "bytes": 11077258,
+        "sha256": "101079e4e06931c5e8b7b337654f6d05022262dca18a314e0a0736369d6aaee3",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.14/miku-gate-v0.1.0-dev.14-linux-arm64.tar.gz"
+      },
+      {
+        "name": "miku-gate-v0.1.0-dev.14-windows-amd64.zip",
+        "bytes": 11651143,
+        "sha256": "e80e56768d4331b0cc69ae6eddd291919717a44af9bfd1b4fff36ef18901074c",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.14/miku-gate-v0.1.0-dev.14-windows-amd64.zip"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 326,
+        "sha256": "ee9d1d89d7275577abac727b3b3b08c36dc1b2d9beae835dd528e344ed8601d1",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.14/SHA256SUMS.txt"
+      }
+    ]
+  },
+  "scope": {
+    "installed_platform": "linux-amd64 disposable Ubuntu runner",
+    "uninstall": "real exact units removed with encrypted DB/key/cert/account/binary retained, explicit registration did not start/enable, manual start recovered original private HTTPS session and encrypted config",
+    "recovery": "controlled gateway failure/backoff/reconnect proves same actual port and original SOCKS authentication plus persistent pause, not real public VPN rotation"
+  },
+  "preserved_failure": {
+    "run": 38122865196,
+    "source": "2ed2c48d363a719061792e1e818fbc8334829ec6",
+    "cause": "New fixture inspected starting reservation before failed Probe completed; corrected synchronization, not loosened listener proof."
+  },
+  "not_proven": [
+    "actual public VPN automatic failover and installed long-running data plane",
+    "official panel installed compatibility and public encrypted client path",
+    "independent existing Xray/sing-box persistent service application",
+    "public ACME/root renewal coordinator real lifecycle",
+    "cross-host disaster recovery",
+    "user VPS permanent deployment complete host-state proof"
+  ]
+}

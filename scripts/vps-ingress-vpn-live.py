@@ -62,10 +62,22 @@ class CoreClient:
     def __init__(self,path,core,raw,port):
         args=["run","-config","stdin:"] if core=="xray" else ["run","-c","/dev/stdin"]
         self.lock=threading.Lock();self.categories={}
-        self.process=subprocess.Popen(["/usr/bin/setpriv","--reuid=65534","--regid=65534","--clear-groups","--no-new-privs","--",str(path),*args],cwd="/",env=live.ENV,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True)
+        # sing-box reopens /dev/stdin. A pipe created by the root coordinator
+        # remains root-owned after setpriv, unlike the production ordinary-user
+        # control process. Prepare exact pipe ownership BEFORE starting the child.
+        read_fd,write_fd=os.pipe()
+        try:
+            os.fchown(read_fd,65534,65534)
+            os.fchmod(read_fd,0o600)
+            self.process=subprocess.Popen(["/usr/bin/setpriv","--reuid=65534","--regid=65534","--clear-groups","--no-new-privs","--",str(path),*args],cwd="/",env=live.ENV,stdin=read_fd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True)
+        except BaseException:
+            os.close(write_fd)
+            raise
+        finally:os.close(read_fd)
         self.reader=threading.Thread(target=self.observe,daemon=True);self.reader.start()
         try:
-            self.process.stdin.write(raw);self.process.stdin.close()
+            with os.fdopen(write_fd,"wb") as config_input:
+                config_input.write(raw)
             deadline=time.monotonic()+8
             while time.monotonic()<deadline:
                 live.require(self.process.poll() is None,"generated client exited before listening")

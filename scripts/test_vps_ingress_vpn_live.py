@@ -15,4 +15,11 @@ class FullEncryptedAcceptanceSafety(unittest.TestCase):
         self.assertNotIn('"insecure":True',text)
         self.assertIn('runtime["phase"]=="stopped"',text)
         self.assertIn('raw_ip==running["proof"]["exit_ip"]',text)
+    def test_root_coordinator_config_pipe_owned_before_uid_switch(self):
+        text=Path(__file__).with_name("vps-ingress-vpn-live.py").read_text()
+        start=text.index("read_fd,write_fd=os.pipe()")
+        ownership=text.index("os.fchown(read_fd,65534,65534)",start)
+        spawn=text.index("self.process=subprocess.Popen",start)
+        self.assertLess(ownership,spawn)
+        self.assertIn("stdin=read_fd",text[spawn:spawn+450])
 if __name__=="__main__":unittest.main()

@@ -180,7 +180,7 @@ func (d *safeCoreLogs) Write(raw []byte) (int, error) {
 	if d.counts == nil {
 		d.counts = map[string]int{}
 	}
-	for _, category := range []string{"failed", "invalid", "authentication", "certificate", "timeout", "refused", "REALITY", "verification", "accepted", "TCP", "read", "EOF", "TLS", "dispatch", "Vision", "user", "payload", "splice", "write", "connection reset", "processed invalid", "account", "flow", "forward", "closing"} {
+	for _, category := range []string{"failed", "invalid", "authentication", "certificate", "timeout", "refused", "REALITY", "verification", "accepted", "TCP", "read", "EOF", "TLS", "dispatch", "Vision", "user", "payload", "splice", "write", "connection reset", "processed invalid", "account", "flow", "forward", "closing", "failed to read client hello", "authentication failed or validation criteria not met", "target sent incorrect server hello or handshake incomplete", "handshake did not complete successfully", "server name mismatch", "unsupported TLS version", "failed to dial dest", "payload[0]"} {
 		if strings.Contains(string(raw), category) {
 			d.counts[category]++
 		}

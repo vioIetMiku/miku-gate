@@ -120,7 +120,7 @@ def encrypted_path(control,created,state):
         step(core,"stopping-exit-for-save")
         control.request("POST",prefix+"/stop",expect=204)
         port=free_port();client_port=free_port()
-        request={"core":core,"template":"vless-reality-vision","address":"127.0.0.1","listen":"127.0.0.1","port":port,"server_name":"www.microsoft.com","reality_hostname":"www.microsoft.com"}
+        request={"core":core,"template":"vless-reality-vision","address":"127.0.0.1","listen":"127.0.0.1","port":port,"server_name":"www.cloudflare.com","reality_hostname":"www.cloudflare.com"}
         step(core,"saving-verified-material")
         saved=control.request("PUT",prefix+"/ingress",{"request":request,"exit_password":created["password"],"confirm":True,"confirm_network":True},expect=200)
         live.require(saved["configured"] and not saved["applied"],"save pretended applied")

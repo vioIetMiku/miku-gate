@@ -114,7 +114,10 @@ def stop_services(state):
     units=['miku-gate.service']+(['miku-gate-vpn.service'] if state['vpn'] else [])
     active=[u for u in units if service_active(u)]
     for unit in units:
-        install.run([install.trusted_tool('systemctl'),'stop',unit],timeout=35)
+        # Interrupted service-only removal may already have deleted an inactive
+        # unit file. Do not make a missing unit prevent paired recovery.
+        if FILES['units/'+unit].exists() or service_active(unit):
+            install.run([install.trusted_tool('systemctl'),'stop',unit],timeout=35)
         require(not service_active(unit),'服务未确认停止，不能做配套快照')
     return active
 
@@ -744,8 +747,10 @@ def reinstall_services(args,state):
         if not path.exists():install.exclusive(path,text.encode(),0o644)
     install.run([install.trusted_tool('systemd-analyze'),'verify',*[str(FILES['units/'+name]) for name in units]])
     new=json.loads(json.dumps(state));new['services_uninstalled']=False
-    replace_owned(FILES['installation/install-state.json'],json.dumps(new,ensure_ascii=False,indent=2).encode(),0,0,0o600)
     install.run([install.trusted_tool('systemctl'),'daemon-reload']);remove_owned(STARTUP_BLOCK,0,0o600)
+    # Keep services_uninstalled=True through any registration error so a retry
+    # is possible; no service is started/enabled by re-registration.
+    replace_owned(FILES['installation/install-state.json'],json.dumps(new,ensure_ascii=False,indent=2).encode(),0,0,0o600)
     print('MIKU_REINSTALL_RESULT '+json.dumps({'units_registered':list(units),'data_identity_preserved':True,'services_started':False,'startup_enable_changed':False},sort_keys=True))
 
 def main(argv=None):

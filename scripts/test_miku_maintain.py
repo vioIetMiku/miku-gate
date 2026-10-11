@@ -174,4 +174,8 @@ class DataPreservingServiceRemoval(unittest.TestCase):
         with mock.patch.object(maintenance,'FILES',fixed),mock.patch.object(maintenance,'DATA',__import__('pathlib').PurePosixPath('/var/lib/miku-gate/data')):
             self.assertEqual(set(maintenance.registered_units(state)),{'miku-gate.service','miku-gate-certificate.service','miku-gate-certificate.timer'})
         self.assertNotIn('x-ui.service',units)
+class PartialUnitRemovalRecovery(unittest.TestCase):
+    def test_missing_stopped_unit_does_not_block_recovery_snapshot_restore(self):
+        with mock.patch.object(Path,'exists',return_value=False),mock.patch.object(maintenance,'service_active',return_value=False),mock.patch.object(maintenance.install,'run') as run:
+            self.assertEqual(maintenance.stop_services({'vpn':False}),[]);run.assert_not_called()
 if __name__=='__main__':unittest.main()

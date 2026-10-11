@@ -1,0 +1,90 @@
+{
+  "changed_sections": [],
+  "elapsed_wall_seconds": 24.421,
+  "exit_code": 0,
+  "harness_source": "f82502d987ff16331e5958fa330586f3b15cf01c",
+  "host_after_sha256": "7dfcf472fba99cda30fffb71b321791c1b208711c5d056dc5bed5bd1d51e0ae3",
+  "host_before_sha256": "7dfcf472fba99cda30fffb71b321791c1b208711c5d056dc5bed5bd1d51e0ae3",
+  "host_unchanged": true,
+  "results": [
+    {
+      "elapsed_seconds": 23.299,
+      "encrypted_ingress": [
+        {
+          "business_https_verified": true,
+          "client_identity_survives_restart": true,
+          "core": "xray",
+          "exit_ip_matches_vpn": true,
+          "exit_ipv4_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+          "exit_stop_revokes_core": true,
+          "listener_public": false,
+          "mutation_refused": true,
+          "native_listener_owned": true,
+          "success": true,
+          "template": "vless-reality-vision"
+        },
+        {
+          "business_https_verified": true,
+          "client_identity_survives_restart": true,
+          "core": "sing-box",
+          "exit_ip_matches_vpn": true,
+          "exit_ipv4_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+          "exit_stop_revokes_core": true,
+          "listener_public": false,
+          "mutation_refused": true,
+          "native_listener_owned": true,
+          "success": true,
+          "template": "vless-reality-vision"
+        }
+      ],
+      "factory_substituted": false,
+      "failure_categories": [],
+      "limits": {
+        "cpu.max": "100000 100000",
+        "memory.max": "402653184",
+        "memory.swap.max": "0",
+        "pids.max": "64"
+      },
+      "memory_events_delta": {
+        "high": 0,
+        "low": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0,
+        "sock_throttled": 0
+      },
+      "memory_peak_bytes": 215781376,
+      "pids_events_delta": {
+        "max": 0
+      },
+      "public_nodes_attempted": [
+        {
+          "business_https_verified": true,
+          "exit_ipv4_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+          "identity_http": 200,
+          "node_hostname": "vpn184169581",
+          "node_ip_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+          "peer_fingerprint": "d4bedc8f499ae6e416311783ad4575086ca5a0b138787cd946931f109d4b2d3f",
+          "peer_name": "opengw.net",
+          "runtime_verified": true,
+          "start_http": 200,
+          "stopped": true,
+          "tls_hostname": "vpn184169581.opengw.net"
+        }
+      ],
+      "public_proxy_listener": false,
+      "remaining_scope_pids": [],
+      "scope": "at most two official public VPN Gate candidates; real CLI and isolated worker",
+      "source_binary_sha256": "dd62f22dac8b3430d51f77e190fa5c43ea5952feb3edc54db5f7c870e7d1b302",
+      "success": true,
+      "tls_verification_disabled": false
+    }
+  ],
+  "retained_stage_errors": [],
+  "run_id": "encrypted-vpn-a837ecf-f82502d-761458ebfc",
+  "source": "a837ecf13bcf43748e270559a577a42680637f20",
+  "success": true,
+  "timed_out": false,
+  "raw_log_sha256": "8903e0bc6bcb3d677c6f7a5ba5271e4707e48070e83ff576f12139517c3dcf2d"
+}

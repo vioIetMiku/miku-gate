@@ -24,6 +24,8 @@
 
 - 受管运行器两核心真实stdin/UID/NoNewPrivs/PID监听/租约停止已在5ee75c4通过。a837ecf授权VPS完整公共Xray REALITY→隔离VPN→HTTPS/IP一致性/重启身份/互锁/退出通过；sing-box测试客户端启动失败，整体验收false继续定位，主机快照一致。见[实际证据/边界](validation/2026-10-11-managed-runtime.md)。
 
+- 最终授权VPS两核心加密入口→实际公共VPN→业务HTTPS/IP一致性全部通过：产品a837ecf/脚本f82502d，23.299秒，205.79MiB峰值，资源事件0/无残留/宿主不变。sing-box修复的是root测试协调器stdin管道归属，不改产品验证；失败历史保留。入口回环测试并非已开放公网安装验收，[成功证据](validation/evidence/2026-10-11-encrypted-public-success.json)。
+
 ## 历史阶段记录（保留当时限制，不代表当前状态）
 
 下面记录各提交当时的实现/失败状态。“尚未接线/待公共验证”等必须结合上面的最新状态与精确提交阅读，不作为当前功能回退声明。

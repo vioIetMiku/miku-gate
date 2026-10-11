@@ -225,6 +225,8 @@ export function runtimeTone(phase: Exit['status']) {
 }
 
 export type ProfileCheck = {
+  transport?: string;
+  port?: number;
   mode: 'strict' | 'legacy-candidate' | 'unsupported';
   strict_compatible: boolean;
   legacy_candidate: boolean;

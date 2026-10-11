@@ -96,10 +96,25 @@ class Daemon:
             self.process.stdout.close()
 
 
-def select_candidates(nodes):
-    # This is a connection attempt budget, not a broad scanner or benchmark.
-    return [node for node in nodes if re.fullmatch(r"vpn[0-9]{1,20}", node.get("hostname", ""))
-            and node.get("source") == "https://www.vpngate.net/api/iphone/"][:2]
+def select_candidates(nodes, profile_reader=None):
+    # At most two peer connection attempts. Optional server-side profile reads
+    # are bounded local cache inspection, not network/port scanning.
+    eligible = [node for node in nodes if re.fullmatch(r"vpn[0-9]{1,20}", node.get("hostname", ""))
+                and node.get("source") == "https://www.vpngate.net/api/iphone/"]
+    if profile_reader is None:
+        return eligible[:2]
+    tcp, udp = [], []
+    for node in eligible[:20]:
+        checked = profile_reader(node["id"])
+        if checked.get("mode") not in ("strict", "legacy-candidate"):
+            continue
+        if checked.get("transport") == "tcp4-client":
+            tcp.append(node)
+            if len(tcp) == 2:
+                return tcp
+        elif checked.get("transport") == "udp4":
+            udp.append(node)
+    return (tcp + udp)[:2]
 
 
 def exercise(binary, data, control_factory=UserControl, on_connected=None):
@@ -128,7 +143,7 @@ def exercise(binary, data, control_factory=UserControl, on_connected=None):
         live.require(response.status == 200 and len(raw) <= 2 << 20, "node cache read failed")
         nodes = json.loads(raw)
         connection.close()
-        candidates = select_candidates(nodes)
+        candidates = select_candidates(nodes, lambda id: control.request("GET", "/api/nodes/" + id + "/profile", expect=200))
         live.require(candidates, "official cache contains no compatible naming candidates")
         for index, node in enumerate(candidates):
             if index:

@@ -53,6 +53,15 @@ export function NodeProfileView({ node, close }: { node: Node; close: () => void
             </div>
             <dl className="credential-list">
               <div>
+                <dt>配置传输端点</dt>
+                <dd>
+                  {result.transport
+                    ? `${result.transport === 'tcp4-client' ? 'TCP' : 'UDP'} · ${result.port}`
+                    : '不支持或未知'}
+                  （不是连通性证明）
+                </dd>
+              </div>
+              <div>
                 <dt>严格 AEAD 策略</dt>
                 <dd>{result.strict_compatible ? '通过格式检查' : '未通过'}</dd>
               </div>

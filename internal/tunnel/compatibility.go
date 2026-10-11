@@ -13,6 +13,8 @@ import (
 // ProfileCheck is a format/policy report, NEVER an authorization or health proof.
 // It carries no CA, certificate, private key, or normalized executable config.
 type ProfileCheck struct {
+	Transport                string    `json:"transport,omitempty"`
+	Port                     uint16    `json:"port,omitempty"`
 	Mode                     string    `json:"mode"`
 	StrictCompatible         bool      `json:"strict_compatible"`
 	LegacyCandidate          bool      `json:"legacy_candidate"`
@@ -34,7 +36,10 @@ func CheckProfile(raw, expectedIP string) ProfileCheck {
 	}
 	sum := sha256.Sum256([]byte(raw))
 	result.ProfileSHA256 = hex.EncodeToString(sum[:])
-	if _, err := Normalize(raw, expectedIP); err == nil {
+	if profile, err := Normalize(raw, expectedIP); err == nil {
+		endpoint := profile.Endpoint()
+		result.Transport = endpoint.Transport
+		result.Port = endpoint.Port
 		result.Mode = "strict"
 		result.StrictCompatible = true
 		result.Message = "配置符合严格AEAD策略。仅为静态检查；服务器身份、连通性及出口IP尚未验证。"
@@ -55,6 +60,9 @@ func CheckProfile(raw, expectedIP string) ProfileCheck {
 	}
 	profile, err := normalizeOptions(raw, expectedIP, result.CheckedAt, egress.PublicIPv4, NormalizeOptions{AllowVPNGateLegacy: true, ExpectedPeerName: peerName})
 	if err == nil {
+		endpoint := profile.Endpoint()
+		result.Transport = endpoint.Transport
+		result.Port = endpoint.Port
 		result.Mode = "legacy-candidate"
 		result.LegacyCandidate = true
 		result.LegacyDataChannel = profile.LegacyDataChannel()

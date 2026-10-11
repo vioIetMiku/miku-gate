@@ -14,6 +14,13 @@ func TestProfileCheckDoesNotClaimLivenessOrExposeSecrets(t *testing.T) {
 		if result.Mode != test.mode || result.NetworkTested || result.ServerIdentityVerified || !result.ExpectedPeerNameRequired {
 			t.Fatal("false policy/liveness report", result)
 		}
+		if test.mode == "unsupported" {
+			if result.Transport != "" || result.Port != 0 {
+				t.Fatal("unsafe endpoint returned")
+			}
+		} else if (result.Transport != "udp4" && result.Transport != "tcp4-client") || result.Port == 0 {
+			t.Fatal("validated transport metadata missing")
+		}
 		raw, err := json.Marshal(result)
 		if err != nil {
 			t.Fatal(err)

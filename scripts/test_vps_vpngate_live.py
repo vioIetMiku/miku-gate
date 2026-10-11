@@ -13,6 +13,19 @@ class PublicVPNBudget(unittest.TestCase):
         for host in ("vpn123.evil.example","localhost","127.0.0.1","VPN123"):
             self.assertFalse(public.select_candidates([{"hostname":host,"source":nodes[0]["source"]}]))
         self.assertFalse(public.select_candidates([{"hostname":"vpn123","source":"http://untrusted.example"}]))
+    def test_tcp_preference_uses_at_most_twenty_local_cache_reads_and_two_peers(self):
+        nodes = [{"id":str(i),"hostname":"vpn"+str(i),"source":"https://www.vpngate.net/api/iphone/"} for i in range(100)]
+        calls=[]
+        def read(id):
+            calls.append(id)
+            return {"mode":"legacy-candidate","transport":"tcp4-client" if int(id) in (3,6) else "udp4"}
+        chosen=public.select_candidates(nodes,read)
+        self.assertEqual([n["id"] for n in chosen],["3","6"])
+        self.assertEqual(len(calls),7)
+        calls.clear()
+        chosen=public.select_candidates(nodes,lambda id: calls.append(id) or {"mode":"unsupported"})
+        self.assertEqual(chosen,[])
+        self.assertEqual(len(calls),20)
     def test_public_path_always_starts_nonroot_control_and_explicit_executor(self):
         control=public.UserControl(Path("/verified/miku-gate"),Path("/owned/data"))
         for command in ("init","serve","instance"):

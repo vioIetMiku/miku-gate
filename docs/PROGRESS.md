@@ -22,6 +22,8 @@
 
 - dev.10新增schema6的入口加密保存/出口绑定、客户端材料明确显示、CLI显式核心路径、普通UID真实核心check/stdin/监听FD归属、启停与出口租约互锁；UI已接保存/启停/状态。新native核心实验需独立实际回读；[操作/边界](MANAGED_RUNTIME.md)。
 
+- 受管运行器两核心真实stdin/UID/NoNewPrivs/PID监听/租约停止已在5ee75c4通过。a837ecf授权VPS完整公共Xray REALITY→隔离VPN→HTTPS/IP一致性/重启身份/互锁/退出通过；sing-box测试客户端启动失败，整体验收false继续定位，主机快照一致。见[实际证据/边界](validation/2026-10-11-managed-runtime.md)。
+
 ## 历史阶段记录（保留当时限制，不代表当前状态）
 
 下面记录各提交当时的实现/失败状态。“尚未接线/待公共验证”等必须结合上面的最新状态与精确提交阅读，不作为当前功能回退声明。

@@ -1,0 +1,234 @@
+{
+  "full_goal_completed": false,
+  "both_cores_public_path_verified": false,
+  "attempts": [
+    {
+      "changed_sections": [],
+      "elapsed_wall_seconds": 12.706,
+      "exit_code": 1,
+      "host_after_sha256": "33f7652d5f1e3d7390fa5f710464b6977c6585ddb69dfc5c02d064723961cafa",
+      "host_before_sha256": "33f7652d5f1e3d7390fa5f710464b6977c6585ddb69dfc5c02d064723961cafa",
+      "host_unchanged": true,
+      "results": [
+        {
+          "elapsed_seconds": 11.471,
+          "factory_substituted": false,
+          "failure_categories": [],
+          "limits": {
+            "cpu.max": "100000 100000",
+            "memory.max": "402653184",
+            "memory.swap.max": "0",
+            "pids.max": "64"
+          },
+          "memory_events_delta": {
+            "high": 0,
+            "low": 0,
+            "max": 0,
+            "oom": 0,
+            "oom_group_kill": 0,
+            "oom_kill": 0,
+            "sock_throttled": 0
+          },
+          "memory_peak_bytes": 188157952,
+          "pids_events_delta": {
+            "max": 0
+          },
+          "public_nodes_attempted": [
+            {
+              "error_code": "identity_unverified",
+              "identity_http": 502,
+              "node_hostname": "vpn231298988",
+              "node_ip_sha256": "211ec3a07378f3835024a87a794d970d4cc0570d9fa7c3e8544ef6f9826fe10f"
+            },
+            {
+              "error_code": "identity_unverified",
+              "identity_http": 502,
+              "node_hostname": "vpn205082667",
+              "node_ip_sha256": "926d2b9463dd8b203b7367bc71c78fbffbf9c127866b0f72847abee32b762388"
+            }
+          ],
+          "public_proxy_listener": false,
+          "remaining_scope_pids": [],
+          "scope": "at most two official public VPN Gate candidates; real CLI and isolated worker",
+          "source_binary_sha256": "ee4913abb493c35ef4c379ac47f23a544f5c96fab6e0ad94769a8025e485ed8a",
+          "success": false,
+          "tls_verification_disabled": false
+        }
+      ],
+      "retained_stage_errors": [],
+      "run_id": "encrypted-vpn-e839b87-84d07da816",
+      "source": "e839b87ae6ea3566b2c91485141c386c5cf6d2dc",
+      "success": false,
+      "timed_out": false,
+      "log_sha256": "d3a0d9adc552b6fdde2af575b792a7f1d20062d8140bf4fed0256045faf34d11",
+      "log_name": "encrypted-vpn-e839b87-002.log"
+    },
+    {
+      "changed_sections": [],
+      "elapsed_wall_seconds": 12.498,
+      "exit_code": 1,
+      "host_after_sha256": "785c63789a5e69c18a72695cf613966642ceece60830e43197a0189dd9b58f2b",
+      "host_before_sha256": "785c63789a5e69c18a72695cf613966642ceece60830e43197a0189dd9b58f2b",
+      "host_unchanged": true,
+      "results": [],
+      "retained_stage_errors": [],
+      "run_id": "encrypted-vpn-afb5984-03bb438915",
+      "source": "afb598448ac17f18e288b0ebb8a14d366647a7ad",
+      "success": false,
+      "timed_out": false,
+      "log_sha256": "9cb695f3413b20465ecbcc1cbd9e2051c399631c7418e91a8d6136aa20d28e17",
+      "log_name": "encrypted-vpn-afb5984-001.log"
+    },
+    {
+      "changed_sections": [],
+      "elapsed_wall_seconds": 12.799,
+      "exit_code": 1,
+      "harness_source": "7491490976c8463553f50dbaadeebfd4c940149f",
+      "host_after_sha256": "add08fa2ba16a47ec5e3ff5f632b9ad2d4d4275a986b553bd72e42970e6c33a3",
+      "host_before_sha256": "add08fa2ba16a47ec5e3ff5f632b9ad2d4d4275a986b553bd72e42970e6c33a3",
+      "host_unchanged": true,
+      "results": [],
+      "retained_stage_errors": [],
+      "run_id": "encrypted-vpn-afb5984-step7491490-e0a78f5be2",
+      "source": "afb598448ac17f18e288b0ebb8a14d366647a7ad",
+      "success": false,
+      "timed_out": false,
+      "log_sha256": "0c0bd8b2cd5212a7fb52281b464438599f64e0b64c13188a4fd45c6c48d11643",
+      "log_name": "encrypted-vpn-afb5984-step7491490-001.log"
+    },
+    {
+      "changed_sections": [],
+      "elapsed_wall_seconds": 14.0,
+      "exit_code": 1,
+      "harness_source": "467a71c4e5911f2956134c0165961fa3b065f261",
+      "host_after_sha256": "5b30dbd5fbe7885ede781ca3f6a67e0d8702f80701ef43bf0911d61e537c673d",
+      "host_before_sha256": "5b30dbd5fbe7885ede781ca3f6a67e0d8702f80701ef43bf0911d61e537c673d",
+      "host_unchanged": true,
+      "results": [],
+      "retained_stage_errors": [],
+      "run_id": "encrypted-vpn-afb5984-step467a71c-cbeb315db1",
+      "source": "afb598448ac17f18e288b0ebb8a14d366647a7ad",
+      "success": false,
+      "timed_out": false,
+      "log_sha256": "42cebe80aae2f4ddaa217fcb4549c1d1a04394c81a3d68428f76c2ceddbacce1",
+      "log_name": "encrypted-vpn-afb5984-step467a71c-001.log"
+    },
+    {
+      "changed_sections": [],
+      "elapsed_wall_seconds": 12.722,
+      "exit_code": 1,
+      "harness_source": "d72e7cdd1fefa0638ae9d45a340e26b86d562634",
+      "host_after_sha256": "e313b53b9a70469444a8a4dbe147a55c79075afdbc5b05b132d1a36f8d6c3130",
+      "host_before_sha256": "e313b53b9a70469444a8a4dbe147a55c79075afdbc5b05b132d1a36f8d6c3130",
+      "host_unchanged": true,
+      "results": [],
+      "retained_stage_errors": [],
+      "run_id": "encrypted-vpn-d72e7cd-eb1c19ad77",
+      "source": "d72e7cdd1fefa0638ae9d45a340e26b86d562634",
+      "success": false,
+      "timed_out": false,
+      "log_sha256": "e6d5aa0a6aecd2d59b477b9a5496b4accf786a8f2394557237c72d279a9471f7",
+      "log_name": "encrypted-vpn-d72e7cd-001.log"
+    },
+    {
+      "changed_sections": [],
+      "elapsed_wall_seconds": 13.521,
+      "exit_code": 1,
+      "harness_source": "56d270bd826d3eda623985e7615ca026d127d18d",
+      "host_after_sha256": "7dfcf472fba99cda30fffb71b321791c1b208711c5d056dc5bed5bd1d51e0ae3",
+      "host_before_sha256": "7dfcf472fba99cda30fffb71b321791c1b208711c5d056dc5bed5bd1d51e0ae3",
+      "host_unchanged": true,
+      "results": [],
+      "retained_stage_errors": [],
+      "run_id": "encrypted-vpn-56d270b-e0fa42c928",
+      "source": "56d270bd826d3eda623985e7615ca026d127d18d",
+      "success": false,
+      "timed_out": false,
+      "log_sha256": "6ea982e956feae800a8275a518241f300adbd3476beda77fe3be4baf1fa39964",
+      "log_name": "encrypted-vpn-56d270b-001.log"
+    },
+    {
+      "changed_sections": [],
+      "elapsed_wall_seconds": 24.493,
+      "exit_code": 1,
+      "harness_source": "a837ecf13bcf43748e270559a577a42680637f20",
+      "host_after_sha256": "ec04e1b6ed82856015d6d557b46d4a2d66538405eebb18d96ded812d0eba321b",
+      "host_before_sha256": "ec04e1b6ed82856015d6d557b46d4a2d66538405eebb18d96ded812d0eba321b",
+      "host_unchanged": true,
+      "results": [
+        {
+          "elapsed_seconds": 23.388,
+          "encrypted_ingress": [
+            {
+              "business_https_verified": true,
+              "client_identity_survives_restart": true,
+              "core": "xray",
+              "exit_ip_matches_vpn": true,
+              "exit_ipv4_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+              "exit_stop_revokes_core": true,
+              "listener_public": false,
+              "mutation_refused": true,
+              "native_listener_owned": true,
+              "success": true,
+              "template": "vless-reality-vision"
+            },
+            {
+              "core": "sing-box",
+              "failure_category": "RuntimeError",
+              "success": false
+            }
+          ],
+          "factory_substituted": false,
+          "failure_categories": [],
+          "limits": {
+            "cpu.max": "100000 100000",
+            "memory.max": "402653184",
+            "memory.swap.max": "0",
+            "pids.max": "64"
+          },
+          "memory_events_delta": {
+            "high": 0,
+            "low": 0,
+            "max": 0,
+            "oom": 0,
+            "oom_group_kill": 0,
+            "oom_kill": 0,
+            "sock_throttled": 0
+          },
+          "memory_peak_bytes": 200093696,
+          "pids_events_delta": {
+            "max": 0
+          },
+          "public_nodes_attempted": [
+            {
+              "business_https_verified": true,
+              "exit_ipv4_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+              "identity_http": 200,
+              "node_hostname": "vpn184169581",
+              "node_ip_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+              "peer_fingerprint": "d4bedc8f499ae6e416311783ad4575086ca5a0b138787cd946931f109d4b2d3f",
+              "peer_name": "opengw.net",
+              "runtime_verified": true,
+              "start_http": 200,
+              "stopped": true,
+              "tls_hostname": "vpn184169581.opengw.net"
+            }
+          ],
+          "public_proxy_listener": false,
+          "remaining_scope_pids": [],
+          "scope": "at most two official public VPN Gate candidates; real CLI and isolated worker",
+          "source_binary_sha256": "dd62f22dac8b3430d51f77e190fa5c43ea5952feb3edc54db5f7c870e7d1b302",
+          "success": false,
+          "tls_verification_disabled": false
+        }
+      ],
+      "retained_stage_errors": [],
+      "run_id": "encrypted-vpn-a837ecf-a594287ba3",
+      "source": "a837ecf13bcf43748e270559a577a42680637f20",
+      "success": false,
+      "timed_out": false,
+      "log_sha256": "def61b529f54d4d7d47f6699f3be98fd7182ee2f5f5f7604560abb0f655b81e0",
+      "log_name": "encrypted-vpn-a837ecf-001.log"
+    }
+  ]
+}

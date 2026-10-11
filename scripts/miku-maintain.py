@@ -470,7 +470,7 @@ def install_startup_guard(state):
 
 def recover_transaction():
     raw,_=safe_path(JOURNAL,0,0o600);journal=json.loads(raw)
-    require(journal.get('format')==1 and journal.get('operation') in ('upgrade','rollback','certificate-refresh'),'恢复事务格式无效')
+    require(journal.get('format')==1 and journal.get('operation') in ('upgrade','rollback','certificate-refresh','uninstall-services'),'恢复事务格式无效')
     state=journal['state'];check_identity(state)
     units=['miku-gate.service']+(['miku-gate-vpn.service'] if state['vpn'] else [])
     require(isinstance(journal.get('active'),list) and set(journal['active'])<=set(units),'恢复日志不允许操作未知单元')
@@ -486,7 +486,12 @@ def recover_transaction():
     try:
         remove_owned(STARTUP_BLOCK,0,0o600)
         install.run([install.trusted_tool('systemctl'),'daemon-reload'])
+        if journal['operation']=='uninstall-services':
+            enabled=state.get('recovery_enabled_units',[])
+            require(isinstance(enabled,list) and set(enabled)<=set(registered_units(old)),'恢复只允许原已登记启用单元')
+            for name in enabled:install.run([install.trusted_tool('systemctl'),'enable',name])
         restart_services(old,journal['active'])
+        if journal['operation']=='uninstall-services' and 'miku-gate-certificate.timer' in state.get('recovery_enabled_units',[]):install.run([install.trusted_tool('systemctl'),'start','miku-gate-certificate.timer'])
         remove_owned(JOURNAL,0,0o600)
     except BaseException:
         set_startup_block();stop_services(old)
@@ -667,27 +672,110 @@ def configure_certificate_automation(args,state):
         replace_owned(FILES['installation/install-state.json'],json.dumps(new,ensure_ascii=False,indent=2).encode(),0,0,0o600)
     print('MIKU_CERTIFICATE_AUTOMATION '+json.dumps({'instance':state['instance'],'enabled':enabled,'renew_authorized':new['certificate_automation']['renew'],'management_service_restarted':False},sort_keys=True))
 
+
+def registered_units(state):
+    units=install.unit_text(FILES['binary/miku-gate'],DATA,state['origin'],state['port'],DATA/'management/certificate.pem',DATA/'management/private.key',state['certificate_summary']['bootstrap'],state['vpn'],state['instance'],state['users'],{core:FILES['binary/miku-gate'].with_name(core) for core in state['cores']})
+    if state.get('certificate_automation',{}).get('enabled'):units.update(install.certificate_units())
+    return units
+
+def check_registered_units(state):
+    units=registered_units(state)
+    for name,text in units.items():
+        raw,_=safe_path(FILES['units/'+name],0,0o644)
+        legacy=text.replace('ConditionPathExists=!/etc/miku-gate/maintenance-block\n','').encode()
+        require(raw in (text.encode(),legacy),'已有单元内容变化，拒绝服务卸载接管')
+        overrides=install.run([install.trusted_tool('systemctl'),'show',name,'--property=DropInPaths','--value']).strip()
+        require(not overrides,'已有单元drop-in自定义，先明确检查，不自动卸载')
+    return units
+
+def uninstall_services(args,state):
+    require(args.confirm_uninstall_services and args.confirm_stop and args.output and not state.get('services_uninstalled'),'服务卸载需--confirm-uninstall-services --confirm-stop --output新私有快照')
+    require(not any((args.archive,args.archive_sha256,args.distribution,args.confirm_backup,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover,args.confirm_certificate_refresh,args.confirm_certificate_automation,args.disable_certificate_automation,args.confirm_reinstall_services,args.scheduled,args.renew,args.leave_stopped)),'服务卸载不混用其他变更')
+    out=check_output(args.output);units=check_registered_units(state)
+    active=[name for name in ('miku-gate.service','miku-gate-vpn.service') if name in units and service_active(name)]
+    enabled=[]
+    for name in units:
+        value=install.run([install.trusted_tool('systemctl'),'show',name,'--property=UnitFileState','--value']).decode().strip()
+        require(value in ('enabled','disabled','static','indirect'),'服务启用状态未知，拒绝卸载')
+        if value=='enabled':enabled.append(name)
+    # Stop future certificate triggers before snapshot; do not remove any data.
+    if 'miku-gate-certificate.timer' in units:install.run([install.trusted_tool('systemctl'),'stop','miku-gate-certificate.timer'])
+    original=None;changed=False
+    try:
+        stop_services(state)
+        with data_lease(state):
+            original,backup=snapshot(out,state)
+            journal_state=json.loads(json.dumps(state));journal_state['recovery_enabled_units']=enabled
+            write_journal(journal_state,active,backup,'uninstall-services');changed=True
+            set_startup_block()
+            for name in units:install.run([install.trusted_tool('systemctl'),'disable','--now',name])
+            for name in units:remove_owned(FILES['units/'+name],0,0o644)
+            new=json.loads(json.dumps(state));new['services_uninstalled']=True;new['previous_enabled_units']=enabled
+            replace_owned(FILES['installation/install-state.json'],json.dumps(new,ensure_ascii=False,indent=2).encode(),0,0,0o600)
+        install.run([install.trusted_tool('systemctl'),'daemon-reload'])
+        remove_owned(STARTUP_BLOCK,0,0o600);remove_owned(JOURNAL,0,0o600)
+    except BaseException:
+        if changed:
+            try:
+                with data_lease(state):restore_resources(original,state);validate_recovered(state)
+                remove_owned(STARTUP_BLOCK,0,0o600);install.run([install.trusted_tool('systemctl'),'daemon-reload'])
+                for name in enabled:install.run([install.trusted_tool('systemctl'),'enable',name])
+                restart_services(state,active)
+                if 'miku-gate-certificate.timer' in enabled:install.run([install.trusted_tool('systemctl'),'start','miku-gate-certificate.timer'])
+                remove_owned(JOURNAL,0,0o600)
+            except BaseException:raise BackupError('UNINSTALL_RECOVERY_REQUIRED：数据/程序与事务快照保留，明确recover。') from None
+        else:
+            restart_services(state,active)
+            if 'miku-gate-certificate.timer' in enabled:install.run([install.trusted_tool('systemctl'),'start','miku-gate-certificate.timer'])
+        raise BackupError('服务卸载失败；未删除数据/程序/账号，旧服务状态已尝试恢复。') from None
+    print('MIKU_UNINSTALL_RESULT '+json.dumps({'services_removed':list(units),'data_keys_certificates_retained':True,'binaries_accounts_retained':True,'backup_sha256':backup['archive_sha256'],'firewall_or_routes_changed':False},sort_keys=True))
+
+def reinstall_services(args,state):
+    require(args.confirm_reinstall_services and state.get('services_uninstalled') and not any((args.output,args.confirm_stop,args.archive,args.archive_sha256,args.distribution,args.confirm_backup,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover,args.confirm_certificate_refresh,args.confirm_certificate_automation,args.disable_certificate_automation,args.confirm_uninstall_services,args.scheduled,args.renew,args.leave_stopped)),'恢复注册需明确--confirm-reinstall-services，且已有保留数据的服务卸载登记')
+    units=registered_units(state)
+    # No replacement of a newly occupied service file by this action.
+    for name,text in units.items():
+        path=FILES['units/'+name]
+        if path.exists() or path.is_symlink():
+            raw,_=safe_path(path,0,0o644);require(raw==text.encode(),'单元名称被新服务占用，不覆盖')
+    set_startup_block()
+    for name,text in units.items():
+        path=FILES['units/'+name]
+        if not path.exists():install.exclusive(path,text.encode(),0o644)
+    install.run([install.trusted_tool('systemd-analyze'),'verify',*[str(FILES['units/'+name]) for name in units]])
+    new=json.loads(json.dumps(state));new['services_uninstalled']=False
+    replace_owned(FILES['installation/install-state.json'],json.dumps(new,ensure_ascii=False,indent=2).encode(),0,0,0o600)
+    install.run([install.trusted_tool('systemctl'),'daemon-reload']);remove_owned(STARTUP_BLOCK,0,0o600)
+    print('MIKU_REINSTALL_RESULT '+json.dumps({'units_registered':list(units),'data_identity_preserved':True,'services_started':False,'startup_enable_changed':False},sort_keys=True))
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('status','backup','upgrade','rollback','recover','certificate-refresh','certificate-automation'))
+    parser.add_argument('command',choices=('status','backup','upgrade','rollback','recover','certificate-refresh','certificate-automation','uninstall-services','reinstall-services'))
     parser.add_argument('--output');parser.add_argument('--confirm-stop',action='store_true');parser.add_argument('--confirm-backup',action='store_true');parser.add_argument('--leave-stopped',action='store_true')
     parser.add_argument('--distribution');parser.add_argument('--confirm-upgrade',action='store_true')
     parser.add_argument('--archive');parser.add_argument('--archive-sha256');parser.add_argument('--confirm-rollback',action='store_true');parser.add_argument('--confirm-recover',action='store_true')
     parser.add_argument('--confirm-certificate-refresh',action='store_true');parser.add_argument('--renew',action='store_true');parser.add_argument('--scheduled',action='store_true')
     parser.add_argument('--confirm-certificate-automation',action='store_true');parser.add_argument('--disable-certificate-automation',action='store_true')
+    parser.add_argument('--confirm-uninstall-services',action='store_true');parser.add_argument('--confirm-reinstall-services',action='store_true')
     args=parser.parse_args(argv)
     require(sys.platform=='linux' and os.geteuid()==0,'维护仅已授权Linux root协调，控制服务仍普通账号')
     if args.command=='status':
-        require(not any((args.output,args.confirm_stop,args.confirm_backup,args.leave_stopped,args.distribution,args.archive,args.archive_sha256,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover,args.confirm_certificate_refresh,args.renew,args.scheduled,args.confirm_certificate_automation,args.disable_certificate_automation)),'status只读，无变更参数')
+        require(not any((args.output,args.confirm_stop,args.confirm_backup,args.leave_stopped,args.distribution,args.archive,args.archive_sha256,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover,args.confirm_certificate_refresh,args.renew,args.scheduled,args.confirm_certificate_automation,args.disable_certificate_automation,args.confirm_uninstall_services,args.confirm_reinstall_services)),'status只读，无变更参数')
         pending=JOURNAL.exists()
         state=installed_state() if not pending else json.loads(safe_path(JOURNAL,0,0o600)[0])['state']
-        print(json.dumps({'instance':state['instance'],'origin':state['origin'],'vpn':state['vpn'],'cores':state['cores'],'control_active':service_active('miku-gate.service'),'backup_required_before_upgrade':True,'upgrade_restore_implemented':True,'recovery_required':pending,'certificate_automation':state.get('certificate_automation',{'enabled':False,'renew':False})},ensure_ascii=False));return
+        print(json.dumps({'instance':state['instance'],'origin':state['origin'],'vpn':state['vpn'],'cores':state['cores'],'control_active':False if state.get('services_uninstalled') else service_active('miku-gate.service'),'backup_required_before_upgrade':True,'upgrade_restore_implemented':True,'recovery_required':pending,'certificate_automation':state.get('certificate_automation',{'enabled':False,'renew':False}),'services_uninstalled':state.get('services_uninstalled',False)},ensure_ascii=False));return
     with maintenance_lock():
         if args.command=='recover':
-            require(args.confirm_recover and args.confirm_stop and not any((args.output,args.archive,args.archive_sha256,args.distribution,args.confirm_backup,args.confirm_upgrade,args.confirm_rollback,args.leave_stopped,args.confirm_certificate_refresh,args.renew,args.scheduled,args.confirm_certificate_automation,args.disable_certificate_automation)),'recover需明确--confirm-recover --confirm-stop且无外部目标')
+            require(args.confirm_recover and args.confirm_stop and not any((args.output,args.archive,args.archive_sha256,args.distribution,args.confirm_backup,args.confirm_upgrade,args.confirm_rollback,args.leave_stopped,args.confirm_certificate_refresh,args.renew,args.scheduled,args.confirm_certificate_automation,args.disable_certificate_automation,args.confirm_uninstall_services,args.confirm_reinstall_services)),'recover需明确--confirm-recover --confirm-stop且无外部目标')
             recover_transaction();return
-        require(not JOURNAL.exists() and not JOURNAL.is_symlink() and not STARTUP_BLOCK.exists() and not STARTUP_BLOCK.is_symlink(),'已有维护事务，先明确recover，不能叠加更改')
+        require(not JOURNAL.exists() and not JOURNAL.is_symlink() and (args.command=='reinstall-services' or not STARTUP_BLOCK.exists()) and not STARTUP_BLOCK.is_symlink(),'已有维护事务，先明确recover，不能叠加更改')
         state=installed_state()
+        if args.command=='uninstall-services':
+            uninstall_services(args,state);return
+        if args.command=='reinstall-services':
+            reinstall_services(args,state);return
+        require(not args.confirm_uninstall_services and not args.confirm_reinstall_services,'卸载/恢复注册参数不能用于其他更改')
+        require(not state.get('services_uninstalled'),'服务已卸载，先明确reinstall-services恢复注册；保留的数据/程序未删除')
         if args.command=='certificate-automation':
             configure_certificate_automation(args,state);return
         require(not args.confirm_certificate_automation and not args.disable_certificate_automation,'定时授权参数不能用于其他更改')
@@ -695,7 +783,7 @@ def main(argv=None):
             run_certificate_refresh(args,state);return
         require(not args.confirm_certificate_refresh and not args.renew and not args.scheduled,'证书专属参数不能用于其他更改')
         if args.command=='backup':
-            require(not any((args.archive,args.archive_sha256,args.distribution,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover,args.confirm_certificate_refresh,args.renew,args.scheduled,args.confirm_certificate_automation,args.disable_certificate_automation)),'备份不混用升级/回滚参数')
+            require(not any((args.archive,args.archive_sha256,args.distribution,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover,args.confirm_certificate_refresh,args.renew,args.scheduled,args.confirm_certificate_automation,args.disable_certificate_automation,args.confirm_uninstall_services,args.confirm_reinstall_services)),'备份不混用升级/回滚参数')
             run_backup(args,state)
         else:run_change(args,state)
 

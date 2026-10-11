@@ -159,4 +159,19 @@ class CertificateUnitSnapshotRestoration(unittest.TestCase):
         with mock.patch.object(maintenance,'replace_owned') as replace,mock.patch.object(maintenance,'remove_owned'):
             maintenance.restore_resources(resources,state)
             self.assertEqual({call.args[0].name:call.args[1] for call in replace.call_args_list},{name:text.encode() for name,text in maintenance.install.certificate_units().items()})
+class DataPreservingServiceRemoval(unittest.TestCase):
+    def test_unconfirmed_removal_does_not_touch_units_or_data(self):
+        args=__import__('types').SimpleNamespace(confirm_uninstall_services=False,confirm_stop=False,output=None)
+        with mock.patch.object(maintenance,'check_output') as check,mock.patch.object(maintenance,'stop_services') as stop,mock.patch.object(maintenance,'remove_owned') as remove:
+            with self.assertRaises(maintenance.BackupError):maintenance.uninstall_services(args,{'services_uninstalled':False})
+            check.assert_not_called();stop.assert_not_called();remove.assert_not_called()
+    def test_registered_units_never_include_other_panel_services(self):
+        state,_=PairedMaintenanceSafety().state()
+        fixed={name:__import__('pathlib').PurePosixPath(str(path).replace('\\','/')) for name,path in maintenance.FILES.items()}
+        with mock.patch.object(maintenance,'FILES',fixed),mock.patch.object(maintenance,'DATA',__import__('pathlib').PurePosixPath('/var/lib/miku-gate/data')):units=maintenance.registered_units(state)
+        self.assertEqual(set(units),{'miku-gate.service'})
+        state['certificate_automation']={'enabled':True,'renew':False}
+        with mock.patch.object(maintenance,'FILES',fixed),mock.patch.object(maintenance,'DATA',__import__('pathlib').PurePosixPath('/var/lib/miku-gate/data')):
+            self.assertEqual(set(maintenance.registered_units(state)),{'miku-gate.service','miku-gate-certificate.service','miku-gate-certificate.timer'})
+        self.assertNotIn('x-ui.service',units)
 if __name__=='__main__':unittest.main()

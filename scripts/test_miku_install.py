@@ -67,4 +67,8 @@ class CertificateTimerPlanning(unittest.TestCase):
         units=install.certificate_units();service=units['miku-gate-certificate.service'];timer=units['miku-gate-certificate.timer']
         self.assertIn('certificate-refresh --scheduled',service);self.assertIn('MemoryMax=256M',service);self.assertIn('User=root',service)
         self.assertIn('Persistent=yes',timer);self.assertIn('RandomizedDelaySec=30m',timer);self.assertNotIn('certbot renew',service);self.assertNotIn('nginx',service+timer)
+class UnreadableCertificateSources(unittest.TestCase):
+    def test_unreadable_root_sources_are_unavailable_without_execution(self):
+        with mock.patch.object(Path,'exists',side_effect=PermissionError('fixture')),mock.patch.object(install,'run') as run:
+            self.assertIsNone(install.source_certificate(Path('/trusted/miku'),'entry.example'));run.assert_not_called()
 if __name__=='__main__':unittest.main()

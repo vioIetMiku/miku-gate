@@ -7,6 +7,7 @@ import {
   ShieldWarning,
   Trash,
 } from '@phosphor-icons/react';
+import { IPIntelligence } from './IPIntelligence';
 import { Modal } from './Modal';
 import {
   api,
@@ -331,6 +332,7 @@ export function RuntimeView({ exitID, changed }: { exitID: string; changed: () =
   const [state, setState] = useState<RuntimeState | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [intelligenceOpen, setIntelligenceOpen] = useState(false);
   useEffect(() => {
     let alive = true;
     const read = () =>
@@ -406,6 +408,14 @@ export function RuntimeView({ exitID, changed }: { exitID: string; changed: () =
               <dd>{state.proof.exit_ip || '尚未测量（不使用配置地区冒充）'}</dd>
             </div>
           </dl>
+          <button
+            type="button"
+            className="text-button"
+            disabled={!state.healthy || !state.proof.exit_ip}
+            onClick={() => setIntelligenceOpen(true)}
+          >
+            查询实测出口归属 / ASN / 风险
+          </button>
           <p className="field-note">
             {state.proof.protection_mode === 'proxy_only'
               ? '应用层只经代理上游转发；不是OpenVPN隧道或内核隔离的证明。'
@@ -438,6 +448,12 @@ export function RuntimeView({ exitID, changed }: { exitID: string; changed: () =
         <div className="inline-error" role="alert">
           {error}
         </div>
+      )}
+      {intelligenceOpen && (
+        <IPIntelligence
+          selection={{ kind: 'exit', id: exitID, name: '当前实测公网出口' }}
+          close={() => setIntelligenceOpen(false)}
+        />
       )}
     </section>
   );

@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"path"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	"mikugate/internal/gateway"
 	"mikugate/internal/hostinventory"
 	"mikugate/internal/ingress"
+	"mikugate/internal/ipintel"
 	"mikugate/internal/management"
 	"mikugate/internal/netexec"
 	"mikugate/internal/security"
@@ -42,47 +44,53 @@ type SandboxClient interface {
 	Capabilities(context.Context) (executoripc.Capabilities, error)
 }
 type Options struct {
-	ManagementIdentity  *management.CertificateInfo
-	PublicOrigin        string
-	Cores               *coreruntime.Manager
-	DiscoverCertificate func(string) (certassets.Discovery, *certassets.Asset, error)
-	ProbeReality        func(context.Context, string) (ingress.RealityTarget, error)
-	InspectIngress      func(ingress.Source) (ingress.Report, error)
-	InspectNodeIdentity func(context.Context, domain.Node) (domain.NodeIdentity, error)
-	Sandbox             SandboxClient
-	Gateway             *gateway.Manager
-	VPN                 *vpnipc.Client
+	LookupIntelligence        func(context.Context, string) (ipintel.Report, error)
+	ResolveIntelligenceDomain func(context.Context, string) ([]netip.Addr, error)
+	ManagementIdentity        *management.CertificateInfo
+	PublicOrigin              string
+	Cores                     *coreruntime.Manager
+	DiscoverCertificate       func(string) (certassets.Discovery, *certassets.Asset, error)
+	ProbeReality              func(context.Context, string) (ingress.RealityTarget, error)
+	InspectIngress            func(ingress.Source) (ingress.Report, error)
+	InspectNodeIdentity       func(context.Context, domain.Node) (domain.NodeIdentity, error)
+	Sandbox                   SandboxClient
+	Gateway                   *gateway.Manager
+	VPN                       *vpnipc.Client
 }
 type Server struct {
-	managementIdentity  *management.CertificateInfo
-	publicEndpoint      *management.Endpoint
-	cores               *coreruntime.Manager
-	assetSlot           chan struct{}
-	lastAsset           time.Time
-	discoverCertificate func(string) (certassets.Discovery, *certassets.Asset, error)
-	probeReality        func(context.Context, string) (ingress.RealityTarget, error)
-	ingressSlot         chan struct{}
-	lastIngress         time.Time
-	inspectIngress      func(ingress.Source) (ingress.Report, error)
-	hostSlot            chan struct{}
-	hostReport          *hostinventory.Report
-	nodeIdentities      map[string]domain.NodeIdentity
-	identitySlot        chan struct{}
-	lastIdentity        time.Time
-	inspectIdentity     func(context.Context, domain.Node) (domain.NodeIdentity, error)
-	gateway             *gateway.Manager
-	vpnClient           *vpnipc.Client
-	sandbox             SandboxClient
-	sandboxSlot         chan struct{}
-	store               *store.Store
-	assets              fs.FS
-	dummyHash           string
-	authSlots           chan struct{}
-	writeSlots          chan struct{}
-	refreshSlot         chan struct{}
-	mu                  sync.Mutex
-	attempts            map[string]attempt
-	lastRefresh         time.Time
+	intelligenceSlot          chan struct{}
+	lastIntelligence          time.Time
+	intelligenceLookupFunc    func(context.Context, string) (ipintel.Report, error)
+	resolveIntelligenceDomain func(context.Context, string) ([]netip.Addr, error)
+	managementIdentity        *management.CertificateInfo
+	publicEndpoint            *management.Endpoint
+	cores                     *coreruntime.Manager
+	assetSlot                 chan struct{}
+	lastAsset                 time.Time
+	discoverCertificate       func(string) (certassets.Discovery, *certassets.Asset, error)
+	probeReality              func(context.Context, string) (ingress.RealityTarget, error)
+	ingressSlot               chan struct{}
+	lastIngress               time.Time
+	inspectIngress            func(ingress.Source) (ingress.Report, error)
+	hostSlot                  chan struct{}
+	hostReport                *hostinventory.Report
+	nodeIdentities            map[string]domain.NodeIdentity
+	identitySlot              chan struct{}
+	lastIdentity              time.Time
+	inspectIdentity           func(context.Context, domain.Node) (domain.NodeIdentity, error)
+	gateway                   *gateway.Manager
+	vpnClient                 *vpnipc.Client
+	sandbox                   SandboxClient
+	sandboxSlot               chan struct{}
+	store                     *store.Store
+	assets                    fs.FS
+	dummyHash                 string
+	authSlots                 chan struct{}
+	writeSlots                chan struct{}
+	refreshSlot               chan struct{}
+	mu                        sync.Mutex
+	attempts                  map[string]attempt
+	lastRefresh               time.Time
 }
 
 func New(s *store.Store, assets fs.FS) (http.Handler, error) {
@@ -127,8 +135,19 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 	if reality == nil {
 		reality = ingress.ProbeReality
 	}
-	a := &Server{managementIdentity: options.ManagementIdentity, publicEndpoint: publicEndpoint, cores: options.Cores, assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	intel := options.LookupIntelligence
+	if intel == nil {
+		intel = ipintel.New().Lookup
+	}
+	resolver := options.ResolveIntelligenceDomain
+	if resolver == nil {
+		resolver = defaultDomainResolver
+	}
+	a := &Server{intelligenceSlot: make(chan struct{}, 1), intelligenceLookupFunc: intel, resolveIntelligenceDomain: resolver, managementIdentity: options.ManagementIdentity, publicEndpoint: publicEndpoint, cores: options.Cores, assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/nodes/{id}/intelligence", a.auth(a.nodeIntelligence))
+	mux.HandleFunc("POST /api/exits/{id}/intelligence", a.auth(a.exitIntelligence))
+	mux.HandleFunc("POST /api/intelligence/domain", a.auth(a.domainIntelligence))
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]any{"version": domain.Version, "status": a.mode()})
 	})

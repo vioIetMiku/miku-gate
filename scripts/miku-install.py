@@ -212,13 +212,13 @@ def source_certificate(binary,domain):
                 (Path('/root/.acme.sh')/domain/'fullchain.cer',Path('/root/.acme.sh')/domain/(domain+'.key'),Path('/root/.acme.sh')/domain),
                 (Path('/root/.acme.sh')/(domain+'_ecc')/'fullchain.cer',Path('/root/.acme.sh')/(domain+'_ecc')/(domain+'.key'),Path('/root/.acme.sh')/(domain+'_ecc'))]
     for cert,key,bound in candidates:
-        if not cert.exists() or not key.exists():continue
-        c,k=cert.resolve(strict=True),key.resolve(strict=True)
-        if not c.is_relative_to(bound) or not k.is_relative_to(bound):continue
         try:
+            if not cert.exists() or not key.exists():continue
+            c,k=cert.resolve(strict=True),key.resolve(strict=True)
+            if not c.is_relative_to(bound) or not k.is_relative_to(bound):continue
             summary=json.loads(run([str(binary),'management','inspect','--origin=https://'+domain+':8443','--certificate='+str(c),'--key='+str(k)]))
             if summary['system_trusted'] and not summary['bootstrap']:return c,k,summary
-        except InstallError:continue
+        except (InstallError,OSError,ValueError,KeyError):continue
     return None
 
 def certificate_plan(binary,prompt,domain,ip,plan_only=False):

@@ -548,6 +548,7 @@ def run_change(args,state):
 def certificate_candidate(state,renew=False):
     domain=state.get('domain')
     require(domain and not state['certificate_summary'].get('bootstrap'),'自动刷新仅已信任域名，不自动更换用户已信任的IP自签身份')
+    if renew:require(state.get('certificate_automation',{}).get('renew'),'安装未授权自动Certbot续期；不读取或运行续期来源')
     found=install.source_certificate(FILES['binary/miku-gate'],domain)
     already_updated=found is not None and found[2]['leaf_sha256']!=state['certificate_summary']['leaf_sha256']
     if renew:

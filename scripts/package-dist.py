@@ -17,7 +17,7 @@ import zipfile
 
 ROOT=Path(__file__).resolve().parent.parent
 SCRIPTS=('install-vps.sh','miku-install.py','miku-maintain.py')
-DOCS=('README.md','CHANGELOG.md','docs/HTTPS_INSTALLATION.md','docs/CONFIDENTIAL_BACKUP.md','docs/DISTRIBUTION.md','docs/UPGRADE_ROLLBACK.md','docs/CERTIFICATE_RENEWAL.md','docs/FINAL_FEATURES.md','docs/DELIVERY_PLAN.md')
+DOCS=('README.md','CHANGELOG.md','docs/HTTPS_INSTALLATION.md','docs/CONFIDENTIAL_BACKUP.md','docs/DISTRIBUTION.md','docs/UPGRADE_ROLLBACK.md','docs/CERTIFICATE_RENEWAL.md','docs/IP_INTELLIGENCE.md','docs/FINAL_FEATURES.md','docs/DELIVERY_PLAN.md')
 MAX_BINARY=48<<20
 MAX_PAYLOAD=64<<20
 

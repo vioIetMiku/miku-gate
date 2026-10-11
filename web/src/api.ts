@@ -286,3 +286,38 @@ export type NodeIdentity = {
   vpn_connected: boolean;
   message: string;
 };
+
+export type IPIntelligence = {
+  ip: string;
+  checked_at: string;
+  cached: boolean;
+  network_path: string;
+  prefix?: string;
+  asns: { number: number; holder?: string; source: string }[];
+  geography: {
+    state: string;
+    source: string;
+    country?: string;
+    country_code?: string;
+    region?: string;
+    city?: string;
+    isp?: string;
+    organization?: string;
+  };
+  reputation: {
+    state: string;
+    source: string;
+    pending: boolean;
+    listed_count: number;
+    checked_count: number;
+    results: { id: string; name: string; operator?: string; status: string; query_time?: string }[];
+  };
+  residential: string;
+  warnings: string[];
+};
+export function reputationLabel(state: string) {
+  if (state === 'listed') return '部分DNS黑名单有记录（不等于恶意用途证明）';
+  if (state === 'pending') return '第三方结果未出齐 · 未知';
+  if (state === 'no_listings_in_checked_sources') return '本次检查来源未列出 · 不代表纯净';
+  return '未知 / 来源不可用';
+}

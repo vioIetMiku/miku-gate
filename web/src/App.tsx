@@ -1,3 +1,4 @@
+import { IPIntelligence } from './IPIntelligence';
 import { ManagementAccess } from './ManagementAccess';
 import { ManagedIngress } from './ManagedIngress';
 import { IngressInventory } from './IngressInventory';
@@ -434,6 +435,7 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [country, setCountry] = useState('');
   const [profileNode, setProfileNode] = useState<VPNNode | null>(null);
+  const [intelligenceNode, setIntelligenceNode] = useState<VPNNode | null>(null);
   const [nodeQuery, setNodeQuery] = useState('');
   const [nodeLimit, setNodeLimit] = useState(50);
   useEffect(() => {
@@ -454,6 +456,7 @@ export default function App() {
       setExits([]);
       setNodes([]);
       setProfileNode(null);
+      setIntelligenceNode(null);
       setEvents([]);
       setForm(null);
       setDetail(null);
@@ -1115,6 +1118,13 @@ export default function App() {
                               >
                                 检查配置
                               </button>
+                              <button
+                                className="text-button"
+                                onClick={() => setIntelligenceNode(n)}
+                                aria-label={`归属与风险 ${n.hostname}`}
+                              >
+                                归属 / ASN / 风险
+                              </button>
                             </td>
                             <td className="small muted">{timestamp(n.fetched_at)}</td>
                           </tr>
@@ -1211,7 +1221,8 @@ export default function App() {
                     </li>
                     <li className="muted">
                       <Clock size={17} />
-                      域名/TLS/REALITY、Xray/sing-box、安装向导：后续阶段
+                      域名HTTPS / TLS / REALITY / 双核心入口 /
+                      交互安装已接入；已有面板持久协同继续开发
                     </li>
                   </ul>
                 </section>
@@ -1273,6 +1284,17 @@ export default function App() {
             setToast('VPN配置快照已保存；未自动启动');
             setVPNExit(null);
           }}
+        />
+      )}
+      {intelligenceNode && (
+        <IPIntelligence
+          selection={{
+            kind: 'node',
+            id: intelligenceNode.id,
+            name: intelligenceNode.hostname,
+            ip: intelligenceNode.ip,
+          }}
+          close={() => setIntelligenceNode(null)}
         />
       )}
       {profileNode && <NodeProfileView node={profileNode} close={() => setProfileNode(null)} />}

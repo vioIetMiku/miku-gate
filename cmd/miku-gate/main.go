@@ -53,7 +53,7 @@ func run() error {
 		return tunnel.RunWorker()
 	}
 	if len(os.Args) < 2 {
-		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | instance | serve | doctor | inventory | ingress | management | version | sandbox | executor | vpn-executor\n支持本机认证代理上游；Linux 隔离 OpenVPN 已接线；交互安装与加密入口开发中。")
+		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | instance | data-check | serve | doctor | inventory | ingress | management | version | sandbox | executor | vpn-executor\n支持本机认证代理上游；Linux 隔离 OpenVPN 已接线；交互安装与加密入口开发中。")
 		return nil
 	}
 	if os.Args[1] == "version" {
@@ -90,7 +90,7 @@ func run() error {
 		enc.SetIndent("", "  ")
 		return enc.Encode(diagnostics.Inspect())
 	}
-	if os.Args[1] != "init" && os.Args[1] != "serve" && os.Args[1] != "instance" {
+	if os.Args[1] != "init" && os.Args[1] != "serve" && os.Args[1] != "instance" && os.Args[1] != "data-check" {
 		return errors.New("未知命令")
 	}
 	flags := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
@@ -124,6 +124,16 @@ func run() error {
 	}
 	if *sandboxIPC && os.Args[1] != "serve" {
 		return errors.New("--sandbox-ipc 只适用于 serve")
+	}
+	if os.Args[1] == "data-check" {
+		if runtime.GOOS == "linux" && os.Geteuid() == 0 {
+			return errors.New("数据维护检查须使用专用普通账号，避免root生成数据库侧文件")
+		}
+		checked, err := store.InspectMaintenance(filepath.Join(*data, "miku-gate.db"))
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(checked)
 	}
 	if os.Args[1] == "instance" {
 		id, err := store.InspectInstance(filepath.Join(*data, "miku-gate.db"))

@@ -250,13 +250,13 @@ def unit_text(binary,data,origin,port,cert,key,bootstrap,vpn,instance,uids,cores
     if vpn:args.append('--vpn-executor')
     for core,path in cores.items():args.append(('--xray-core=' if core=='xray' else '--sing-box-core=')+str(path))
     require(all(re.fullmatch(r'[A-Za-z0-9_./:=[\]-]+',a) for a in args),'systemd参数包含未允许字符')
-    control='''[Unit]\nDescription=Miku Gate HTTPS management and owned ingress\nAfter=network-online.target\nWants=network-online.target\n'''
+    control='''[Unit]\nDescription=Miku Gate HTTPS management and owned ingress\nConditionPathExists=!/etc/miku-gate/maintenance-block\nAfter=network-online.target\nWants=network-online.target\n'''
     if vpn:control+='Requires=miku-gate-vpn.service\nAfter=miku-gate-vpn.service\n'
     control+='''\n[Service]\nType=simple\nUser=miku-gate\nGroup=miku-gate\nUMask=0077\nExecStart='''+' '.join(args)+'''\nRestart=on-failure\nRestartSec=5\nTimeoutStopSec=15\nNoNewPrivileges=yes\nCapabilityBoundingSet=\nAmbientCapabilities=\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nProtectKernelTunables=yes\nProtectKernelModules=yes\nProtectControlGroups=yes\nReadWritePaths='''+str(data)+'''\nCPUQuota=100%\nMemoryMax=384M\nMemorySwapMax=0\nTasksMax=128\n\n[Install]\nWantedBy=multi-user.target\n'''
     units={'miku-gate.service':control}
     if vpn:
         v=USERS[0];command=[str(binary),'vpn-executor','serve','--instance='+instance,'--allow-uid='+str(uids[v][0]),'--tunnel-uid='+str(uids[USERS[1]][0]),'--worker-uid='+str(uids[USERS[2]][0]),'--apply']
-        units['miku-gate-vpn.service']='''[Unit]\nDescription=Miku Gate isolated VPN executor\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nUser=root\nUMask=0077\nExecStart='''+' '.join(command)+'''\nRestart=on-failure\nRestartSec=5\nTimeoutStopSec=15\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nProtectKernelTunables=yes\nProtectKernelModules=yes\nProtectControlGroups=yes\nReadWritePaths=/run/miku-gate-vpnipc\nCPUQuota=100%\nMemoryMax=256M\nMemorySwapMax=0\nTasksMax=64\n\n[Install]\nWantedBy=multi-user.target\n'''
+        units['miku-gate-vpn.service']='''[Unit]\nDescription=Miku Gate isolated VPN executor\nConditionPathExists=!/etc/miku-gate/maintenance-block\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nUser=root\nUMask=0077\nExecStart='''+' '.join(command)+'''\nRestart=on-failure\nRestartSec=5\nTimeoutStopSec=15\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nProtectKernelTunables=yes\nProtectKernelModules=yes\nProtectControlGroups=yes\nReadWritePaths=/run/miku-gate-vpnipc\nCPUQuota=100%\nMemoryMax=256M\nMemorySwapMax=0\nTasksMax=64\n\n[Install]\nWantedBy=multi-user.target\n'''
     return units
 
 def verify_served_management(plan,cert_path,certificate_summary):

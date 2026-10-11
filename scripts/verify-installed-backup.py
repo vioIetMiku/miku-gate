@@ -35,6 +35,7 @@ def main():
     parser.add_argument('--private-init-log',required=True)
     parser.add_argument('--maintenance-script',required=True)
     parser.add_argument('--output',required=True)
+    parser.add_argument('--upgrade-distribution')
     args=parser.parse_args()
     require(os.geteuid()==0,'disposable installed verification needs root coordinator')
     state=json.loads(Path('/etc/miku-gate/install-state.json').read_text())
@@ -82,8 +83,30 @@ def main():
     require(hashlib.sha256(key.read_bytes()).hexdigest()==original_key_sha,'backup replaced live vault identity')
     after,_=request('GET','/api/exits/'+id+'/upstream')
     require(after==before,'encrypted upstream not recoverable after ordinary service restart')
+    rollback_verified=False;upgrade_verified=False
+    if args.upgrade_distribution:
+        def change(command,arguments):
+            result=subprocess.run(['/usr/bin/python3','-B',args.maintenance_script,command,*arguments],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=90)
+            require(result.returncode==0,'paired '+command+' failed; private diagnostics not returned')
+            require(len(result.stdout)<16384 and len(result.stderr)<16384,'paired maintenance output exceeded budget')
+        original_binary=state['binary_sha256']
+        change('upgrade',['--distribution='+args.upgrade_distribution,'--output='+str(output.parent/'pre-upgrade.tar.gz'),'--confirm-stop','--confirm-upgrade'])
+        upgraded=json.loads(Path('/etc/miku-gate/install-state.json').read_text())
+        require(upgraded['binary_sha256']!=original_binary and upgraded['instance']==state['instance'],'real candidate program not upgraded or instance drift')
+        after,_=request('GET','/api/exits/'+id+'/upstream');require(after==before,'encrypted fixture not readable after upgrade')
+        upgrade_verified=True
+        request('PUT','/api/exits/'+id+'/upstream',{'kind':'socks5','host':'127.0.0.1','port':19090,'username':'changed-after-snapshot','password':'changed-'+os.urandom(12).hex(),'allow_loopback':True,'dns':'cloudflare'},expected=204)
+        changed,_=request('GET','/api/exits/'+id+'/upstream');require(changed!=before,'rollback fixture did not change persistent data')
+        archive_sha=hashlib.sha256(output.read_bytes()).hexdigest()
+        change('rollback',['--archive='+str(output),'--archive-sha256='+archive_sha,'--output='+str(output.parent/'pre-rollback.tar.gz'),'--confirm-stop','--confirm-rollback'])
+        restored=json.loads(Path('/etc/miku-gate/install-state.json').read_text())
+        require(restored['binary_sha256']==original_binary and restored['instance']==state['instance'],'paired rollback did not restore original program/state')
+        require(hashlib.sha256(key.read_bytes()).hexdigest()==original_key_sha,'paired rollback restored wrong credential key')
+        after,_=request('GET','/api/exits/'+id+'/upstream');require(after==before,'paired rollback did not restore original encrypted data')
+        require(not Path('/etc/miku-gate/maintenance-transaction.json').exists() and not Path('/etc/miku-gate/maintenance-block').exists(),'successful paired rollback left an unresolved transaction')
+        rollback_verified=True
     request('DELETE','/api/exits/'+id,expected=204)
-    print('INSTALLED_BACKUP_VERIFIED '+json.dumps({'paired_encrypted_db_key_verified':True,'private_archive_mode':'0600','ordinary_service_https_restart_verified':True,'data_identity_retained':True,'raw_private_material_returned':False,'restore_verified':False,'vpn_mode':state['vpn']},sort_keys=True))
+    print('INSTALLED_BACKUP_VERIFIED '+json.dumps({'paired_encrypted_db_key_verified':True,'private_archive_mode':'0600','ordinary_service_https_restart_verified':True,'data_identity_retained':True,'raw_private_material_returned':False,'restore_verified':rollback_verified,'upgrade_verified':upgrade_verified,'vpn_mode':state['vpn']},sort_keys=True))
 
 if __name__=='__main__':
     try:main()

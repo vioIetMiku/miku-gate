@@ -1,4 +1,9 @@
 import importlib.util
+import contextlib
+import gzip
+import hashlib
+import tarfile
+from types import SimpleNamespace
 import io
 import json
 from pathlib import Path
@@ -32,9 +37,8 @@ class ConfidentialBackupSafety(unittest.TestCase):
                 result=maintenance.create_archive(destination,files,{'instance':'a'*22,'schema':6})
                 self.assertFalse(result['restore_verified']);self.assertEqual(result['member_count'],3)
                 with self.assertRaises(maintenance.BackupError):maintenance.create_archive(destination,files,{'instance':'a'*22,'schema':6})
-    def test_unknown_data_paths_and_restore_commands_are_not_implemented(self):
+    def test_known_fixed_destinations_exclude_other_services(self):
         self.assertEqual(len(maintenance.FILES),4)
-        self.assertNotIn('restore',maintenance.main.__doc__ or '')
         self.assertNotIn('nginx',str(maintenance.FILES))
 class InstalledBackupFixtureContract(unittest.TestCase):
     def test_real_api_creation_status_and_unprivileged_loopback_port(self):
@@ -47,5 +51,77 @@ class InstalledBackupFixtureContract(unittest.TestCase):
         self.assertEqual(request.call_args_list[0].kwargs['expected'],201)
         body=request.call_args_list[1].args[2]
         self.assertGreaterEqual(body['port'],1024);self.assertEqual(body['host'],'127.0.0.1');self.assertTrue(body['allow_loopback'])
+
+
+class PairedMaintenanceSafety(unittest.TestCase):
+    def state(self):
+        helpers={name:b'fixture-'+name.encode() for name in ('miku-install.py','miku-maintain.py')}
+        state={'instance':'a'*22,'users':{'miku-gate':[1000,1000]},'vpn':False,'cores':[],'core_sources':[],'origin':'https://192.0.2.10:8443','ip':'192.0.2.10','domain':'','port':8443,'certificate_summary':{'bootstrap':True},'binary_sha256':hashlib.sha256(b'old-program').hexdigest(),'maintenance_sha256':{name:hashlib.sha256(raw).hexdigest() for name,raw in helpers.items()}}
+        return state,helpers
+    def archive(self,mutate=None):
+        state,helpers=self.state();targets=maintenance.destinations(state)
+        contents={'installation/install-state.json':json.dumps(state).encode(),'binary/miku-gate':b'old-program','units/miku-gate.service':b'known-unit','data/miku-gate.db':b'fixture-db','data/miku-gate.db.key':b'paired-key','data/management/certificate.pem':b'certificate','data/management/private.key':b'private'}
+        contents.update({'binary/'+name:raw for name,raw in helpers.items()})
+        records=[{'name':name,'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'uid':targets[name][1],'gid':targets[name][2],'mode':targets[name][3]} for name,raw in contents.items()]
+        manifest={'format':1,'schema':6,'instance':state['instance'],'binary_sha256':state['binary_sha256'],'encrypted_record_count':1,'files':records}
+        contents['BACKUP.json']=json.dumps(manifest).encode()
+        if mutate:mutate(contents)
+        output=io.BytesIO()
+        with tarfile.open(fileobj=output,mode='w:gz') as archive:
+            for name,raw in contents.items():
+                item=tarfile.TarInfo(name);item.size=len(raw)
+                item.uid,item.gid,item.mode=targets[name][1:] if name in targets else (0,0,0o600)
+                archive.addfile(item,io.BytesIO(raw))
+        return state,output.getvalue()
+    def test_snapshot_requires_same_instance_paired_material_and_fixed_paths(self):
+        state,raw=self.archive()
+        with mock.patch.object(maintenance,'check_identity'),mock.patch.object(maintenance.install,'unit_text',return_value={'miku-gate.service':'known-unit'}):
+            resources,old,_=maintenance.decode_snapshot(raw,state)
+            self.assertEqual(old['instance'],state['instance']);self.assertIn('data/miku-gate.db.key',[r[0] for r in resources])
+            for change in (lambda c:c.pop('data/miku-gate.db.key'),lambda c:c.update({'../../elsewhere':b'payload'}),lambda c:c.update({'binary/miku-gate':b'changed'}),lambda c:c.update({'units/miku-gate.service':b'ExecStart=/bin/sh'})):
+                _,bad=self.archive(change)
+                with self.assertRaises(maintenance.BackupError):maintenance.decode_snapshot(bad,state)
+            other=json.loads(json.dumps(state));other['instance']='b'*22
+            with self.assertRaises(maintenance.BackupError):maintenance.decode_snapshot(raw,other)
+    def test_link_archive_member_rejected_without_extraction(self):
+        output=io.BytesIO()
+        with tarfile.open(fileobj=output,mode='w:gz') as archive:
+            item=tarfile.TarInfo('data/miku-gate.db');item.type=tarfile.SYMTYPE;item.linkname='/etc/shadow';archive.addfile(item)
+        with self.assertRaises(maintenance.BackupError):maintenance.decode_snapshot(output.getvalue(),self.state()[0])
+    def test_restore_keeps_writer_lease_and_removes_only_known_stale_sidecars(self):
+        state,_=self.state();uid,gid=state['users']['miku-gate']
+        resources=[('data/.serve.lock',b'lease',uid,gid,0o600),('data/miku-gate.db',b'db',uid,gid,0o600),('data/miku-gate.db.key',b'key',uid,gid,0o600)]
+        with mock.patch.object(maintenance,'replace_owned') as replace,mock.patch.object(maintenance,'remove_owned') as remove:
+            maintenance.restore_resources(resources,state)
+            self.assertFalse(any(call.args[0].name=='.serve.lock' for call in replace.call_args_list))
+            self.assertEqual({call.args[0].name for call in remove.call_args_list},{'miku-gate.db-wal','miku-gate.db-shm'})
+    def test_failed_upgrade_restores_original_pair_and_reports_failure(self):
+        state,_=self.state();original=[('data/miku-gate.db',b'old',1000,1000,0o600)]
+        args=SimpleNamespace(command='upgrade',confirm_stop=True,output='/private/pre-upgrade.tar.gz',leave_stopped=False,confirm_backup=False,confirm_recover=False,confirm_upgrade=True,distribution='/release',archive=None,archive_sha256=None)
+        events=[]
+        with contextlib.ExitStack() as stack:
+            for name in ('stop_services','set_startup_block','install_startup_guard','remove_owned','write_journal','protected_data_check'):
+                stack.enter_context(mock.patch.object(maintenance,name,side_effect=lambda *a,n=name:events.append(n)))
+            stack.enter_context(mock.patch.object(maintenance,'data_lease',return_value=contextlib.nullcontext()))
+            stack.enter_context(mock.patch.object(maintenance,'check_output',return_value=Path(args.output)))
+            stack.enter_context(mock.patch.object(maintenance,'service_active',return_value=True))
+            stack.enter_context(mock.patch.object(maintenance,'snapshot',return_value=(original,{'file':args.output,'archive_sha256':'c'*64})))
+            stack.enter_context(mock.patch.object(maintenance,'apply_release',return_value={**state,'binary_sha256':'d'*64}))
+            stack.enter_context(mock.patch.object(maintenance,'validate_recovered',side_effect=[maintenance.BackupError('fixture failed'),None]))
+            restored=stack.enter_context(mock.patch.object(maintenance,'restore_resources'))
+            restarted=stack.enter_context(mock.patch.object(maintenance,'restart_services'))
+            stack.enter_context(mock.patch.object(maintenance.install,'distribution_binary',return_value=(Path('/release/bin/miku-gate'),b'new',{'binary_sha256':'d'*64})))
+            stack.enter_context(mock.patch.object(maintenance.install,'platform_gate',return_value='amd64'))
+            stack.enter_context(mock.patch.object(maintenance.install,'trusted_tool',return_value='/usr/bin/systemctl'))
+            stack.enter_context(mock.patch.object(maintenance.install,'run',return_value=b''))
+            with self.assertRaisesRegex(maintenance.BackupError,'PAIRED_ROLLBACK_VERIFIED'):maintenance.run_change(args,state)
+            restored.assert_called_once_with(original,state);restarted.assert_called_once_with(state,['miku-gate.service'])
+            self.assertLess(events.index('write_journal'),events.index('set_startup_block'))
+    def test_unconfirmed_rollback_keeps_recovery_journal_and_block(self):
+        state,_=self.state()
+        with mock.patch.object(maintenance,'safe_path',return_value=(json.dumps({'format':1,'operation':'upgrade','state':state,'active':['miku-gate.service'],'backup':'/private/one','archive_sha256':'c'*64}).encode(),None)),mock.patch.object(maintenance,'check_identity'),mock.patch.object(maintenance,'read_snapshot',return_value=([],state,{})),mock.patch.object(maintenance,'set_startup_block') as block,mock.patch.object(maintenance,'stop_services'),mock.patch.object(maintenance,'data_lease',return_value=contextlib.nullcontext()),mock.patch.object(maintenance,'remove_owned') as remove,mock.patch.object(maintenance,'restore_resources'),mock.patch.object(maintenance,'validate_recovered'),mock.patch.object(maintenance,'restart_services',side_effect=maintenance.BackupError('restart failure')),mock.patch.object(maintenance.install,'trusted_tool',return_value='/usr/bin/systemctl'),mock.patch.object(maintenance.install,'run',return_value=b''):
+            with self.assertRaisesRegex(maintenance.BackupError,'RECOVERY_RESTART_UNCONFIRMED'):maintenance.recover_transaction()
+            self.assertGreaterEqual(block.call_count,2)
+            self.assertFalse(any(call.args[0]==maintenance.JOURNAL for call in remove.call_args_list))
 
 if __name__=='__main__':unittest.main()

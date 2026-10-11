@@ -1,6 +1,6 @@
 # 使用新版发行包安装与维护
 
-> 本说明对应dev.11开发源码和新版包格式。dev.10已发布包不含此安装器；只有正式发布、带完整BUILD清单的新版压缩包可按下面无参数入口安装。恢复/升级/卸载仍未实现。
+> 本说明对应dev.11开发源码和新版包格式。dev.10已发布包不含此安装器；只有正式发布、带完整BUILD清单的新版压缩包可按下面无参数入口安装。同安装/schema6升级与配套回滚已接线，Linux实际验收待回读；跨机灾备、未来schema迁移与卸载未实现。
 
 ## 在VPS安装
 
@@ -29,7 +29,7 @@ sudo python3 -B /usr/local/lib/miku-gate/miku-maintain.py backup \
   --confirm-stop --confirm-backup
 ```
 
-备份明确停机，输出必须全新文件；默认重启之前活动的Miku服务并核对HTTPS/VPN身份。归档含数据库配套.key与TLS私钥，不上传GitHub。它不是经过恢复验证的回滚包，也不含全部核心二进制；见[备份边界](CONFIDENTIAL_BACKUP.md)。
+备份明确停机，输出必须全新文件；默认重启之前活动的Miku服务并核对HTTPS/VPN身份。归档含数据库配套.key与TLS私钥，不上传GitHub。创建归档不等于已证明恢复；它不含全部核心二进制。同安装受控回滚需要明确归档摘要/停机/更改前快照，见[升级回滚说明](UPGRADE_ROLLBACK.md)和[备份边界](CONFIDENTIAL_BACKUP.md)。
 
 ## 构建固定源码发行包
 

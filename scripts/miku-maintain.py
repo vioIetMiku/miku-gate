@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Explicit, owner-checked installed Miku backup. No wildcard deletes/restores.
+"""Owner-checked Miku backup, same-install upgrade, paired rollback and recovery.
 
-Backup requires known install state and preserves paired encrypted DB/key,
-management certificates, core provenance, exact units and current Miku binary.
-This command does NOT implement upgrade/restore by swapping binary alone.
+Explicit confirmations, fixed destinations, offline verified release bundles,
+paired DB/key snapshots and a durable root-only recovery journal. Never extract
+an archive to its own paths or downgrade by swapping an old executable alone.
 """
 import argparse
 import contextlib
 import hashlib
+import gzip
 import importlib.util
 import io
 import json
@@ -33,19 +34,23 @@ DATABASE=('miku-gate.db','miku-gate.db-wal','miku-gate.db-shm','miku-gate.db.key
 CERT_DIRS=('management','bootstrap')
 MAX_FILE=48<<20
 MAX_TOTAL=96<<20
+MAX_ARCHIVE=MAX_TOTAL+(1<<20)
+JOURNAL=Path("/etc/miku-gate/maintenance-transaction.json")
+STARTUP_BLOCK=Path("/etc/miku-gate/maintenance-block")
+MAINTENANCE_LOCK=Path("/etc/miku-gate/.maintenance.lock")
 
 class BackupError(RuntimeError):pass
 
 def require(value,message):
     if not value:raise BackupError(message)
 
-def safe_path(path,uid,mode=None):
+def safe_path(path,uid,mode=None,max_bytes=MAX_FILE):
     # Open via resolved non-symlink metadata plus O_NOFOLLOW and identity check.
     # The root-only manifest paths are fixed, never constructed from archive data.
     path=Path(path)
     require(path.is_absolute() and path.resolve(strict=True)==path,'资源路径含链接或不存在，停止')
     info=path.lstat()
-    require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and info.st_uid==uid and info.st_size<=MAX_FILE,'资源文件归属/类型/大小异常，停止')
+    require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and info.st_uid==uid and info.st_size<=max_bytes,'资源文件归属/类型/大小异常，停止')
     require(not info.st_mode&0o022 and (mode is None or stat.S_IMODE(info.st_mode)==mode),'资源权限不符合备份要求')
     for parent in path.parents:
         current=parent.lstat()
@@ -53,13 +58,23 @@ def safe_path(path,uid,mode=None):
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC)
     with os.fdopen(fd,'rb') as stream:
         require(os.path.samestat(info,os.fstat(stream.fileno())),'读取时资源被替换')
-        raw=stream.read(MAX_FILE+1)
-    require(len(raw)<=MAX_FILE,'资源超过有界读取限制')
+        raw=stream.read(max_bytes+1)
+    require(len(raw)<=max_bytes,'资源超过有界读取限制')
     return raw,info
+
+def check_identity(state):
+    expected=install.USERS if state.get("vpn") else install.USERS[:1]
+    require(isinstance(state.get("vpn"),bool) and state.get("cores") in ([],["xray"],["sing-box"],["xray","sing-box"]),"未知安装模式")
+    require(set(state.get("users",{}))==set(expected),"安装账号登记不完整")
+    for name in expected:
+        account=install.pwd.getpwnam(name)
+        require(state["users"][name]==[account.pw_uid,account.pw_gid] and account.pw_uid>0,"安装账号身份已变化")
+    require(re.fullmatch(r"[A-Za-z0-9_-]{22}",state.get("instance","")) is not None,"安装实例无效")
 
 def installed_state():
     raw,_=safe_path(FILES['installation/install-state.json'],0,0o600)
     state=json.loads(raw)
+    check_identity(state)
     require(re.fullmatch(r'[A-Za-z0-9_-]{22}',state.get('instance','')) is not None,'安装身份无效')
     require(re.fullmatch(r'[a-f0-9]{64}',state.get('binary_sha256','')) is not None,'安装程序摘要无效')
     require(isinstance(state.get('vpn'),bool) and state.get('cores') in ([],['xray'],['sing-box'],['xray','sing-box']),'安装模式未知')
@@ -78,6 +93,11 @@ def installed_state():
             raw,_=safe_path(FILES['binary/miku-gate'].with_name(name),0,0o644)
             require(hashlib.sha256(raw).hexdigest()==expected_hash,'维护协调器已漂移，不自动认定可信')
     require(DATA.resolve(strict=True)==DATA and DATA.stat().st_uid==users['miku-gate'][0] and stat.S_IMODE(DATA.stat().st_mode)==0o700,'数据目录归属异常')
+    sources=state.get('core_sources',[])
+    require(isinstance(sources,list) and {r.get('core') for r in sources}==set(state['cores']),'核心来源登记不完整')
+    for source in sources:
+        core=source['core'];raw,_=safe_path(FILES['binary/miku-gate'].with_name(core),0,0o755,128<<20)
+        require(hashlib.sha256(raw).hexdigest()==source.get('binary_sha256'),'核心程序漂移，不能按旧来源回滚')
     return state
 
 def service_active(unit):
@@ -104,18 +124,8 @@ def restart_services(state,active):
         install.verify_served_management(state,DATA/'management/certificate.pem',certificate)
         if state['vpn']:install.verify_vpn_executor(FILES['binary/miku-gate'],state['instance'],state['users'])
 
-def collect(state):
-    uid=state['users']['miku-gate'][0]
-    expected={'miku-gate.db',*DATABASE[1:],*CERT_DIRS}
-    require(all(p.name in expected for p in DATA.iterdir()),'数据目录有未登记资源，拒绝不完整备份')
-    resources=[]
-    for member,path in FILES.items():
-        if member.endswith('miku-gate-vpn.service') and not state['vpn']:continue
-        raw,info=safe_path(path,0,0o755 if member=='binary/miku-gate' else 0o600 if member.endswith('install-state.json') else 0o644)
-        resources.append((member,raw,info.st_uid,info.st_gid,stat.S_IMODE(info.st_mode)))
-    for name in state.get('maintenance_sha256',{}):
-        raw,info=safe_path(FILES['binary/miku-gate'].with_name(name),0,0o644)
-        resources.append(('binary/'+name,raw,info.st_uid,info.st_gid,0o644))
+def inspect_database(state):
+    uid=state["users"]["miku-gate"][0]
     # Inspect through the same ordinary identity, so sqlite cannot leave a
     # root-owned WAL/SHM file in the control account's private data directory.
     inspector=r"""import json,sqlite3,sys
@@ -130,8 +140,23 @@ finally:connection.close()
 """
     gid=state['users']['miku-gate'][1]
     examined=json.loads(install.run([install.trusted_tool('setpriv'),'--reuid='+str(uid),'--regid='+str(gid),'--clear-groups','--no-new-privs',install.trusted_tool('python3'),'-B','-c',inspector,str(DATA/'miku-gate.db')]))
+    require(examined['instance']==state['instance'] and examined['schema']==6 and examined['integrity_valid'],'数据库身份/schema/完整性不匹配')
+    return examined
+
+def collect(state):
+    uid=state['users']['miku-gate'][0]
+    expected={'miku-gate.db',*DATABASE[1:],*CERT_DIRS}
+    require(all(p.name in expected for p in DATA.iterdir()),'数据目录有未登记资源，拒绝不完整备份')
+    resources=[]
+    for member,path in FILES.items():
+        if member.endswith('miku-gate-vpn.service') and not state['vpn']:continue
+        raw,info=safe_path(path,0,0o755 if member=='binary/miku-gate' else 0o600 if member.endswith('install-state.json') else 0o644)
+        resources.append((member,raw,info.st_uid,info.st_gid,stat.S_IMODE(info.st_mode)))
+    for name in state.get('maintenance_sha256',{}):
+        raw,info=safe_path(FILES['binary/miku-gate'].with_name(name),0,0o644)
+        resources.append(('binary/'+name,raw,info.st_uid,info.st_gid,0o644))
+    examined=inspect_database(state)
     schema,counts=examined['schema'],examined['encrypted_count']
-    require(examined['instance']==state['instance'] and schema==6 and examined['integrity_valid'],'备份数据库身份/schema/完整性不匹配')
     for name in DATABASE:
         p=DATA/name
         if not p.exists():continue
@@ -182,7 +207,7 @@ def create_archive(destination,resources,manifest):
         with tarfile.open(fileobj=output,mode='w:gz') as archive:
             for name,raw,uid,gid,mode in [*resources,('BACKUP.json',manifest_raw,0,0,0o600)]:
                 item=tarfile.TarInfo(name);item.type=tarfile.REGTYPE;item.mode=mode;item.uid=uid;item.gid=gid;item.size=len(raw);item.mtime=int(time.time());archive.addfile(item,io.BytesIO(raw))
-        output.flush();os.fsync(output.fileno())
+        output.flush();os.fsync(output.fileno());created_info=os.fstat(output.fileno())
     # Verify archive contents and every confidential member without extraction.
     expected={r[0]:r[1] for r in resources};expected['BACKUP.json']=manifest_raw
     with tarfile.open(destination,'r:gz') as archive:
@@ -191,19 +216,14 @@ def create_archive(destination,resources,manifest):
         for item in members:
             require(item.isfile() and not item.issym() and item.size==len(expected[item.name]),'归档类型/大小异常')
             require(archive.extractfile(item).read(item.size+1)==expected[item.name],'归档内容校验失败')
-    return {'file':str(destination),'member_count':len(expected),'instance':manifest['instance'],'schema':manifest['schema'],'contains_private_keys':True,'restore_verified':False}
+    with os.fdopen(os.open(destination,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC),'rb') as checked:
+        require(os.path.samestat(created_info,os.fstat(checked.fileno())),'归档读回期间被替换')
+        archive_raw=checked.read(MAX_ARCHIVE+1)
+    require(len(archive_raw)<=MAX_ARCHIVE,'归档压缩大小超限')
+    return {'archive_sha256':hashlib.sha256(archive_raw).hexdigest(),'file':str(destination),'member_count':len(expected),'instance':manifest['instance'],'schema':manifest['schema'],'contains_private_keys':True,'restore_verified':False}
 
-def main(argv=None):
-    parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('status','backup'))
-    parser.add_argument('--output');parser.add_argument('--confirm-stop',action='store_true');parser.add_argument('--confirm-backup',action='store_true');parser.add_argument('--leave-stopped',action='store_true')
-    args=parser.parse_args(argv)
-    require(sys.platform=='linux' and os.geteuid()==0,'维护仅已授权Linux root协调，控制服务仍普通账号')
-    state=installed_state()
-    if args.command=='status':
-        require(not args.output and not args.confirm_stop and not args.confirm_backup and not args.leave_stopped,'status只读，无变更参数')
-        print(json.dumps({'instance':state['instance'],'origin':state['origin'],'vpn':state['vpn'],'cores':state['cores'],'control_active':service_active('miku-gate.service'),'backup_required_before_upgrade':True,'upgrade_restore_implemented':False},ensure_ascii=False));return
-    require(args.confirm_backup and args.confirm_stop and args.output,'备份需--confirm-stop --confirm-backup及新文件--output，明确停机；不升级/恢复')
+def run_backup(args,state):
+    require(args.confirm_backup and args.confirm_stop and args.output,'备份需--confirm-stop --confirm-backup及新文件--output，明确停机；不暗中升级/恢复')
     # Validate destination before stopping known units. Do not create arbitrary
     # parent directories or remove existing files to force a backup through.
     out=Path(args.output);info=out.parent.lstat()
@@ -235,7 +255,314 @@ def main(argv=None):
     result['service_restart_verified']=not args.leave_stopped
     print('MIKU_BACKUP_RESULT '+json.dumps(result,ensure_ascii=False,sort_keys=True))
 
+
+@contextlib.contextmanager
+def parent_fd(path,uid=0):
+    path=Path(path)
+    require(path.is_absolute() and path.parent.resolve(strict=True)==path.parent,'固定目标父路径含链接')
+    fd=os.open('/',os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC)
+    try:
+        for component in path.parent.parts[1:]:
+            child=os.open(component,os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC|os.O_NOFOLLOW,dir_fd=fd)
+            os.close(fd);fd=child
+            info=os.fstat(fd)
+            require(info.st_uid in (0,uid) and not info.st_mode&0o022,'固定目标父目录归属/权限不可信')
+        yield fd
+    finally:os.close(fd)
+
+def replace_owned(path,raw,uid,gid,mode):
+    require(len(raw)<=MAX_FILE,'固定目标替换超出预算')
+    # Services are stopped and the data lease/global maintenance lock are held.
+    # Stage and rename in the checked same-directory descriptor, not shell mv.
+    with parent_fd(path,uid) as directory:
+        try:
+            previous=os.stat(path.name,dir_fd=directory,follow_symlinks=False)
+            require(stat.S_ISREG(previous.st_mode) and previous.st_nlink==1 and previous.st_uid==uid,'固定目标不能覆盖未知资源')
+        except FileNotFoundError:previous=None
+        pending='.miku-maintain-'+path.name+'.pending'
+        fd=os.open(pending,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_CLOEXEC,mode,dir_fd=directory)
+        try:
+            with os.fdopen(fd,'wb') as output:
+                os.fchmod(output.fileno(),mode);os.fchown(output.fileno(),uid,gid)
+                output.write(raw);output.flush();os.fsync(output.fileno())
+            current=os.stat(path.name,dir_fd=directory,follow_symlinks=False) if previous is not None else None
+            require(previous is None or os.path.samestat(previous,current),'固定目标在写入期间被替换')
+            os.replace(pending,path.name,src_dir_fd=directory,dst_dir_fd=directory)
+            os.fsync(directory)
+        finally:
+            try:os.unlink(pending,dir_fd=directory)
+            except FileNotFoundError:pass
+
+def remove_owned(path,uid,mode):
+    with parent_fd(path,uid) as directory:
+        try:info=os.stat(path.name,dir_fd=directory,follow_symlinks=False)
+        except FileNotFoundError:return
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and info.st_uid==uid and stat.S_IMODE(info.st_mode)==mode,'只删除确切已知普通文件，不删除链接/目录')
+        os.unlink(path.name,dir_fd=directory);os.fsync(directory)
+
+@contextlib.contextmanager
+def maintenance_lock():
+    import fcntl
+    with parent_fd(MAINTENANCE_LOCK) as directory:
+        fd=os.open(MAINTENANCE_LOCK.name,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW|os.O_CLOEXEC,0o600,dir_fd=directory)
+    try:
+        info=os.fstat(fd);require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o600,'维护锁归属异常')
+        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        yield
+    finally:os.close(fd)
+
+@contextlib.contextmanager
+def data_lease(state):
+    import fcntl
+    path=DATA/'.serve.lock';safe_path(path,state['users']['miku-gate'][0],0o600)
+    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+    try:
+        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        yield
+    finally:os.close(fd)
+
+def destinations(state):
+    uid,gid=state['users']['miku-gate']
+    targets={name:(path,0,0,0o755 if name=='binary/miku-gate' else 0o600 if name.endswith('install-state.json') else 0o644) for name,path in FILES.items() if state['vpn'] or not name.endswith('miku-gate-vpn.service')}
+    for name in ('miku-install.py','miku-maintain.py'):targets['binary/'+name]=(FILES['binary/miku-gate'].with_name(name),0,0,0o644)
+    for name in DATABASE:targets['data/'+name]=(DATA/name,uid,gid,0o600)
+    for directory in CERT_DIRS:
+        for name in ('certificate.pem','private.key'):targets['data/'+directory+'/'+name]=(DATA/directory/name,uid,gid,0o600)
+    return targets
+
+def decode_snapshot(raw,state):
+    # Iterative bounded reads, never extract/extractall and never use archive
+    # names as filesystem destinations. Every name maps to a fixed allowlist.
+    targets=destinations(state);members={};total=0
+    with gzip.GzipFile(fileobj=io.BytesIO(raw),mode='rb') as zipped:
+        unpacked=zipped.read(MAX_TOTAL+(2<<20)+1)
+    require(len(unpacked)<=MAX_TOTAL+(2<<20),'备份压缩膨胀超限')
+    with tarfile.open(fileobj=io.BytesIO(unpacked),mode='r:') as archive:
+        for item in archive:
+            require(len(members)<24 and item.name not in members,'备份成员重复/过多')
+            require(item.name in targets or item.name=='BACKUP.json','备份含未登记路径')
+            require(item.isfile() and not item.issym() and not item.islnk() and 0<=item.size<=(65536 if item.name=='BACKUP.json' else MAX_FILE),'备份成员类型/大小非法')
+            total+=item.size;require(total<=MAX_TOTAL+65536,'备份解压总大小超限')
+            content=archive.extractfile(item).read(item.size+1);require(len(content)==item.size,'备份成员截断')
+            members[item.name]=(content,item)
+    require('BACKUP.json' in members and 'installation/install-state.json' in members,'备份缺实例清单')
+    manifest=json.loads(members.pop('BACKUP.json')[0]);old=json.loads(members['installation/install-state.json'][0])
+    require(isinstance(manifest,dict) and manifest.get('format')==1 and manifest.get('schema')==6 and manifest.get('instance')==state['instance'],'备份格式/schema/实例不匹配')
+    require(isinstance(old,dict),'备份安装登记无效');check_identity(old)
+    for name in ('instance','users','vpn','cores','origin','port','domain','ip'):
+        require(old.get(name)==state.get(name),'只允许同一安装的配套回滚，不迁移账号/地址/核心')
+    required={'installation/install-state.json','binary/miku-gate','binary/miku-install.py','binary/miku-maintain.py','units/miku-gate.service','data/miku-gate.db','data/management/certificate.pem','data/management/private.key'}
+    if state['vpn']:required.add('units/miku-gate-vpn.service')
+    require(isinstance(manifest.get('encrypted_record_count'),int) and manifest['encrypted_record_count']>=0,'备份加密行登记无效')
+    if manifest['encrypted_record_count']>0:required.add('data/miku-gate.db.key')
+    require(required<=set(members),'备份缺配套程序/维护工具/数据库/key/证书')
+    records=manifest.get('files');require(isinstance(records,list) and all(isinstance(r,dict) and isinstance(r.get('name'),str) for r in records) and len(records)==len(members),'备份成员清单数量错误')
+    indexed={r['name']:r for r in records};require(len(indexed)==len(records) and set(indexed)==set(members),'备份清单重复或不完整')
+    result=[]
+    for name,(content,item) in members.items():
+        _,uid,gid,mode=targets[name];record=indexed[name]
+        require(record.get('bytes')==len(content) and record.get('sha256')==hashlib.sha256(content).hexdigest(),'备份成员长度/摘要不匹配')
+        require((record.get('uid'),record.get('gid'),record.get('mode'))==(uid,gid,mode) and (item.uid,item.gid,item.mode)==(uid,gid,mode),'备份成员不允许改变固定身份/权限')
+        result.append((name,content,uid,gid,mode))
+    require(hashlib.sha256(members['binary/miku-gate'][0]).hexdigest()==old.get('binary_sha256')==manifest.get('binary_sha256'),'备份程序来源摘要不匹配')
+    helpers=old.get('maintenance_sha256');require(isinstance(helpers,dict) and set(helpers)=={'miku-install.py','miku-maintain.py'},'备份维护协调器不完整；旧无协调器备份不自动升级恢复')
+    for name,expected in helpers.items():require(hashlib.sha256(members['binary/'+name][0]).hexdigest()==expected,'备份协调器摘要不匹配')
+    expected_units=install.unit_text(FILES['binary/miku-gate'],DATA,old['origin'],old['port'],DATA/'management/certificate.pem',DATA/'management/private.key',old['certificate_summary']['bootstrap'],old['vpn'],old['instance'],old['users'],{core:FILES['binary/miku-gate'].with_name(core) for core in old['cores']})
+    for name,unit in expected_units.items():
+        legacy=unit.replace('ConditionPathExists=!/etc/miku-gate/maintenance-block\n','')
+        require(members['units/'+name][0] in (unit.encode(),legacy.encode()),'备份服务不是已知固定安装模板，拒绝root命令注入')
+    return result,old,manifest
+
+def read_snapshot(path,expected,state):
+    require(isinstance(expected,str) and re.fullmatch(r'[a-f0-9]{64}',expected) is not None,'回滚必须明确提供备份归档SHA256')
+    raw,_=safe_path(Path(path),0,0o600,MAX_ARCHIVE)
+    require(stat.S_IMODE(Path(path).parent.stat().st_mode)==0o700,'回滚归档须root私有0700目录')
+    require(hashlib.sha256(raw).hexdigest()==expected,'回滚归档与明确摘要不符')
+    return decode_snapshot(raw,state)
+
+def snapshot(destination,state):
+    resources,schema,count=collect(state)
+    result=create_archive(destination,resources,{'format':1,'instance':state['instance'],'schema':schema,'binary_sha256':state['binary_sha256'],'encrypted_record_count':count,'core_provenance':state['core_sources']})
+    return resources,result
+
+def restore_resources(resources,state):
+    targets=destinations(state);names={r[0] for r in resources}
+    require(names<=set(targets),'恢复不能写未登记路径')
+    # Do not replace the lease inode: this process owns it and stopped writers
+    # must continue to see the same lock until the entire paired restore ends.
+    for name,raw,uid,gid,mode in sorted(resources,key=lambda r:r[0]=='installation/install-state.json'):
+        if name=='data/.serve.lock':continue
+        path,expected_uid,expected_gid,expected_mode=targets[name]
+        require((uid,gid,mode)==(expected_uid,expected_gid,expected_mode),'恢复不能信任归档提供的身份/权限')
+        if name.startswith('units/') and b'ConditionPathExists=!/etc/miku-gate/maintenance-block\n' not in raw:
+            # Insert after Description to preserve the canonical unit template.
+            lines=raw.splitlines(keepends=True);index=next(i for i,line in enumerate(lines) if line.startswith(b'Description='))+1
+            lines.insert(index,b'ConditionPathExists=!/etc/miku-gate/maintenance-block\n');raw=b''.join(lines)
+        replace_owned(path,raw,uid,gid,mode)
+    for name in ('miku-gate.db-wal','miku-gate.db-shm','miku-gate.db.key'):
+        if 'data/'+name not in names:remove_owned(DATA/name,state['users']['miku-gate'][0],0o600)
+
+
+def write_journal(state,active,backup,operation):
+    require(not JOURNAL.exists() and not JOURNAL.is_symlink(),'已有维护事务，先明确recover，不覆盖')
+    data={'format':1,'operation':operation,'state':state,'active':active,'backup':backup['file'],'archive_sha256':backup['archive_sha256']}
+    raw=json.dumps(data,sort_keys=True).encode();require(len(raw)<=65536,'维护日志过大')
+    install.exclusive(JOURNAL,raw,0o600)
+    with parent_fd(JOURNAL) as directory:os.fsync(directory)
+
+def check_output(output):
+    path=Path(output);info=path.parent.lstat()
+    require(path.is_absolute() and path.parent.resolve(strict=True)==path.parent and info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700 and not path.exists() and not path.is_symlink(),'先准备root0700目录及全新配套备份文件')
+    return path
+
+def protected_data_check(state):
+    uid,gid=state["users"]["miku-gate"]
+    raw=install.run([install.trusted_tool("setpriv"),"--reuid="+str(uid),"--regid="+str(gid),"--clear-groups","--no-new-privs",str(FILES["binary/miku-gate"]),"data-check","--data="+str(DATA)])
+    checked=json.loads(raw)
+    require(checked.get("instance")==state["instance"] and checked.get("schema")==6 and checked.get("integrity_valid") and checked.get("protected_records_verified"),"真实数据库/key加密记录配套检查未通过")
+    return checked
+
+def validate_recovered(state):
+    current=installed_state();require(current['binary_sha256']==state['binary_sha256'],'配套恢复后程序登记不一致')
+    protected_data_check(state)
+
+def apply_release(binary,meta,state):
+    raw=binary.read_bytes();require(hashlib.sha256(raw).hexdigest()==meta['binary_sha256'],'升级候选程序在校验后漂移')
+    root=binary.parent.parent;helpers={}
+    for name in ('miku-install.py','miku-maintain.py'):
+        _,content=install.validate_binary(str(root/'scripts'/name),meta['script_sha256'][name]);helpers[name]=content
+    new=json.loads(json.dumps(state))
+    new.update(binary_sha256=meta['binary_sha256'],maintenance_sha256={name:hashlib.sha256(content).hexdigest() for name,content in helpers.items()},distribution={name:meta[name] for name in ('source','platform','version')})
+    uid,gid=state['users']['miku-gate']
+    # Execute the staged candidate only as the ordinary control account, after
+    # the root-owned digest has been checked. Root0700 release dirs cannot be
+    # traversed by the account, so stage in the registered root-owned lib first.
+    candidate=FILES['binary/miku-gate'].with_name('.miku-version-candidate')
+    require(not candidate.exists() and not candidate.is_symlink(),'版本检查临时程序已存在，拒绝覆盖')
+    install.exclusive(candidate,raw,0o755)
+    try:
+        version=install.run([install.trusted_tool('setpriv'),'--reuid='+str(uid),'--regid='+str(gid),'--clear-groups','--no-new-privs',str(candidate),'version']).decode().strip()
+    finally:remove_owned(candidate,0,0o755)
+    require('v'+version==meta['version'],'候选程序版本与发行包登记不符')
+    replace_owned(FILES['binary/miku-gate'],raw,0,0,0o755)
+    for name,content in helpers.items():replace_owned(FILES['binary/miku-gate'].with_name(name),content,0,0,0o644)
+    replace_owned(FILES['installation/install-state.json'],json.dumps(new,ensure_ascii=False,indent=2).encode(),0,0,0o600)
+    return new
+
+def set_startup_block():
+    if STARTUP_BLOCK.exists():safe_path(STARTUP_BLOCK,0,0o600)
+    else:install.exclusive(STARTUP_BLOCK,b"Miku paired maintenance in progress\n",0o600)
+
+def install_startup_guard(state):
+    units=install.unit_text(FILES["binary/miku-gate"],DATA,state["origin"],state["port"],DATA/"management/certificate.pem",DATA/"management/private.key",state["certificate_summary"]["bootstrap"],state["vpn"],state["instance"],state["users"],{core:FILES["binary/miku-gate"].with_name(core) for core in state["cores"]})
+    for name,text in units.items():
+        path=FILES["units/"+name];raw,_=safe_path(path,0,0o644)
+        legacy=text.replace("ConditionPathExists=!/etc/miku-gate/maintenance-block\n","").encode()
+        require(raw in (text.encode(),legacy),"既有Miku单元已被修改，拒绝自动改写")
+        replace_owned(path,text.encode(),0,0,0o644)
+    install.run([install.trusted_tool("systemctl"),"daemon-reload"])
+
+def recover_transaction():
+    raw,_=safe_path(JOURNAL,0,0o600);journal=json.loads(raw)
+    require(journal.get('format')==1 and journal.get('operation') in ('upgrade','rollback'),'恢复事务格式无效')
+    state=journal['state'];check_identity(state)
+    units=['miku-gate.service']+(['miku-gate-vpn.service'] if state['vpn'] else [])
+    require(isinstance(journal.get('active'),list) and set(journal['active'])<=set(units),'恢复日志不允许操作未知单元')
+    resources,old,_=read_snapshot(journal['backup'],journal['archive_sha256'],state)
+    set_startup_block();stop_services(state)
+    with data_lease(state):
+        # Power loss before rename may leave only these exact staged filenames.
+        for path,uid,_,mode in destinations(state).values():
+            if not path.parent.exists():continue
+            remove_owned(path.with_name('.miku-maintain-'+path.name+'.pending'),uid,mode)
+        remove_owned(FILES['binary/miku-gate'].with_name('.miku-version-candidate'),0,0o755)
+        restore_resources(resources,old);validate_recovered(old)
+    try:
+        remove_owned(STARTUP_BLOCK,0,0o600)
+        install.run([install.trusted_tool('systemctl'),'daemon-reload'])
+        restart_services(old,journal['active'])
+        remove_owned(JOURNAL,0,0o600)
+    except BaseException:
+        set_startup_block();stop_services(old)
+        raise BackupError('RECOVERY_RESTART_UNCONFIRMED：保留日志与启动保护，服务停止。') from None
+    print('MIKU_RECOVERY_RESULT '+json.dumps({'paired_restore_verified':True,'instance':old['instance'],'service_restart_verified':True},sort_keys=True))
+
+def run_change(args,state):
+    require(args.confirm_stop and args.output and not args.leave_stopped and not args.confirm_backup and not args.confirm_recover,'升级/回滚需明确停机与全新安全备份，不能跳过恢复核验')
+    out=check_output(args.output)
+    target=None
+    if args.command=='upgrade':
+        require(args.confirm_upgrade and args.distribution and not args.archive and not args.archive_sha256,'升级需--distribution --confirm-upgrade，不混用回滚参数')
+        binary,_,meta=install.distribution_binary(args.distribution,install.platform_gate())
+        require(meta['binary_sha256']!=state['binary_sha256'],'同一程序无需重复升级')
+    else:
+        require(args.confirm_rollback and args.archive and args.archive_sha256 and not args.distribution,'回滚需--archive --archive-sha256 --confirm-rollback')
+        target=read_snapshot(args.archive,args.archive_sha256,state)
+    units=['miku-gate.service']+(['miku-gate-vpn.service'] if state['vpn'] else [])
+    active=[unit for unit in units if service_active(unit)]
+    require('miku-gate.service' in active,'先明确启动已知管理服务；不把未启动安装的程序替换当已验证升级')
+    protected_data_check(state)
+    original=None;new=state;backup=None;changed=False
+    try:
+        stop_services(state)
+        with data_lease(state):
+            original,backup=snapshot(out,state)
+            write_journal(state,active,backup,args.command)
+            changed=True
+            set_startup_block();install_startup_guard(state)
+            if args.command=='upgrade':new=apply_release(binary,meta,state)
+            else:
+                resources,new,_=target;restore_resources(resources,new)
+            validate_recovered(new)
+            install_startup_guard(new)
+        remove_owned(STARTUP_BLOCK,0,0o600)
+        install.run([install.trusted_tool('systemctl'),'daemon-reload'])
+        restart_services(new,active)
+        remove_owned(JOURNAL,0,0o600)
+    except BaseException as failure:
+        if changed:
+            try:
+                set_startup_block();stop_services(state)
+                with data_lease(state):restore_resources(original,state);validate_recovered(state)
+                remove_owned(STARTUP_BLOCK,0,0o600)
+                install.run([install.trusted_tool('systemctl'),'daemon-reload'])
+                restart_services(state,active)
+                remove_owned(JOURNAL,0,0o600)
+            except BaseException:
+                try:set_startup_block();stop_services(state)
+                except BaseException:pass
+                raise BackupError('MIKU_RECOVERY_REQUIRED：保留配套备份与root私有事务日志；服务停止，明确运行recover。') from None
+            raise BackupError('MIKU_CHANGE_FAILED_PAIRED_ROLLBACK_VERIFIED：已恢复更改前整套状态；失败类别='+type(failure).__name__) from None
+        try:restart_services(state,active)
+        except BaseException:raise BackupError('MIKU_CHANGE_STOPPED_RESTART_UNCONFIRMED：没有应用程序变更，请检查已知服务。') from None
+        raise failure
+    print('MIKU_CHANGE_RESULT '+json.dumps({'operation':args.command,'instance':new['instance'],'binary_sha256':new['binary_sha256'],'backup':backup['file'],'backup_sha256':backup['archive_sha256'],'paired_restore_verified':args.command=='rollback','service_restart_verified':True,'units_or_core_choices_changed':False,'live_gateway_connections_restored':False},sort_keys=True))
+
+def main(argv=None):
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('command',choices=('status','backup','upgrade','rollback','recover'))
+    parser.add_argument('--output');parser.add_argument('--confirm-stop',action='store_true');parser.add_argument('--confirm-backup',action='store_true');parser.add_argument('--leave-stopped',action='store_true')
+    parser.add_argument('--distribution');parser.add_argument('--confirm-upgrade',action='store_true')
+    parser.add_argument('--archive');parser.add_argument('--archive-sha256');parser.add_argument('--confirm-rollback',action='store_true');parser.add_argument('--confirm-recover',action='store_true')
+    args=parser.parse_args(argv)
+    require(sys.platform=='linux' and os.geteuid()==0,'维护仅已授权Linux root协调，控制服务仍普通账号')
+    if args.command=='status':
+        require(not any((args.output,args.confirm_stop,args.confirm_backup,args.leave_stopped,args.distribution,args.archive,args.archive_sha256,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover)),'status只读，无变更参数')
+        pending=JOURNAL.exists()
+        state=installed_state() if not pending else json.loads(safe_path(JOURNAL,0,0o600)[0])['state']
+        print(json.dumps({'instance':state['instance'],'origin':state['origin'],'vpn':state['vpn'],'cores':state['cores'],'control_active':service_active('miku-gate.service'),'backup_required_before_upgrade':True,'upgrade_restore_implemented':True,'recovery_required':pending},ensure_ascii=False));return
+    with maintenance_lock():
+        if args.command=='recover':
+            require(args.confirm_recover and args.confirm_stop and not any((args.output,args.archive,args.archive_sha256,args.distribution,args.confirm_backup,args.confirm_upgrade,args.confirm_rollback,args.leave_stopped)),'recover需明确--confirm-recover --confirm-stop且无外部目标')
+            recover_transaction();return
+        require(not JOURNAL.exists() and not JOURNAL.is_symlink() and not STARTUP_BLOCK.exists() and not STARTUP_BLOCK.is_symlink(),'已有维护事务，先明确recover，不能叠加更改')
+        state=installed_state()
+        if args.command=='backup':
+            require(not any((args.archive,args.archive_sha256,args.distribution,args.confirm_upgrade,args.confirm_rollback,args.confirm_recover)),'备份不混用升级/回滚参数')
+            run_backup(args,state)
+        else:run_change(args,state)
+
 if __name__=='__main__':
     try:main()
-    except (BackupError,install.InstallError,ValueError,KeyError,OSError) as exc:
+    except (BackupError,install.InstallError,ValueError,KeyError,OSError,tarfile.TarError) as exc:
         print('MAINTENANCE_STOPPED '+type(exc).__name__+': '+str(exc),file=sys.stderr);sys.exit(1)

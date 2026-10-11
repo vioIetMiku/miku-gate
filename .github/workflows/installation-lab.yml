@@ -30,6 +30,7 @@ jobs:
           npm --prefix web run build
           mkdir -p .cache/installation-lab
           go build -trimpath -o .cache/installation-lab/miku-gate ./cmd/miku-gate
+          go build -trimpath -ldflags="-s -w" -o .cache/installation-lab/miku-gate-upgrade ./cmd/miku-gate
           go test -c -o .cache/installation-lab/cli.test ./cmd/miku-gate
           go test -c -o .cache/installation-lab/core-runtime.test ./internal/coreruntime
           python3 -B -m unittest discover -s scripts -p 'test_*.py' -v
@@ -56,6 +57,19 @@ jobs:
           Path('.cache/installation-lab/BUILD.json').write_text(json.dumps(meta))
           PY
           sudo install -m 444 .cache/installation-lab/BUILD.json "$stage/BUILD.json"
+          sudo install -d -m 755 "$stage/upgrade" "$stage/upgrade/bin" "$stage/upgrade/scripts"
+          sudo install -m 555 .cache/installation-lab/miku-gate-upgrade "$stage/upgrade/bin/miku-gate"
+          for name in install-vps.sh miku-install.py miku-maintain.py; do
+            sudo install -m 444 "scripts/$name" "$stage/upgrade/scripts/$name"
+          done
+          python3 - "$stage/upgrade" "$GITHUB_SHA" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          stage=Path(sys.argv[1]);binary=stage/'bin/miku-gate'
+          meta={'format':1,'version':'v0.1.0-dev.11','source':sys.argv[2],'platform':'linux-amd64','binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'binary_bytes':binary.stat().st_size,'script_sha256':{name:hashlib.sha256((stage/'scripts'/name).read_bytes()).hexdigest() for name in ('install-vps.sh','miku-install.py','miku-maintain.py')}}
+          Path('.cache/installation-lab/UPGRADE-BUILD.json').write_text(json.dumps(meta))
+          PY
+          sudo install -m 444 .cache/installation-lab/UPGRADE-BUILD.json "$stage/upgrade/BUILD.json"
           echo "MIKU_INSTALL_STAGE=$stage" >> "$GITHUB_ENV"
       - name: Actual ordinary-user IP HTTPS CLI, Host Origin and Secure session
         shell: bash
@@ -142,15 +156,16 @@ jobs:
                 "$1/core-runtime.test" -test.v -test.run "^TestLinuxManagedNativeRuntime$" -test.timeout=60s
             ' sh "$MIKU_INSTALL_STAGE" "$control_uid" "$control_gid" \
             2>&1 | tee .cache/installation-lab/installed-core-runtime.txt
-      - name: Verify confidential paired backup and installed HTTPS service restart
+      - name: Verify confidential paired backup, installed upgrade and rollback
         shell: bash
         run: |
           set -euo pipefail
           # Neither archive nor initialization log is published. Only closed
-          # boolean assertions are uploaded; this is not a restore test.
+          # boolean assertions are uploaded; only installed same-instance assertions are retained.
           sudo python3 -B scripts/verify-installed-backup.py \
             --private-init-log "$PWD/.cache/installation-lab/private-install.log" \
-            --maintenance-script "$PWD/scripts/miku-maintain.py" \
+            --maintenance-script /usr/local/lib/miku-gate/miku-maintain.py \
+            --upgrade-distribution "$MIKU_INSTALL_STAGE/upgrade" \
             --output /var/backups/miku-gate-ci-private/snapshot.tar.gz \
             2>&1 | tee .cache/installation-lab/backup-result.txt
       - name: Retain bounded non-secret assertion output only

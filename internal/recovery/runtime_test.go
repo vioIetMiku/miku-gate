@@ -3,6 +3,7 @@ package recovery_test
 import (
 	"context"
 	"errors"
+	"io"
 	"mikugate/internal/domain"
 	"mikugate/internal/gateway"
 	"mikugate/internal/recovery"
@@ -66,15 +67,20 @@ func TestActualGatewayReconnectKeepsPortCredentialsAndPause(t *testing.T) {
 	}
 	automatic := recovery.New(ctx, s, runtime, recovery.Options{Interval: 5 * time.Millisecond, RetryMin: 50 * time.Millisecond, RetryMax: 100 * time.Millisecond})
 	defer automatic.Close()
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) && starts.Load() == 0 {
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && automatic.Status(exit.ID).Phase != "backoff" {
 		time.Sleep(time.Millisecond)
 	}
-	if _, ok := runtime.Snapshot(exit.ID); ok {
-		t.Fatal("failed proof opened listener")
+	if automatic.Status(exit.ID).Phase != "backoff" {
+		t.Fatal("initial failed attempt was not observed before reconnect")
+	}
+	// A starting reservation can exist before Probe finishes; only a listener
+	// is a forwarding claim. Don't mistake the reservation for an open socket.
+	if state, ok := runtime.Snapshot(exit.ID); ok && state.ProxyListening {
+		t.Fatal("failed proof opened listener", state)
 	}
 	bad.Store(false)
-	deadline = time.Now().Add(time.Second)
+	deadline = time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		state, ok := runtime.Snapshot(exit.ID)
 		if ok && state.Healthy && state.ProxyListening {
@@ -99,14 +105,14 @@ func TestActualGatewayReconnectKeepsPortCredentialsAndPause(t *testing.T) {
 	connection.SetDeadline(time.Now().Add(time.Second))
 	connection.Write([]byte{5, 1, 2})
 	reply := make([]byte, 2)
-	if _, e = connection.Read(reply); e != nil || reply[0] != 5 || reply[1] != 2 {
+	if _, e = io.ReadFull(connection, reply); e != nil || reply[0] != 5 || reply[1] != 2 {
 		t.Fatal("recovered SOCKS auth")
 	}
 	request := append([]byte{1, byte(len(after.Username))}, []byte(after.Username)...)
 	request = append(request, byte(len(password)))
 	request = append(request, []byte(password)...)
 	connection.Write(request)
-	if _, e = connection.Read(reply); e != nil || reply[0] != 1 || reply[1] != 0 {
+	if _, e = io.ReadFull(connection, reply); e != nil || reply[0] != 1 || reply[1] != 0 {
 		t.Fatal("old credential rejected after recovery")
 	}
 	if e = automatic.Pause(exit.ID); e != nil {

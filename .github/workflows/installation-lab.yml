@@ -156,7 +156,7 @@ jobs:
                 "$1/core-runtime.test" -test.v -test.run "^TestLinuxManagedNativeRuntime$" -test.timeout=60s
             ' sh "$MIKU_INSTALL_STAGE" "$control_uid" "$control_gid" \
             2>&1 | tee .cache/installation-lab/installed-core-runtime.txt
-      - name: Verify confidential paired backup, installed upgrade and rollback
+      - name: Verify new schema installed lifecycle, paired rollback and retained-data service removal
         shell: bash
         run: |
           set -euo pipefail
@@ -166,6 +166,7 @@ jobs:
             --private-init-log "$PWD/.cache/installation-lab/private-install.log" \
             --maintenance-script /usr/local/lib/miku-gate/miku-maintain.py \
             --upgrade-distribution "$MIKU_INSTALL_STAGE/upgrade" \
+            --verify-service-removal \
             --output /var/backups/miku-gate-ci-private/snapshot.tar.gz \
             2>&1 | tee .cache/installation-lab/backup-result.txt
       - name: Retain bounded non-secret assertion output only

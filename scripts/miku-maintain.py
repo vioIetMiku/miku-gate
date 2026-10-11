@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import subprocess
 import sys
 import tarfile
 import time
@@ -104,11 +105,15 @@ def installed_state():
     return state
 
 def service_active(unit):
-    output=install.run([install.trusted_tool('systemctl'),'show',unit,'--property=ActiveState,MainPID','--value'])
-    fields=output.decode().splitlines()
-    require(len(fields)==2,'系统服务状态格式未知')
-    values=set(fields)
-    return 'active' in values or 'activating' in values or any(v.isdecimal() and int(v)>0 for v in values)
+    require(unit in ('miku-gate.service','miku-gate-vpn.service','miku-gate-certificate.service','miku-gate-certificate.timer'),'服务状态仅固定已登记名称')
+    command=[install.trusted_tool('systemctl'),'show',unit,'--property=LoadState,ActiveState,MainPID']
+    result=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,cwd='/',env=install.ENV,timeout=15)
+    require(len(result.stdout)<=4096 and len(result.stderr)<=4096,'服务状态输出异常，不能确认已停止')
+    fields={line.split('=',1)[0]:line.split('=',1)[1] for line in result.stdout.decode().splitlines() if '=' in line}
+    require(set(fields)=={'LoadState','ActiveState','MainPID'} and fields['MainPID'].isdecimal(),'服务状态格式未知，不能确认已停止')
+    if result.returncode!=0:
+        require(fields['LoadState']=='not-found' and fields['ActiveState']=='inactive' and fields['MainPID']=='0','systemctl无法确认确切单元已停止')
+    return fields['ActiveState'] in ('active','activating','deactivating','reloading') or int(fields['MainPID'])>0
 
 def stop_services(state):
     units=['miku-gate.service']+(['miku-gate-vpn.service'] if state['vpn'] else [])

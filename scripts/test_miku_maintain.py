@@ -178,4 +178,13 @@ class PartialUnitRemovalRecovery(unittest.TestCase):
     def test_missing_stopped_unit_does_not_block_recovery_snapshot_restore(self):
         with mock.patch.object(Path,'exists',return_value=False),mock.patch.object(maintenance,'service_active',return_value=False),mock.patch.object(maintenance.install,'run') as run:
             self.assertEqual(maintenance.stop_services({'vpn':False}),[]);run.assert_not_called()
+class MissingUnitRuntimeState(unittest.TestCase):
+    def test_deleted_file_does_not_hide_live_systemd_pid(self):
+        result=__import__('types').SimpleNamespace(returncode=0,stdout=b'LoadState=not-found\nActiveState=active\nMainPID=17\n',stderr=b'')
+        with mock.patch.object(maintenance.install,'trusted_tool',return_value='/usr/bin/systemctl'),mock.patch.object(maintenance.subprocess,'run',return_value=result):self.assertTrue(maintenance.service_active('miku-gate.service'))
+        result.returncode=1;result.stdout=b'LoadState=not-found\nActiveState=inactive\nMainPID=0\n'
+        with mock.patch.object(maintenance.install,'trusted_tool',return_value='/usr/bin/systemctl'),mock.patch.object(maintenance.subprocess,'run',return_value=result):self.assertFalse(maintenance.service_active('miku-gate.service'))
+        result.stdout=b''
+        with mock.patch.object(maintenance.install,'trusted_tool',return_value='/usr/bin/systemctl'),mock.patch.object(maintenance.subprocess,'run',return_value=result):
+            with self.assertRaises(maintenance.BackupError):maintenance.service_active('miku-gate.service')
 if __name__=='__main__':unittest.main()

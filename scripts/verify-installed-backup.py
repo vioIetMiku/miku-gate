@@ -36,6 +36,7 @@ def main():
     parser.add_argument('--maintenance-script',required=True)
     parser.add_argument('--output',required=True)
     parser.add_argument('--upgrade-distribution')
+    parser.add_argument('--verify-service-removal',action='store_true')
     args=parser.parse_args()
     require(os.geteuid()==0,'disposable installed verification needs root coordinator')
     state=json.loads(Path('/etc/miku-gate/install-state.json').read_text())
@@ -105,8 +106,58 @@ def main():
         after,_=request('GET','/api/exits/'+id+'/upstream');require(after==before,'paired rollback did not restore original encrypted data')
         require(not Path('/etc/miku-gate/maintenance-transaction.json').exists() and not Path('/etc/miku-gate/maintenance-block').exists(),'successful paired rollback left an unresolved transaction')
         rollback_verified=True
+    service_removal_verified=False
+    if args.verify_service_removal:
+        require(args.upgrade_distribution,'service removal proof follows the same installed upgrade fixture')
+        data=Path('/var/lib/miku-gate/data');units=Path('/etc/systemd/system')
+        unit_names=['miku-gate.service']+(['miku-gate-vpn.service'] if state['vpn'] else [])
+        def systemctl(*arguments):
+            result=subprocess.run(['/usr/bin/systemctl',*arguments],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=35)
+            require(result.returncode==0 and len(result.stdout)<16384 and len(result.stderr)<16384,'bounded exact-unit systemctl check failed')
+            return result.stdout.decode().strip()
+        def manifest():
+            paths=[Path('/etc/miku-gate/install-state.json'),Path('/usr/local/lib/miku-gate/miku-gate'),key,data/'miku-gate.db',cp,data/'management/private.key',*[(units/name) for name in unit_names]]
+            return {str(path):{'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'uid':path.stat().st_uid,'gid':path.stat().st_gid,'mode':stat.S_IMODE(path.stat().st_mode)} for path in paths}
+        initial_users=state['users'];before_files=manifest()
+        failed=subprocess.run(['/usr/bin/python3','-B',args.maintenance_script,'uninstall-services','--output='+str(output.parent/'unconfirmed.tar.gz')],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=15)
+        require(failed.returncode!=0 and not (output.parent/'unconfirmed.tar.gz').exists(),'unconfirmed service removal did not refuse before snapshot')
+        systemctl('is-active','--quiet','miku-gate.service')
+        change('uninstall-services',['--output='+str(output.parent/'pre-uninstall.tar.gz'),'--confirm-stop','--confirm-uninstall-services'])
+        retained=json.loads(Path('/etc/miku-gate/install-state.json').read_text())
+        require(retained['services_uninstalled'] and retained['users']==initial_users and retained['instance']==state['instance'],'data preserving removal changed identities')
+        for name in unit_names:
+            require(not (units/name).exists(),'service-only removal left an unverified unit file')
+        for name in ['/usr/local/lib/miku-gate/miku-gate',str(key),str(cp),str(data/'management/private.key')]:
+            require(hashlib.sha256(Path(name).read_bytes()).hexdigest()==before_files[name]['sha256'],'service removal changed retained binary/key/certificate')
+        try:
+            with socket.create_connection(('127.0.0.1',state['port']),timeout=1):
+                raise VerifyError('management listener remained after confirmed service removal')
+        except OSError:pass
+        accounts={name:[int(x) for x in subprocess.check_output(['/usr/bin/id','-u',name],timeout=5).split()] for name in initial_users}
+        require(all(accounts[name]==[ids[0]] for name,ids in initial_users.items()),'service removal deleted/reassigned dedicated account')
+        require(not Path('/etc/miku-gate/maintenance-transaction.json').exists() and not Path('/etc/miku-gate/maintenance-block').exists(),'successful removal left unresolved paired transaction')
+        change('reinstall-services',['--confirm-reinstall-services'])
+        registered=json.loads(Path('/etc/miku-gate/install-state.json').read_text())
+        require(not registered['services_uninstalled'] and registered['users']==initial_users and registered['instance']==state['instance'],'explicit registration did not preserve installation identity')
+        for name in unit_names:
+            require((units/name).exists() and hashlib.sha256((units/name).read_bytes()).hexdigest()==before_files[str(units/name)]['sha256'],'registered unit template changed')
+            values=systemctl('show',name,'--property=ActiveState,MainPID,UnitFileState','--value').splitlines()
+            require('active' not in values and 'activating' not in values and 'enabled' not in values and not any(value.isdecimal() and int(value)>0 for value in values),'re-registration secretly enabled/started unit')
+        # Start explicitly, in executor/control order; the re-register action did
+        # not do this. Authenticate with the original private session/key/cert.
+        if state['vpn']:systemctl('start','miku-gate-vpn.service')
+        systemctl('start','miku-gate.service')
+        import time
+        deadline=time.monotonic()+15;last=None
+        while time.monotonic()<deadline:
+            try:
+                after,_=request('GET','/api/exits/'+id+'/upstream');last=after;break
+            except (OSError,VerifyError):time.sleep(0.2)
+        require(last==before,'original encrypted config/session not readable after service-only uninstall and explicit registration/start')
+        require(hashlib.sha256(key.read_bytes()).hexdigest()==original_key_sha,'service removal/re-registration replaced database vault key')
+        service_removal_verified=True
     request('DELETE','/api/exits/'+id,expected=204)
-    print('INSTALLED_BACKUP_VERIFIED '+json.dumps({'paired_encrypted_db_key_verified':True,'private_archive_mode':'0600','ordinary_service_https_restart_verified':True,'data_identity_retained':True,'raw_private_material_returned':False,'restore_verified':rollback_verified,'upgrade_verified':upgrade_verified,'vpn_mode':state['vpn']},sort_keys=True))
+    print('INSTALLED_BACKUP_VERIFIED '+json.dumps({'paired_encrypted_db_key_verified':True,'private_archive_mode':'0600','ordinary_service_https_restart_verified':True,'data_identity_retained':True,'raw_private_material_returned':False,'restore_verified':rollback_verified,'upgrade_verified':upgrade_verified,'service_removal_and_explicit_registration_verified':service_removal_verified,'vpn_mode':state['vpn']},sort_keys=True))
 
 if __name__=='__main__':
     try:main()

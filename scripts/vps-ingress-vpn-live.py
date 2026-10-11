@@ -49,20 +49,20 @@ class CoreClient:
     def diagnostics(self):
         with self.lock: return dict(self.categories)
     def observe(self):
-        for line in self.process.stderr:
+        for line in self.process.stdout:
             # No raw text is stored. Closed error taxonomy only; generated UUID,
             # client passwords, peer addresses and key values never enter stdout.
             for needle, category in ((b"REALITY verification failed", "reality_verification_failed"),
                     (b"processed invalid connection", "invalid_reality_connection"),
                     (b"certificate", "certificate_log"), (b"handshake", "handshake_log"),
                     (b"authentication", "authentication_log"), (b"failed", "failure_log"),
-                    (b"refused", "refused"), (b"timeout", "timeout"), (b"password", "password_log")):
+                    (b"refused", "refused"), (b"timeout", "timeout"), (b"password", "password_log"), (b"Vision", "vision_log"), (b"dispatch", "dispatch_log"), (b"splice", "splice_log"), (b"processed invalid", "invalid_connection"), (b"closing", "closing_log"), (b"connection reset", "connection_reset"), (b"EOF", "eof")):
                 if needle in line:
                     with self.lock: self.categories[category] = self.categories.get(category,0)+1
     def __init__(self,path,core,raw,port):
         args=["run","-config","stdin:"] if core=="xray" else ["run","-c","/dev/stdin"]
         self.lock=threading.Lock();self.categories={}
-        self.process=subprocess.Popen(["/usr/bin/setpriv","--reuid=65534","--regid=65534","--clear-groups","--no-new-privs","--",str(path),*args],cwd="/",env=live.ENV,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,start_new_session=True)
+        self.process=subprocess.Popen(["/usr/bin/setpriv","--reuid=65534","--regid=65534","--clear-groups","--no-new-privs","--",str(path),*args],cwd="/",env=live.ENV,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True)
         self.reader=threading.Thread(target=self.observe,daemon=True);self.reader.start()
         try:
             self.process.stdin.write(raw);self.process.stdin.close()
@@ -82,7 +82,7 @@ class CoreClient:
             self.process.kill();self.process.wait(timeout=3)
             raise RuntimeError("owned core client failed orderly stop") from None
         finally:
-            self.reader.join(2);self.process.stderr.close()
+            self.reader.join(2);self.process.stdout.close()
 
 def step(core,phase):
     # Closed set lifecycle observations, no credentials/config/IPs.

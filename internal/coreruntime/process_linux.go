@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net"
 	"os"
@@ -70,6 +71,24 @@ func nativeRunner(options Options) Runner {
 		helper, e := trustedBinary("/usr/bin/setpriv")
 		if e != nil {
 			return nil, e
+		}
+		// Native core output never reaches a raw logger; info diagnostics are
+		// reduced to the closed taxonomy below. Include transport errors that
+		// Xray intentionally reports only at info, not warning level.
+		var generated map[string]any
+		if json.Unmarshal(raw, &generated) != nil {
+			return nil, ErrCore
+		}
+		if log, ok := generated["log"].(map[string]any); ok {
+			if core == "xray" {
+				log["loglevel"] = "info"
+			} else {
+				log["level"] = "info"
+			}
+		}
+		raw, e = json.Marshal(generated)
+		if e != nil {
+			return nil, ErrCore
 		}
 		command := func(check bool) *exec.Cmd {
 			args := []string{"run", "-c", "/dev/stdin"}
@@ -161,7 +180,7 @@ func (d *safeCoreLogs) Write(raw []byte) (int, error) {
 	if d.counts == nil {
 		d.counts = map[string]int{}
 	}
-	for _, category := range []string{"failed", "invalid", "authentication", "certificate", "timeout", "refused", "REALITY", "verification", "accepted", "TCP", "read", "EOF", "TLS"} {
+	for _, category := range []string{"failed", "invalid", "authentication", "certificate", "timeout", "refused", "REALITY", "verification", "accepted", "TCP", "read", "EOF", "TLS", "dispatch", "Vision", "user", "payload", "splice", "write", "connection reset", "processed invalid", "account", "flow", "forward", "closing"} {
 		if strings.Contains(string(raw), category) {
 			d.counts[category]++
 		}

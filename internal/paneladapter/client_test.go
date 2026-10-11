@@ -2,6 +2,7 @@ package paneladapter
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -95,8 +96,43 @@ func TestPanelStrictJSONEndpointAndRedirect(t *testing.T) {
 	defer server.Close()
 	_, port, _ := net.SplitHostPort(server.Listener.Addr().String())
 	n, _ := strconv.Atoi(port)
-	client, _ := New(Endpoint{n, "/", "current"})
+	client, _ := New(Endpoint{Port: n, Base: "/", Mode: "current"})
 	if client.Login(t.Context(), "user", "secret", "") == nil {
 		t.Fatal("panel login redirect allowed")
+	}
+}
+
+func TestLocalHTTPSPanelDoesNotIgnoreTrustOrResolveTLSName(t *testing.T) {
+	calls := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/csrf-token" {
+			json.NewEncoder(w).Encode(map[string]any{"success": true, "obj": "local-tls-csrf-atleast16"})
+		} else {
+			json.NewEncoder(w).Encode(map[string]any{"success": true})
+		}
+	}))
+	defer server.Close()
+	_, port, _ := net.SplitHostPort(server.Listener.Addr().String())
+	n, _ := strconv.Atoi(port)
+	value, e := New(Endpoint{Port: n, Base: "/", Mode: "current", HTTPS: true})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if value.Login(t.Context(), "fixture", "private-login", "") == nil || calls != 0 {
+		t.Fatal("untrusted panel TLS bypassed/credential reached server")
+	}
+	client := value.(*Client)
+	pool := x509.NewCertPool()
+	pool.AddCert(server.Certificate())
+	client.http.Transport.(*http.Transport).TLSClientConfig.RootCAs = pool
+	if e = client.Login(t.Context(), "fixture", "private-login", ""); e != nil {
+		t.Fatal("explicit test-only trusted TLS failed", e)
+	}
+	for _, endpoint := range []Endpoint{{Port: n, Base: "/", Mode: "current", TLSName: "panel.example"}, {Port: n, Base: "/", Mode: "current", HTTPS: true, TLSName: "127.0.0.1"}, {Port: n, Base: "/", Mode: "current", HTTPS: true, TLSName: "metadata.internal"}} {
+		if endpoint.Validate() == nil {
+			t.Fatal("ambiguous TLS identity")
+		}
 	}
 }

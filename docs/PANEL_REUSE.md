@@ -45,3 +45,9 @@ apply需要`--inbound=匿名ID --exit-id=实际逻辑出口ID --expected-templat
 在可丢弃Ubuntu匿名网络空间（只有lo）、普通UID65534/NoNewPrivileges，panel私有DB/bin/log独立目录：实际官方CLI初始化本机管理、真实登录/CSRF、通过官方API新建两个保留客户端UUID的TLS/Vision节点；使用Miku生产paneladapter和持久模板生成器保存选定路由，真实客户端→panel Xray→Miku认证SOCKS→受控回环目标验证，panel进程重启后路由/身份仍保留，代理停止无direct后备，最后原模板/节点一致回滚。
 
 没有访问用户VPS面板/宿主DB/服务，不使用公网VPN或TLS insecure，不回显登录密码/客户端私钥，不上传原面板日志。此用例执行前只代表新验收已经接线；实际结果必须按固定源CI读取。其他面板版本、用户真实环境、公网或实际VPN仍不由该专项自动证明。
+
+## 主线dev.15：HTTPS-only本机面板
+
+网页可勾选HTTPS并填写面板证书SAN域名（留空只验证127.0.0.1）。始终只数字拨号127.0.0.1原端口，域名仅TLS服务器身份，不进行用户域名DNS/远端连接；系统CA/主机名验证和TLS1.2最低不放宽。自签或未信任证书拒绝，不能勾选insecure，面板登录密码不会通过未验证的TLS发送。回滚快照绑定HTTP/HTTPS/同一证书域名，不能跨身份套用。受控TLS用例先证明不信任时零HTTP调用，再仅测试进程注入私有CA证明真实TLS握手/CSRF，生产无导入任意根或跳过开关。旧发行dev.14不修改。
+
+官方v3.9.0持久保存会规范化内部api统计路由到首位；候选现在保留原唯一仅`inboundTag:[api]`/`outboundTag:api`的field规则在首位，选定业务UDP/TCP仍优先于其他业务路由。混合api/业务标签、重复api规则拒绝，不使用“忽略面板差异”比较。首次实测失败保留，新源另验证。

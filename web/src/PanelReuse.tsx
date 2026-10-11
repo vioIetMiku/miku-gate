@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { CircleNotch, Info } from '@phosphor-icons/react';
 import { api, type Exit } from './api';
 
-type Endpoint = { port: number; base: string; mode: string };
+type Endpoint = { port: number; base: string; mode: string; https?: boolean; tls_name?: string };
 type Preview = {
   preview_id: string;
   template_sha256: string;
@@ -37,6 +37,8 @@ export function PanelReuse() {
   const [port, setPort] = useState('2053');
   const [base, setBase] = useState('/');
   const [mode, setMode] = useState('current');
+  const [https, setHTTPS] = useState(false);
+  const [tlsName, setTLSName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [twoFactor, setTwoFactor] = useState('');
@@ -82,7 +84,7 @@ export function PanelReuse() {
     setConfirm(false);
     try {
       const value = await api<Preview>('/host/panel/inspect', 'POST', {
-        endpoint: { port: Number(port), base, mode },
+        endpoint: { port: Number(port), base, mode, https, tls_name: https ? tlsName : '' },
         username,
         password,
         two_factor: twoFactor,
@@ -205,6 +207,30 @@ export function PanelReuse() {
             />
           </label>
         </div>
+        <label className="confirm-check">
+          <input
+            type="checkbox"
+            checked={https}
+            disabled={busy || !!preview}
+            onChange={(e) => {
+              setHTTPS(e.target.checked);
+              setConsent(false);
+            }}
+          />
+          本机面板使用 HTTPS（系统信任链验证，不忽略证书）
+        </label>
+        {https && (
+          <label>
+            面板证书域名（不用于DNS拨号；留空只验证127.0.0.1 SAN）
+            <input
+              value={tlsName}
+              disabled={busy || !!preview}
+              onChange={(e) => setTLSName(e.target.value)}
+              placeholder="panel.example.com"
+              maxLength={253}
+            />
+          </label>
+        )}
         <label>
           明确面板接口版本
           <select
@@ -349,7 +375,9 @@ export function PanelReuse() {
                 (item) =>
                   item.endpoint.port === Number(port) &&
                   item.endpoint.base === base &&
-                  item.endpoint.mode === mode,
+                  item.endpoint.mode === mode &&
+                  !!item.endpoint.https === https &&
+                  (item.endpoint.tls_name || '') === (https ? tlsName : ''),
               )
               .map((item) => (
                 <div className="runtime-actions" key={item.backup_id}>
@@ -413,7 +441,7 @@ export function PanelReuse() {
           </div>
         )}
         <p className="field-note">
-          真实面板版本兼容和完整客户端数据路径仍需实际验证；此处回读配置不是宣称已连接VPN。面板只HTTPS监听/非标准路径当前明确不可用，不忽略证书或扫描端口。
+          真实面板版本兼容和完整客户端数据路径仍需实际验证；此处回读配置不是宣称已连接VPN。面板HTTPS可使用系统可信证书与明确证书域名；自签未受信任会拒绝，不忽略校验或扫描端口。
         </p>
       </div>
     </section>

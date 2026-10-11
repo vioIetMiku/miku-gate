@@ -5,11 +5,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mikugate/internal/certassets"
+	"mikugate/internal/domain"
 	"mikugate/internal/ingress"
 	"net"
 	"net/http"
@@ -23,14 +26,25 @@ var ErrPanel = errors.New("本机面板接口、CSRF或持久配置未验证；�
 var ErrChanged = errors.New("面板配置在预览后变化，未应用；重新检测并确认")
 
 type Endpoint struct {
-	Port int    `json:"port"`
-	Base string `json:"base"`
-	Mode string `json:"mode"`
+	HTTPS   bool   `json:"https,omitempty"`
+	TLSName string `json:"tls_name,omitempty"`
+	Port    int    `json:"port"`
+	Base    string `json:"base"`
+	Mode    string `json:"mode"`
 }
 
 func (e Endpoint) Validate() error {
 	if e.Port < 1024 || e.Port > 65535 || !regexp.MustCompile(`^/(?:[A-Za-z0-9_-]+/)*$`).MatchString(e.Base) || len(e.Base) > 128 || (e.Mode != "current" && e.Mode != "legacy") {
 		return ErrPanel
+	}
+	if !e.HTTPS && e.TLSName != "" {
+		return ErrPanel
+	}
+	if e.HTTPS && e.TLSName != "" {
+		host, err := certassets.Hostname(e.TLSName)
+		if err != nil || host != e.TLSName || !domain.PublicHostname(host) {
+			return ErrPanel
+		}
 	}
 	return nil
 }
@@ -73,8 +87,12 @@ func New(endpoint Endpoint) (Runtime, error) {
 		return nil, ErrPanel
 	}
 	jar, _ := cookiejar.New(nil)
-	origin := fmt.Sprintf("http://127.0.0.1:%d", endpoint.Port)
-	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true, ResponseHeaderTimeout: 8 * time.Second, DialContext: func(ctx context.Context, _ string, address string) (net.Conn, error) {
+	scheme := "http"
+	if endpoint.HTTPS {
+		scheme = "https"
+	}
+	origin := fmt.Sprintf("%s://127.0.0.1:%d", scheme, endpoint.Port)
+	transport := &http.Transport{Proxy: nil, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, ServerName: endpoint.TLSName}, DisableKeepAlives: true, ResponseHeaderTimeout: 8 * time.Second, DialContext: func(ctx context.Context, _ string, address string) (net.Conn, error) {
 		if address != fmt.Sprintf("127.0.0.1:%d", endpoint.Port) {
 			return nil, ErrPanel
 		}

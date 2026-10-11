@@ -55,7 +55,37 @@ func PreparePanelTemplate(rendered, template []byte, expectedRendered, expectedT
 	if len(generatedRules) < 2 {
 		return nil, Plan{}, ErrConfig
 	}
-	routing["rules"] = append(generatedRules[:2:2], rules...)
+	// Official 3x-ui v3.9 normalizes its exact internal stats/API rule to
+	// index zero on every persistent save. Preserve that harmless first rule,
+	// keeping selected business UDP/TCP rules ahead of other business rules.
+	apiIndex := -1
+	for i, value := range rules {
+		rule := object(value)
+		if text(rule["outboundTag"]) != "api" {
+			continue
+		}
+		tags := array(rule["inboundTag"])
+		api := false
+		for _, tag := range tags {
+			if text(tag) == "api" {
+				api = true
+			}
+		}
+		if api {
+			if apiIndex != -1 || len(tags) != 1 || text(rule["type"]) != "field" {
+				return nil, Plan{}, ErrSelection
+			}
+			apiIndex = i
+		}
+	}
+	next := append(generatedRules[:2:2], rules...)
+	if apiIndex >= 0 {
+		api := rules[apiIndex]
+		preserved := append(append([]any{}, rules[:apiIndex]...), rules[apiIndex+1:]...)
+		next = append([]any{api}, generatedRules[:2]...)
+		next = append(next, preserved...)
+	}
+	routing["rules"] = next
 	target["routing"] = routing
 	target["outbounds"] = append(array(target["outbounds"]), additions...)
 	raw, err := json.MarshalIndent(target, "", "  ")

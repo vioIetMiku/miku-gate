@@ -40,3 +40,25 @@ func TestPersistentPanelTemplatePreservesClientsAndNonSelectedConfig(t *testing.
 		t.Fatal("duplicate persistent reconciliation accepted")
 	}
 }
+
+func TestOfficialPanelAPIStatsNormalizationIsPreserved(t *testing.T) {
+	source, _ := FindSource("x-ui")
+	rendered := []byte(xrayFixture)
+	report, e := Inspect(source, rendered)
+	if e != nil {
+		t.Fatal(e)
+	}
+	template := []byte(`{"inbounds":[],"outbounds":[{"tag":"direct","protocol":"freedom"}],"routing":{"rules":[{"type":"field","inboundTag":["api"],"outboundTag":"api"},{"type":"field","domain":["other.example"],"outboundTag":"direct"}]}}`)
+	candidate, plan, e := PreparePanelTemplate(rendered, template, digest(rendered), digest(template), report.Inbounds[0].ID, Proxy{20000, "fixture", "secret"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	next, e := parseJSON(candidate)
+	if e != nil {
+		t.Fatal(e)
+	}
+	rules := array(object(next["routing"])["rules"])
+	if len(rules) != 4 || text(object(rules[0])["outboundTag"]) != "api" || text(object(rules[1])["outboundTag"]) != plan.OutboundTag+"-udp-block" || text(object(rules[2])["outboundTag"]) != plan.OutboundTag || text(object(rules[3])["outboundTag"]) != "direct" {
+		t.Fatal("official stats rule misplaced or other business rules changed")
+	}
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"mikugate/internal/gateway"
 	"mikugate/internal/hostinventory"
 	"mikugate/internal/httpapi"
+	"mikugate/internal/management"
 	"mikugate/internal/runlock"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
@@ -49,7 +52,7 @@ func run() error {
 		return tunnel.RunWorker()
 	}
 	if len(os.Args) < 2 {
-		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | instance | serve | doctor | inventory | ingress | version | sandbox | executor | vpn-executor\n支持本机认证代理上游；Linux 隔离 OpenVPN 已接线；交互安装与加密入口开发中。")
+		fmt.Println("Miku Gate " + domain.Version + "\n用法：miku-gate init | instance | serve | doctor | inventory | ingress | management | version | sandbox | executor | vpn-executor\n支持本机认证代理上游；Linux 隔离 OpenVPN 已接线；交互安装与加密入口开发中。")
 		return nil
 	}
 	if os.Args[1] == "version" {
@@ -78,6 +81,9 @@ func run() error {
 	if os.Args[1] == "ingress" {
 		return runIngress(os.Args[2:], os.Stdin, os.Stdout)
 	}
+	if os.Args[1] == "management" {
+		return runManagement(os.Args[2:], os.Stdout)
+	}
 	if os.Args[1] == "doctor" {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -95,6 +101,10 @@ func run() error {
 	xrayPath := flags.String("xray-core", "", "显式信任的root所有Xray可执行文件绝对路径；不自动执行已有面板程序")
 	singPath := flags.String("sing-box-core", "", "显式信任的root所有sing-box可执行文件绝对路径")
 	maxActive := flags.Int("max-active", 3, "同时运行的代理出口上限，1–8（不是容量保证）")
+	publicOrigin := flags.String("public-origin", "", "明确HTTPS管理Origin，仅该Host可访问，默认保持回环HTTP")
+	tlsCertificate := flags.String("tls-certificate", "", "只读管理TLS证书绝对路径")
+	tlsKey := flags.String("tls-key", "", "受保护管理私钥绝对路径，不回显")
+	allowBootstrap := flags.Bool("allow-bootstrap-certificate", false, "仅IP模式明确允许自签引导证书；需要客户端核对指纹/导入信任")
 	listen := flags.String("listen", "127.0.0.1:3939", "本机管理监听地址")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
@@ -104,6 +114,9 @@ func run() error {
 	}
 	if flags.NArg() != 0 {
 		return errors.New("存在不支持的位置参数")
+	}
+	if (*publicOrigin != "" || *tlsCertificate != "" || *tlsKey != "" || *allowBootstrap) && os.Args[1] != "serve" {
+		return errors.New("HTTPS管理参数只用于serve")
 	}
 	if *vpnExecutor && os.Args[1] != "serve" {
 		return errors.New("--vpn-executor只适用于serve")
@@ -166,14 +179,34 @@ func run() error {
 	if !initialized {
 		return errors.New("请先运行 miku-gate init 初始化本机管理员")
 	}
-	host, _, err := net.SplitHostPort(*listen)
+	host, listenPort, err := net.SplitHostPort(*listen)
 	if err != nil {
 		return err
 	}
 	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() {
-		return errors.New("当前开发版本仅允许绑定回环 IP，不允许公网监听")
+	if ip == nil {
+		return errors.New("管理监听必须数字IP")
 	}
+	var managementTLS *tls.Config
+	var managementIdentity management.CertificateInfo
+	if *publicOrigin == "" {
+		if !ip.IsLoopback() || *tlsCertificate != "" || *tlsKey != "" || *allowBootstrap {
+			return errors.New("明文管理仅允许回环监听；公网须显式public-origin和TLS素材")
+		}
+	} else {
+		endpoint, e := management.ParseOrigin(*publicOrigin)
+		if e != nil {
+			return e
+		}
+		if listenPort != strconv.Itoa(endpoint.Port) {
+			return errors.New("管理监听端口与公开HTTPS地址不匹配")
+		}
+		managementTLS, managementIdentity, err = management.Load(endpoint, *tlsCertificate, *tlsKey, *allowBootstrap)
+		if err != nil {
+			return err
+		}
+	}
+
 	assets, err := web.Assets()
 	if err != nil {
 		return err
@@ -181,6 +214,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	var options httpapi.Options
+	options.PublicOrigin = *publicOrigin
 	if *vpnExecutor {
 		if *controlOnly {
 			return errors.New("--vpn-executor不能用于纯控制台模式")
@@ -240,7 +274,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	server := &http.Server{Addr: *listen, Handler: handler, BaseContext: func(net.Listener) context.Context { return ctx }, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
+	server := &http.Server{TLSConfig: managementTLS, Addr: *listen, Handler: handler, BaseContext: func(net.Listener) context.Context { return ctx }, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
 	listener, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err
@@ -256,8 +290,17 @@ func run() error {
 			server.Close()
 		}
 	}()
-	log.Printf("Miku Gate %s · http://%s · 代理上游运行时=%t · 隔离 OpenVPN 配置=%t · 沙箱 IPC 配置=%t", domain.Version, listener.Addr(), !*controlOnly, *vpnExecutor, *sandboxIPC)
-	err = server.Serve(listener)
+	scheme := "http"
+	if managementTLS != nil {
+		scheme = "https"
+	}
+	log.Printf("Miku Gate %s · %s://%s · 代理上游运行时=%t · 隔离 OpenVPN 配置=%t · 沙箱 IPC 配置=%t", domain.Version, scheme, listener.Addr(), !*controlOnly, *vpnExecutor, *sandboxIPC)
+	if managementTLS != nil {
+		log.Printf("管理HTTPS %s · 证书SHA256=%s · 系统信任=%t · IP自签引导=%t（引导身份需用户核对/导入，不是公共CA信任）", managementIdentity.Origin, managementIdentity.LeafSHA256, managementIdentity.SystemTrusted, managementIdentity.Bootstrap)
+		err = server.ServeTLS(listener, "", "")
+	} else {
+		err = server.Serve(listener)
+	}
 	stop()
 	<-shutdownDone
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {

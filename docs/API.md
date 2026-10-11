@@ -180,3 +180,7 @@ VPN选择请求字段：`node_id`、`peer_name`、`allow_legacy`、`confirm`。�
 - `POST /api/exits/{id}/ingress/stop`：只停止Miku持有子核心，出口租约结束也撤销入口。
 
 变更/显示/启停均认证+CSRF+同源；保存参数没有任意配置/程序路径。启动不可用503、冲突409、核心未验证422；私钥/原始core日志不进入API。详见MANAGED_RUNTIME.md。
+
+## dev.11：明确HTTPS管理Origin
+
+`serve --public-origin=https://域名或IP:端口 --tls-certificate=文件 --tls-key=文件`启用直接TLS与唯一Host/Origin；明文/伪造转发头拒绝。不配置公开地址则仍回环HTTP。会话与退出Secure Cookie，CSRF不变。`--allow-bootstrap-certificate`仅IP有效自签引导身份且需用户核对指纹/信任，不等于公共CA。详见HTTPS_INSTALLATION.md。

@@ -25,6 +25,7 @@ import (
 	"mikugate/internal/gateway"
 	"mikugate/internal/hostinventory"
 	"mikugate/internal/ingress"
+	"mikugate/internal/management"
 	"mikugate/internal/netexec"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
@@ -41,6 +42,7 @@ type SandboxClient interface {
 	Capabilities(context.Context) (executoripc.Capabilities, error)
 }
 type Options struct {
+	PublicOrigin        string
 	Cores               *coreruntime.Manager
 	DiscoverCertificate func(string) (certassets.Discovery, *certassets.Asset, error)
 	ProbeReality        func(context.Context, string) (ingress.RealityTarget, error)
@@ -51,6 +53,7 @@ type Options struct {
 	VPN                 *vpnipc.Client
 }
 type Server struct {
+	publicEndpoint      *management.Endpoint
 	cores               *coreruntime.Manager
 	assetSlot           chan struct{}
 	lastAsset           time.Time
@@ -84,6 +87,14 @@ func New(s *store.Store, assets fs.FS) (http.Handler, error) {
 	return NewWithOptions(s, assets, Options{})
 }
 func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler, error) {
+	var publicEndpoint *management.Endpoint
+	if options.PublicOrigin != "" {
+		endpoint, e := management.ParseOrigin(options.PublicOrigin)
+		if e != nil {
+			return nil, e
+		}
+		publicEndpoint = &endpoint
+	}
 	dummy, err := security.HashPassword("not-an-account-" + time.Now().String())
 	if err != nil {
 		return nil, err
@@ -114,7 +125,7 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 	if reality == nil {
 		reality = ingress.ProbeReality
 	}
-	a := &Server{cores: options.Cores, assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	a := &Server{publicEndpoint: publicEndpoint, cores: options.Cores, assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]any{"version": domain.Version, "status": a.mode()})
@@ -129,7 +140,7 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 			a.internal(w, err)
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: "miku_session", Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: -1})
+		http.SetCookie(w, &http.Cookie{Name: "miku_session", Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, MaxAge: -1})
 		w.WriteHeader(204)
 	}))
 	mux.HandleFunc("GET /api/overview", a.auth(a.overview))
@@ -201,22 +212,38 @@ func (a *Server) guard(next http.Handler) http.Handler {
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 		w.Header().Set("Cache-Control", "no-store")
-		host := r.Host
-		if h, _, err := net.SplitHostPort(host); err == nil {
-			host = h
-		}
-		ip := net.ParseIP(host)
-		if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-			fail(w, 403, "invalid_host", "开发版本只接受本机访问")
-			return
-		}
-		if origin := r.Header.Get("Origin"); origin != "" {
-			u, err := url.Parse(origin)
-			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host != r.Host {
-				fail(w, 403, "invalid_origin", "跨站请求被拒绝")
+		if a.publicEndpoint != nil {
+			if r.TLS == nil {
+				fail(w, 403, "https_required", "公开管理只接受直接HTTPS，转发头不会授权明文")
 				return
 			}
+			if r.Host != a.publicEndpoint.Authority {
+				fail(w, 403, "invalid_host", "请求Host与明确管理地址不匹配")
+				return
+			}
+			if origin := r.Header.Get("Origin"); origin != "" && origin != a.publicEndpoint.Origin {
+				fail(w, 403, "invalid_origin", "仅接受精确HTTPS管理Origin")
+				return
+			}
+		} else {
+			host := r.Host
+			if h, _, e := net.SplitHostPort(host); e == nil {
+				host = h
+			}
+			ip := net.ParseIP(host)
+			if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+				fail(w, 403, "invalid_host", "未配置公开HTTPS管理地址，仅允许回环Host")
+				return
+			}
+			if origin := r.Header.Get("Origin"); origin != "" {
+				u, e := url.Parse(origin)
+				if e != nil || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "http" && u.Scheme != "https") || u.Host != r.Host {
+					fail(w, 403, "invalid_origin", "跨站请求被拒绝")
+					return
+				}
+			}
 		}
+
 		if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
 			fail(w, 403, "invalid_origin", "跨站请求被拒绝")
 			return

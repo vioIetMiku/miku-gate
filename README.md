@@ -1,6 +1,6 @@
 # Miku Gate
 
-**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.10`。**
+**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.11`。**
 
 > 当前可运行的是带认证的本机代理上游网关：HTTP/SOCKS入口 → 用户提供的SOCKS5、HTTP或HTTPS代理。完整VPN网关仍在开发。
 >
@@ -13,6 +13,8 @@
 先前发布：[v0.1.0-dev.8 隔离 VPN Gate 出口预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.8)，含三平台压缩包及校验文件。[公共节点验收](docs/validation/2026-10-10-public-vpngate.md)。主线新增的只读主机检测见 [HOST_INVENTORY](docs/HOST_INVENTORY.md)，尚未包含于 dev.8 资产。另新增[已有入口摘要和私有路由候选](docs/EXISTING_INGRESS.md)，需明确同意读取，尚不自动应用或持久复用面板。新增[受管入口模板/证书/REALITY流程](docs/MANAGED_INGRESS.md)，可本机生成私有配置和客户端导入材料，dev.10已新增加密保存/出口绑定/客户端显示及显式核心启停接线；[运行器说明](docs/MANAGED_RUNTIME.md)。两核心REALITY入口到公共VPN完整业务旅程已通过；[实测记录](docs/validation/2026-10-11-managed-runtime.md)。公网部署/生产安装仍待验收。
 
 上一发布：[v0.1.0-dev.6 代理上游预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.6)。提供Linux amd64/arm64、Windows amd64及校验文件；[实际VPS/发行验收](docs/validation/2026-10-10-proxy-runtime.md)。旧dev.2标签与资产保留，main继续完整网关开发。
+
+主线dev.11新增[HTTPS/交互安装流程](docs/HTTPS_INSTALLATION.md)，实际安装验收仍待执行，尚未包含在已发布dev.10包中。旧包不添加/替换安装器。
 
 ## 如何使用本机代理上游
 

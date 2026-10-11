@@ -1,0 +1,109 @@
+name: Interactive installation and HTTPS lab (manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: installation-lab
+  cancel-in-progress: false
+jobs:
+  install-https:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        vpn: ['no', 'yes']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build actual CLI and HTTPS integration harness
+        run: |
+          npm ci --prefix web
+          npm --prefix web run build
+          mkdir -p .cache/installation-lab
+          go build -trimpath -o .cache/installation-lab/miku-gate ./cmd/miku-gate
+          go test -c -o .cache/installation-lab/cli.test ./cmd/miku-gate
+          python3 -B -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Stage root-owned independent CLI without changing existing services
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/usr/local/lib/miku-install-test-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          test ! -e "$stage"
+          sudo install -d -m 755 "$stage"
+          sudo install -m 555 .cache/installation-lab/miku-gate "$stage/miku-gate"
+          sudo install -m 555 .cache/installation-lab/cli.test "$stage/cli.test"
+          sudo install -m 555 scripts/miku-install.py "$stage/miku-install.py"
+          echo "MIKU_INSTALL_STAGE=$stage" >> "$GITHUB_ENV"
+      - name: Actual ordinary-user IP HTTPS CLI, Host Origin and Secure session
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemd-run --quiet --scope --collect --unit="miku-https-lab-$GITHUB_RUN_ID" \
+            --property=CPUQuota=100% --property=MemoryMax=384M --property=MemorySwapMax=0 --property=TasksMax=64 \
+            /usr/bin/setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs \
+            /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 GOMAXPROCS=1 GOMEMLIMIT=128MiB \
+            MIKU_GATE_MANAGEMENT_TEST=1 MIKU_GATE_BINARY="$MIKU_INSTALL_STAGE/miku-gate" \
+            "$MIKU_INSTALL_STAGE/cli.test" -test.v -test.run '^TestLinuxManagementHTTPSCLI$' -test.timeout=45s \
+            2>&1 | tee .cache/installation-lab/https-result.txt
+      - name: Verify plan-only does not create installation resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          Path('.cache/installation-lab/answers.json').write_text(json.dumps({'enable_vpn':'${{ matrix.vpn }}','install_dependencies':'yes','vps_ip':'192.0.2.10','use_domain':'no','management_port':'39443','managed_core':'none','confirm_ip_certificate':'yes','confirm_install':'yes','start_services':'yes','reuse_existing':'no'}))
+          PY
+          sha=$(sha256sum "$MIKU_INSTALL_STAGE/miku-gate" | cut -d' ' -f1)
+          sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 \
+            python3 -B "$MIKU_INSTALL_STAGE/miku-install.py" --binary "$MIKU_INSTALL_STAGE/miku-gate" --sha256 "$sha" \
+              --plan-only --answers "$PWD/.cache/installation-lab/answers.json" | tee .cache/installation-lab/plan-result.txt
+          test ! -e /usr/local/lib/miku-gate
+          test ! -e /etc/miku-gate
+          test ! -e /var/lib/miku-gate
+          test ! -e /etc/systemd/system/miku-gate.service
+      - name: Apply explicitly answered independent IP HTTPS install on disposable runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha=$(sha256sum "$MIKU_INSTALL_STAGE/miku-gate" | cut -d' ' -f1)
+          umask 077
+          # Output contains the disposable one-time admin password: retain only a
+          # private local file, never print or upload this initialization log.
+          sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 \
+            python3 -B "$MIKU_INSTALL_STAGE/miku-install.py" --binary "$MIKU_INSTALL_STAGE/miku-gate" --sha256 "$sha" \
+              --answers "$PWD/.cache/installation-lab/answers.json" > .cache/installation-lab/private-install.log 2>&1
+          chmod 600 .cache/installation-lab/private-install.log
+          sudo systemctl is-active --quiet miku-gate.service
+          sudo systemctl show miku-gate.service --property=User,NoNewPrivileges,MemoryMax,CPUQuotaPerSecUSec,MainPID \
+            | tee .cache/installation-lab/service-result.txt
+          sudo test -s /etc/miku-gate/install-state.json
+          if [ "${{ matrix.vpn }}" = yes ]; then
+            sudo systemctl is-active --quiet miku-gate-vpn.service
+            instance=$(sudo "$MIKU_INSTALL_STAGE/miku-gate" instance --data=/var/lib/miku-gate/data)
+            # Only capability/status metadata; no node connections or credentials.
+            sudo "$MIKU_INSTALL_STAGE/miku-gate" vpn-executor info --instance="$instance" \
+              | tee .cache/installation-lab/vpn-service-result.txt
+          fi
+          echo 'Actual install coordinator and IP HTTPS health/fingerprint passed on disposable runner; ports80/443 and existing panels were not controlled. This step does not independently compare host network snapshots.'
+      - name: Retain bounded non-secret assertion output only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installation-https-evidence-vpn-${{ matrix.vpn }}
+          path: |
+            .cache/installation-lab/https-result.txt
+            .cache/installation-lab/plan-result.txt
+            .cache/installation-lab/service-result.txt
+            .cache/installation-lab/vpn-service-result.txt
+          if-no-files-found: warn
+          retention-days: 14

@@ -41,7 +41,7 @@ func InspectMaintenance(path string) (MaintenanceInspection, error) {
 	db.SetMaxOpenConns(1)
 	s := &Store{db: db, path: absolute}
 	var integrity string
-	if db.QueryRow("PRAGMA user_version").Scan(&result.Schema) != nil || result.Schema != 6 || db.QueryRow("PRAGMA quick_check").Scan(&integrity) != nil || integrity != "ok" {
+	if db.QueryRow("PRAGMA user_version").Scan(&result.Schema) != nil || (result.Schema != 6 && result.Schema != 7) || db.QueryRow("PRAGMA quick_check").Scan(&integrity) != nil || integrity != "ok" {
 		return result, errors.New("维护检查schema或数据库完整性无效")
 	}
 	if db.QueryRow("SELECT value FROM metadata WHERE key='instance_id'").Scan(&result.Instance) != nil || !regexp.MustCompile(`^[A-Za-z0-9_-]{22}$`).MatchString(result.Instance) {
@@ -85,6 +85,18 @@ func InspectMaintenance(path string) (MaintenanceInspection, error) {
 			}
 		}
 		result.EncryptedRecordCount += len(ids)
+	}
+	backupIDs, e := s.PanelBackupIDs()
+	if e != nil {
+		return result, e
+	}
+	for _, id := range backupIDs {
+		private, e := s.PanelBackup(id)
+		if e != nil {
+			return result, secretstore.ErrCiphertext
+		}
+		clear(private)
+		result.EncryptedRecordCount++
 	}
 	result.IntegrityValid = true
 	result.ProtectedRecordsVerified = true

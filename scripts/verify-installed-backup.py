@@ -76,7 +76,7 @@ def main():
         members={m.name:m for m in archive.getmembers()}
         require('data/miku-gate.db' in members and 'data/miku-gate.db.key' in members and 'BACKUP.json' in members,'paired database/key missing from archive')
         manifest=json.loads(archive.extractfile('BACKUP.json').read())
-        require(manifest['instance']==state['instance'] and manifest['schema']==6 and manifest['encrypted_record_count']>0 and not manifest['restore_verified'],'backup identity/state overstated')
+        require(manifest['instance']==state['instance'] and manifest['schema'] in (6,7) and manifest['encrypted_record_count']>0 and not manifest['restore_verified'],'backup identity/state overstated')
         require(hashlib.sha256(archive.extractfile('data/miku-gate.db.key').read()).hexdigest()==original_key_sha,'archive mismatched vault key')
         database=archive.extractfile('data/miku-gate.db').read()
         require(secret.encode() not in database,'upstream recoverable secret plaintext in DB')

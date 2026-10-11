@@ -67,3 +67,12 @@ func PreparePanelTemplate(rendered, template []byte, expectedRendered, expectedT
 	plan.Warnings = append(plan.Warnings, "候选是面板持久Xray模板，须通过面板API保存并重新读取生成配置验证；不是直接覆盖bin/config.json。")
 	return raw, plan, nil
 }
+
+// CanonicalJSON shares the strict duplicate-key/depth/type bounds of ingress.
+func CanonicalJSON(raw []byte) ([]byte, error) {
+	value, e := parseJSON(raw)
+	if e != nil {
+		return nil, e
+	}
+	return json.Marshal(value)
+}

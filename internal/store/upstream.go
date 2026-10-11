@@ -18,7 +18,7 @@ func (s *Store) secretVault() (*secretstore.Vault, error) {
 		return s.vault, nil
 	}
 	var count int
-	if err := s.db.QueryRow("SELECT (SELECT count(*) FROM upstreams)+(SELECT count(*) FROM vpn_configs)+(SELECT count(*) FROM managed_ingress)").Scan(&count); err != nil {
+	if err := s.db.QueryRow("SELECT (SELECT count(*) FROM upstreams)+(SELECT count(*) FROM vpn_configs)+(SELECT count(*) FROM managed_ingress)+(SELECT count(*) FROM metadata WHERE key LIKE 'panel-backup-v1:%')").Scan(&count); err != nil {
 		return nil, err
 	}
 	v, err := secretstore.Open(s.path+".key", count == 0)

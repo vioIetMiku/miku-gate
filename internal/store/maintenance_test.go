@@ -29,7 +29,7 @@ func TestMaintenanceChecksProtectedPairWithoutMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	inspected, err := InspectMaintenance(path)
-	if err != nil || inspected.Instance != instance || inspected.Schema != 6 || inspected.EncryptedRecordCount != 1 || !inspected.ProtectedRecordsVerified {
+	if err != nil || inspected.Instance != instance || inspected.Schema != 7 || inspected.EncryptedRecordCount != 1 || !inspected.ProtectedRecordsVerified {
 		t.Fatal(inspected, err)
 	}
 	after, _ := os.ReadFile(path + ".key")

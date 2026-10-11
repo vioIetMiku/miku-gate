@@ -54,8 +54,8 @@ func runManagement(args []string, out io.Writer) error {
 			return errors.New("入口证书更新实例不匹配，不创建新数据")
 		}
 		inspected, err := store.InspectMaintenance(filepath.Join(*data, "miku-gate.db"))
-		if err != nil || inspected.Schema != 6 {
-			return errors.New("入口证书更新只支持已初始化schema6")
+		if err != nil || (inspected.Schema != 6 && inspected.Schema != 7) {
+			return errors.New("入口证书更新只支持已初始化schema6/7")
 		}
 		lease, err := runlock.Acquire(filepath.Join(*data, ".serve.lock"))
 		if err != nil {

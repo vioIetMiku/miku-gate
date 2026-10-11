@@ -29,6 +29,7 @@ import (
 	"mikugate/internal/ipintel"
 	"mikugate/internal/management"
 	"mikugate/internal/netexec"
+	"mikugate/internal/paneladapter"
 	"mikugate/internal/security"
 	"mikugate/internal/store"
 	"mikugate/internal/vpngate"
@@ -44,6 +45,7 @@ type SandboxClient interface {
 	Capabilities(context.Context) (executoripc.Capabilities, error)
 }
 type Options struct {
+	PanelFactory              func(paneladapter.Endpoint) (paneladapter.Runtime, error)
 	LookupIntelligence        func(context.Context, string) (ipintel.Report, error)
 	ResolveIntelligenceDomain func(context.Context, string) ([]netip.Addr, error)
 	ManagementIdentity        *management.CertificateInfo
@@ -58,6 +60,10 @@ type Options struct {
 	VPN                       *vpnipc.Client
 }
 type Server struct {
+	panelFactory              func(paneladapter.Endpoint) (paneladapter.Runtime, error)
+	panelPreviews             map[string]panelPreview
+	panelOperations           chan struct{}
+	lastPanel                 time.Time
 	intelligenceSlot          chan struct{}
 	lastIntelligence          time.Time
 	intelligenceLookupFunc    func(context.Context, string) (ipintel.Report, error)
@@ -143,8 +149,18 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 	if resolver == nil {
 		resolver = defaultDomainResolver
 	}
-	a := &Server{intelligenceSlot: make(chan struct{}, 1), intelligenceLookupFunc: intel, resolveIntelligenceDomain: resolver, managementIdentity: options.ManagementIdentity, publicEndpoint: publicEndpoint, cores: options.Cores, assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	panelFactory := options.PanelFactory
+	if panelFactory == nil {
+		panelFactory = paneladapter.New
+	}
+	a := &Server{panelFactory: panelFactory, panelPreviews: map[string]panelPreview{}, panelOperations: make(chan struct{}, 1), intelligenceSlot: make(chan struct{}, 1), intelligenceLookupFunc: intel, resolveIntelligenceDomain: resolver, managementIdentity: options.ManagementIdentity, publicEndpoint: publicEndpoint, cores: options.Cores, assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/host/panel/inspect", a.auth(a.panelInspect))
+	mux.HandleFunc("POST /api/host/panel/plan", a.auth(a.panelPlan))
+	mux.HandleFunc("POST /api/host/panel/apply", a.auth(a.panelApply))
+	mux.HandleFunc("POST /api/host/panel/rollback", a.auth(a.panelRollback))
+	mux.HandleFunc("GET /api/host/panel/backups", a.auth(a.panelBackups))
+	mux.HandleFunc("DELETE /api/host/panel/backups/{id}", a.auth(a.panelForgetBackup))
 	mux.HandleFunc("POST /api/nodes/{id}/intelligence", a.auth(a.nodeIntelligence))
 	mux.HandleFunc("POST /api/exits/{id}/intelligence", a.auth(a.exitIntelligence))
 	mux.HandleFunc("POST /api/intelligence/domain", a.auth(a.domainIntelligence))

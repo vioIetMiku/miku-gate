@@ -1,3 +1,4 @@
+import { PanelReuse } from './PanelReuse';
 import { IPIntelligence } from './IPIntelligence';
 import { ManagementAccess } from './ManagementAccess';
 import { ManagedIngress } from './ManagedIngress';
@@ -1163,6 +1164,7 @@ export default function App() {
               <ManagementAccess />
               <HostInventory />
               <IngressInventory />
+              <PanelReuse />
               <ManagedIngress />
               <section className="panel">
                 <div className="section-heading">

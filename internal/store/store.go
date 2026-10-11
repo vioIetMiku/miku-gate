@@ -52,7 +52,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	var protected int
-	if err := db.QueryRow("SELECT (SELECT count(*) FROM upstreams)+(SELECT count(*) FROM vpn_configs)+(SELECT count(*) FROM managed_ingress)").Scan(&protected); err != nil {
+	if err := db.QueryRow("SELECT (SELECT count(*) FROM upstreams)+(SELECT count(*) FROM vpn_configs)+(SELECT count(*) FROM managed_ingress)+(SELECT count(*) FROM metadata WHERE key LIKE 'panel-backup-v1:%')").Scan(&protected); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -70,8 +70,8 @@ func (s *Store) migrate() error {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 6 {
-		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 6，拒绝降级打开", version)
+	if version > 7 {
+		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 7，拒绝降级打开", version)
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -86,6 +86,7 @@ func (s *Store) migrate() error {
  INSERT OR IGNORE INTO schema_version VALUES(4);
  INSERT OR IGNORE INTO schema_version VALUES(5);
  INSERT OR IGNORE INTO schema_version VALUES(6);
+ INSERT OR IGNORE INTO schema_version VALUES(7);
  CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS accounts(username TEXT PRIMARY KEY,password_hash TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,username TEXT NOT NULL REFERENCES accounts(username),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
@@ -95,7 +96,7 @@ func (s *Store) migrate() error {
  CREATE TABLE IF NOT EXISTS upstreams(exit_id TEXT PRIMARY KEY REFERENCES exits(id) ON DELETE CASCADE,kind TEXT NOT NULL,sealed BLOB NOT NULL,updated_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS vpn_configs(exit_id TEXT PRIMARY KEY REFERENCES exits(id) ON DELETE CASCADE,sealed BLOB NOT NULL);
  CREATE TABLE IF NOT EXISTS managed_ingress(exit_id TEXT PRIMARY KEY REFERENCES exits(id) ON DELETE CASCADE,core TEXT NOT NULL,port INTEGER NOT NULL UNIQUE,sealed BLOB NOT NULL,updated_at TEXT NOT NULL);
- PRAGMA user_version=6;
+ PRAGMA user_version=7;
  `)
 	if err != nil {
 		return err

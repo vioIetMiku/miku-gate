@@ -135,7 +135,7 @@ def inspect_database(state):
 connection=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
 try:
  schema=connection.execute('PRAGMA user_version').fetchone()[0]
- encrypted=sum(connection.execute('SELECT count(*) FROM '+table).fetchone()[0] for table in ('upstreams','vpn_configs','managed_ingress'))
+ encrypted=sum(connection.execute('SELECT count(*) FROM '+table).fetchone()[0] for table in ('upstreams','vpn_configs','managed_ingress'))+connection.execute("SELECT count(*) FROM metadata WHERE key LIKE 'panel-backup-v1:%'").fetchone()[0]
  identity=connection.execute("SELECT value FROM metadata WHERE key='instance_id'").fetchone()[0]
  valid=connection.execute('PRAGMA quick_check').fetchone()[0]=='ok'
  print(json.dumps({'schema':schema,'encrypted_count':encrypted,'instance':identity,'integrity_valid':valid}))
@@ -143,7 +143,7 @@ finally:connection.close()
 """
     gid=state['users']['miku-gate'][1]
     examined=json.loads(install.run([install.trusted_tool('setpriv'),'--reuid='+str(uid),'--regid='+str(gid),'--clear-groups','--no-new-privs',install.trusted_tool('python3'),'-B','-c',inspector,str(DATA/'miku-gate.db')]))
-    require(examined['instance']==state['instance'] and examined['schema']==6 and examined['integrity_valid'],'数据库身份/schema/完整性不匹配')
+    require(examined['instance']==state['instance'] and examined['schema'] in (6,7) and examined['integrity_valid'],'数据库身份/schema/完整性不匹配')
     return examined
 
 def collect(state):
@@ -351,7 +351,7 @@ def decode_snapshot(raw,state):
             members[item.name]=(content,item)
     require('BACKUP.json' in members and 'installation/install-state.json' in members,'备份缺实例清单')
     manifest=json.loads(members.pop('BACKUP.json')[0]);old=json.loads(members['installation/install-state.json'][0])
-    require(isinstance(manifest,dict) and manifest.get('format')==1 and manifest.get('schema')==6 and manifest.get('instance')==state['instance'],'备份格式/schema/实例不匹配')
+    require(isinstance(manifest,dict) and manifest.get('format')==1 and manifest.get('schema') in (6,7) and manifest.get('instance')==state['instance'],'备份格式/schema/实例不匹配')
     require(isinstance(old,dict),'备份安装登记无效');check_identity(old)
     for name in ('instance','users','vpn','cores','origin','port','domain','ip','certificate_automation'):
         require(old.get(name)==state.get(name),'只允许同一安装的配套回滚，不迁移账号/地址/核心')
@@ -425,7 +425,7 @@ def protected_data_check(state):
     uid,gid=state["users"]["miku-gate"]
     raw=install.run([install.trusted_tool("setpriv"),"--reuid="+str(uid),"--regid="+str(gid),"--clear-groups","--no-new-privs",str(FILES["binary/miku-gate"]),"data-check","--data="+str(DATA)])
     checked=json.loads(raw)
-    require(checked.get("instance")==state["instance"] and checked.get("schema")==6 and checked.get("integrity_valid") and checked.get("protected_records_verified"),"真实数据库/key加密记录配套检查未通过")
+    require(checked.get("instance")==state["instance"] and checked.get("schema") in (6,7) and checked.get("integrity_valid") and checked.get("protected_records_verified"),"真实数据库/key加密记录配套检查未通过")
     return checked
 
 def validate_recovered(state):

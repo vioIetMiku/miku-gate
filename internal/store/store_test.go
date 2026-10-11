@@ -152,7 +152,7 @@ func TestInstanceIdentityMigrationAndPersistence(t *testing.T) {
 		t.Fatal("missing stable instance identity", err)
 	}
 	var version int
-	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 6 {
+	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 7 {
 		t.Fatal("migration not committed", err)
 	}
 	exits, err := s.ListExits()

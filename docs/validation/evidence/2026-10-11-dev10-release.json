@@ -1,0 +1,258 @@
+{
+  "release_tag": "v0.1.0-dev.10",
+  "source": "c642476a5daae5c191ab17fcd16c32658cbb57f3",
+  "verified_public_path": {
+    "changed_sections": [],
+    "elapsed_wall_seconds": 24.889,
+    "exit_code": 0,
+    "harness_source": "c642476a5daae5c191ab17fcd16c32658cbb57f3",
+    "host_after_sha256": "bde172f6608fd8c95e2f42b5d352b1e9abe3d3c93c70ad25f1a549f9c13b8b08",
+    "host_before_sha256": "bde172f6608fd8c95e2f42b5d352b1e9abe3d3c93c70ad25f1a549f9c13b8b08",
+    "host_unchanged": true,
+    "results": [
+      {
+        "elapsed_seconds": 23.74,
+        "encrypted_ingress": [
+          {
+            "business_https_verified": true,
+            "client_identity_survives_restart": true,
+            "core": "xray",
+            "exit_ip_matches_vpn": true,
+            "exit_ipv4_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+            "exit_stop_revokes_core": true,
+            "listener_public": false,
+            "mutation_refused": true,
+            "native_listener_owned": true,
+            "success": true,
+            "template": "vless-reality-vision"
+          },
+          {
+            "business_https_verified": true,
+            "client_identity_survives_restart": true,
+            "core": "sing-box",
+            "exit_ip_matches_vpn": true,
+            "exit_ipv4_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+            "exit_stop_revokes_core": true,
+            "listener_public": false,
+            "mutation_refused": true,
+            "native_listener_owned": true,
+            "success": true,
+            "template": "vless-reality-vision"
+          }
+        ],
+        "factory_substituted": false,
+        "failure_categories": [],
+        "limits": {
+          "cpu.max": "100000 100000",
+          "memory.max": "402653184",
+          "memory.swap.max": "0",
+          "pids.max": "64"
+        },
+        "memory_events_delta": {
+          "high": 0,
+          "low": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0,
+          "sock_throttled": 0
+        },
+        "memory_peak_bytes": 200638464,
+        "pids_events_delta": {
+          "max": 0
+        },
+        "public_nodes_attempted": [
+          {
+            "business_https_verified": true,
+            "exit_ipv4_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+            "identity_http": 200,
+            "node_hostname": "vpn184169581",
+            "node_ip_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+            "peer_fingerprint": "d4bedc8f499ae6e416311783ad4575086ca5a0b138787cd946931f109d4b2d3f",
+            "peer_name": "opengw.net",
+            "runtime_verified": true,
+            "start_http": 200,
+            "stopped": true,
+            "tls_hostname": "vpn184169581.opengw.net"
+          }
+        ],
+        "public_proxy_listener": false,
+        "remaining_scope_pids": [],
+        "scope": "at most two official public VPN Gate candidates; real CLI and isolated worker",
+        "source_binary_sha256": "f2d0be7b84bf41cea0c2f8aa90708fedcac9d79a9e20d9313e72e4d50be8290c",
+        "success": true,
+        "tls_verification_disabled": false
+      }
+    ],
+    "retained_stage_errors": [],
+    "run_id": "encrypted-vpn-c642476-5a8f249e36",
+    "source": "c642476a5daae5c191ab17fcd16c32658cbb57f3",
+    "success": true,
+    "timed_out": false,
+    "raw_log_sha256": "fd930a341675d7fdbec8f81830a75bd799144e2d57e0841c1ffc003afe844647"
+  },
+  "earlier_host_audit_failure": {
+    "changed_sections": [
+      "nft"
+    ],
+    "elapsed_wall_seconds": 24.566,
+    "exit_code": 0,
+    "harness_source": "c642476a5daae5c191ab17fcd16c32658cbb57f3",
+    "host_after_sha256": "4c4b9efad900e6f8730247ef15fc18a35d57980cc1782b90430b903681642078",
+    "host_before_sha256": "58bb358a643e1b115325c81c7289d3ff28e23932cd6c1118831bb37422c4ba4e",
+    "host_unchanged": false,
+    "results": [
+      {
+        "elapsed_seconds": 23.412,
+        "encrypted_ingress": [
+          {
+            "business_https_verified": true,
+            "client_identity_survives_restart": true,
+            "core": "xray",
+            "exit_ip_matches_vpn": true,
+            "exit_ipv4_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+            "exit_stop_revokes_core": true,
+            "listener_public": false,
+            "mutation_refused": true,
+            "native_listener_owned": true,
+            "success": true,
+            "template": "vless-reality-vision"
+          },
+          {
+            "business_https_verified": true,
+            "client_identity_survives_restart": true,
+            "core": "sing-box",
+            "exit_ip_matches_vpn": true,
+            "exit_ipv4_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+            "exit_stop_revokes_core": true,
+            "listener_public": false,
+            "mutation_refused": true,
+            "native_listener_owned": true,
+            "success": true,
+            "template": "vless-reality-vision"
+          }
+        ],
+        "factory_substituted": false,
+        "failure_categories": [],
+        "limits": {
+          "cpu.max": "100000 100000",
+          "memory.max": "402653184",
+          "memory.swap.max": "0",
+          "pids.max": "64"
+        },
+        "memory_events_delta": {
+          "high": 0,
+          "low": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_group_kill": 0,
+          "oom_kill": 0,
+          "sock_throttled": 0
+        },
+        "memory_peak_bytes": 236306432,
+        "pids_events_delta": {
+          "max": 0
+        },
+        "public_nodes_attempted": [
+          {
+            "business_https_verified": true,
+            "exit_ipv4_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+            "identity_http": 200,
+            "node_hostname": "vpn184169581",
+            "node_ip_sha256": "982c32932c459096cf285b3f6df4ab2c9b39a373068f64933efe6effd7c593f7",
+            "peer_fingerprint": "d4bedc8f499ae6e416311783ad4575086ca5a0b138787cd946931f109d4b2d3f",
+            "peer_name": "opengw.net",
+            "runtime_verified": true,
+            "start_http": 200,
+            "stopped": true,
+            "tls_hostname": "vpn184169581.opengw.net"
+          }
+        ],
+        "public_proxy_listener": false,
+        "remaining_scope_pids": [],
+        "scope": "at most two official public VPN Gate candidates; real CLI and isolated worker",
+        "source_binary_sha256": "f2d0be7b84bf41cea0c2f8aa90708fedcac9d79a9e20d9313e72e4d50be8290c",
+        "success": true,
+        "tls_verification_disabled": false
+      }
+    ],
+    "retained_stage_errors": [],
+    "run_id": "encrypted-vpn-c642476-c6a7910d51",
+    "source": "c642476a5daae5c191ab17fcd16c32658cbb57f3",
+    "success": false,
+    "timed_out": false,
+    "raw_log_sha256": "b263741c0404ab500c35e3bf67c6ebf5d9b6197ab19d9906d022cdf61b0c64be"
+  },
+  "read_only_diff_observations": {
+    "check-c642-nft-diff-001.log": {
+      "payload": {
+        "changes": [
+          {
+            "after_sha256": "30d92ef3ec7c6a74dddebf815b70c8790e8c15524d3493589d636fbfbca41330",
+            "before_sha256": "e7a3ffa0208488effe1639f157bc7ee466548753943e9d26c6e619a590cd2769",
+            "kind": "value",
+            "numeric_after": null,
+            "numeric_before": null,
+            "path": "nft.nftables[22].set.elem[0]"
+          }
+        ]
+      },
+      "raw_log_sha256": "c70c8f452c1f8a51073644b18df3fded03db80ab5757da48194cd6a4fd16fb4f"
+    },
+    "check-c642-set-owner-001.log": {
+      "payload": {
+        "after": {
+          "family": "inet",
+          "name": "addr-set-sshd",
+          "table": "f2b-table",
+          "type": "ipv4_addr"
+        },
+        "before": {
+          "family": "inet",
+          "name": "addr-set-sshd",
+          "table": "f2b-table",
+          "type": "ipv4_addr"
+        },
+        "element_counts": [
+          2,
+          2
+        ]
+      },
+      "raw_log_sha256": "0937390e3d30ccf24aa74511e2f9309f08a675bacddf1678d714e19243976080"
+    }
+  },
+  "ci": {
+    "verify_run": 38107617215,
+    "ingress_runtime_run": 38107670132
+  },
+  "windows_release_smoke_checks": 63,
+  "arm64_runtime_verified": false,
+  "whole_project_complete": false,
+  "published_release": {
+    "tag": "v0.1.0-dev.10",
+    "source": "c642476a5daae5c191ab17fcd16c32658cbb57f3",
+    "prerelease": true,
+    "assets": [
+      {
+        "name": "miku-gate-v0.1.0-dev.10-linux-amd64.tar.gz",
+        "bytes": 6213069,
+        "sha256": "e8d5e0998b1e222d41261c9a78105824c14bfa80a3a89184b5ed2d9b265182d9"
+      },
+      {
+        "name": "miku-gate-v0.1.0-dev.10-linux-arm64.tar.gz",
+        "bytes": 11048913,
+        "sha256": "608b3455e2bf21006b649f5edc830933ffc7abd20e473379b30949492068e345"
+      },
+      {
+        "name": "miku-gate-v0.1.0-dev.10-windows-amd64.zip",
+        "bytes": 11653590,
+        "sha256": "97f92ac29bd824ea4e299dd00c3869f73bb2d735a071db5009fbcf3906f90ffd"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 326,
+        "sha256": "e3fd39759caf120649440b9721b7eb71127a969bc6ec2efb6e5d6a74b1fb844a"
+      }
+    ]
+  }
+}

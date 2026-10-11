@@ -8,7 +8,9 @@
 
 > 升级提示：dev.10 数据库 schema 升为 6（dev.8为5、dev.6为3），上游凭据用独立的数据库同名 `.key` 文件加密。升级前停止旧服务并备份完整数据目录（数据库、WAL及密钥）；旧版本不能直接打开升级后的数据库。丢失密钥时不重新生成冒充恢复。
 
-最新已发布：[v0.1.0-dev.8 隔离 VPN Gate 出口预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.8)，含三平台压缩包及校验文件。[公共节点验收](docs/validation/2026-10-10-public-vpngate.md)。主线新增的只读主机检测见 [HOST_INVENTORY](docs/HOST_INVENTORY.md)，尚未包含于 dev.8 资产。另新增[已有入口摘要和私有路由候选](docs/EXISTING_INGRESS.md)，需明确同意读取，尚不自动应用或持久复用面板。新增[受管入口模板/证书/REALITY流程](docs/MANAGED_INGRESS.md)，可本机生成私有配置和客户端导入材料，dev.10已新增加密保存/出口绑定/客户端显示及显式核心启停接线；[运行器说明](docs/MANAGED_RUNTIME.md)。两核心REALITY入口到公共VPN完整业务旅程已通过；[实测记录](docs/validation/2026-10-11-managed-runtime.md)。公网部署/生产安装仍待验收。
+最新已发布：[v0.1.0-dev.10 受管入口/公共VPN预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.10)。三平台包＋校验值，[同文件验收与明确边界](docs/validation/2026-10-11-dev10-release.md)，不是最终一键安装器。
+
+先前发布：[v0.1.0-dev.8 隔离 VPN Gate 出口预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.8)，含三平台压缩包及校验文件。[公共节点验收](docs/validation/2026-10-10-public-vpngate.md)。主线新增的只读主机检测见 [HOST_INVENTORY](docs/HOST_INVENTORY.md)，尚未包含于 dev.8 资产。另新增[已有入口摘要和私有路由候选](docs/EXISTING_INGRESS.md)，需明确同意读取，尚不自动应用或持久复用面板。新增[受管入口模板/证书/REALITY流程](docs/MANAGED_INGRESS.md)，可本机生成私有配置和客户端导入材料，dev.10已新增加密保存/出口绑定/客户端显示及显式核心启停接线；[运行器说明](docs/MANAGED_RUNTIME.md)。两核心REALITY入口到公共VPN完整业务旅程已通过；[实测记录](docs/validation/2026-10-11-managed-runtime.md)。公网部署/生产安装仍待验收。
 
 上一发布：[v0.1.0-dev.6 代理上游预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.6)。提供Linux amd64/arm64、Windows amd64及校验文件；[实际VPS/发行验收](docs/validation/2026-10-10-proxy-runtime.md)。旧dev.2标签与资产保留，main继续完整网关开发。
 

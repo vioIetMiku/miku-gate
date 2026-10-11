@@ -110,73 +110,83 @@ def encrypted_fetch(core, address, host, path, username, password):
             return data
     finally:sock.close()
 
-def encrypted_path(control,created,state):
+def encrypted_one(control,created,state,core):
     exit_id=created["exit"]["id"];prefix="/api/exits/"+exit_id
-    observations=[]
-    expected_ip=state["proof"]["exit_ip"]
-    for core in ("xray","sing-box"):
-        # Saving must reserve a stopped exit: no config/auth recipient mutation
-        # while the previous real VPN listener is running.
-        step(core,"stopping-exit-for-save")
+    # Saving must reserve a stopped exit: no config/auth recipient mutation
+    # while the previous real VPN listener is running.
+    step(core,"stopping-exit-for-save")
+    control.request("POST",prefix+"/stop",expect=204)
+    port=free_port();client_port=free_port()
+    request={"core":core,"template":"vless-reality-vision","address":"127.0.0.1","listen":"127.0.0.1","port":port,"server_name":"www.cloudflare.com","reality_hostname":"www.cloudflare.com"}
+    step(core,"saving-verified-material")
+    saved=control.request("PUT",prefix+"/ingress",{"request":request,"exit_password":created["password"],"confirm":True,"confirm_network":True},expect=200)
+    live.require(saved["configured"] and not saved["applied"],"save pretended applied")
+    revealed=control.request("POST",prefix+"/ingress/client",{"confirm":True},expect=200)
+    live.require(not revealed["server_private_key_returned"] and not revealed["proxy_password_returned"],"private material leaked to client")
+    config=json.loads(revealed["client_config"])
+    live.require("privateKey" not in revealed["client_config"] and "private_key" not in revealed["client_config"] and created["password"] not in revealed["client_config"],"server/exit secret in client config")
+    # Prove durable identity through actual control process restart. No
+    # privileged executor replacement; root daemon remains the same instance.
+    before_uri=revealed["uri"]
+    step(core,"restarting-control-checking-persistence")
+    control.stop();control.start()
+    persisted=control.request("POST",prefix+"/ingress/client",{"confirm":True},expect=200)
+    live.require(persisted["uri"]==before_uri,"control restart replaced client credentials")
+    step(core,"starting-isolated-vpn")
+    running=control.request("POST",prefix+"/start",expect=200)
+    live.require(running["proof"]["kernel_verified"] and running["proof"]["dns_verified"],"restored VPN proof missing")
+    step(core,"verifying-direct-loopback-exit-before-encryption")
+    baseline=live.fetch_via(("127.0.0.1",created["exit"]["port"]),"example.com","/",created["exit"]["username"],created["password"])
+    live.require(b"Example Domain" in baseline,"restarted direct VPN frontend business failed")
+    step(core,"starting-owned-core")
+    core_state=control.request("POST",prefix+"/ingress/start",{"confirm":True},expect=200)
+    live.require(core_state["phase"]=="running" and core_state["listener_owned"] and core_state["core_validated"] and not core_state["data_verified"],"native runtime overstated evidence")
+    user="private-client";password=secrets.token_urlsafe(18)
+    inbound=config["inbounds"][0]
+    if core=="xray":
+        inbound["port"]=client_port;inbound["settings"]={"auth":"password","accounts":[{"user":user,"pass":password}],"udp":False}
+    else:
+        inbound["listen_port"]=client_port;inbound["users"]=[{"username":user,"password":password}]
+    step(core,"starting-generated-client")
+    config["log"]["loglevel" if core=="xray" else "level"]="info"
+    client=CoreClient(control.cores[core],core,json.dumps(config).encode(),client_port)
+    try:
+        step(core,"business-https-through-encrypted-path")
+        body=encrypted_fetch(core,("127.0.0.1",client_port),"example.com","/",user,password)
+        live.require(b"Example Domain" in body,"encrypted ingress business HTTPS failed")
+        step(core,"checking-business-public-exit-ip")
+        raw_ip=encrypted_fetch(core,("127.0.0.1",client_port),"api.ipify.org","/",user,password).decode().strip()
+        ip=ipaddress.ip_address(raw_ip)
+        live.require(ip.version==4 and ip.is_global and raw_ip==running["proof"]["exit_ip"],"encrypted business path exit IP mismatched VPN proof")
+        step(core,"checking-live-mutation-lock")
+        status,_=control.call("PUT",prefix+"/ingress",{"request":request,"exit_password":created["password"],"confirm":True,"confirm_network":True})
+        live.require(status==409,"live ingress changed without stop")
+        step(core,"checking-exit-stop-revokes-core")
         control.request("POST",prefix+"/stop",expect=204)
-        port=free_port();client_port=free_port()
-        request={"core":core,"template":"vless-reality-vision","address":"127.0.0.1","listen":"127.0.0.1","port":port,"server_name":"www.cloudflare.com","reality_hostname":"www.cloudflare.com"}
-        step(core,"saving-verified-material")
-        saved=control.request("PUT",prefix+"/ingress",{"request":request,"exit_password":created["password"],"confirm":True,"confirm_network":True},expect=200)
-        live.require(saved["configured"] and not saved["applied"],"save pretended applied")
-        revealed=control.request("POST",prefix+"/ingress/client",{"confirm":True},expect=200)
-        live.require(not revealed["server_private_key_returned"] and not revealed["proxy_password_returned"],"private material leaked to client")
-        config=json.loads(revealed["client_config"])
-        live.require("privateKey" not in revealed["client_config"] and "private_key" not in revealed["client_config"] and created["password"] not in revealed["client_config"],"server/exit secret in client config")
-        # Prove durable identity through actual control process restart. No
-        # privileged executor replacement; root daemon remains the same instance.
-        before_uri=revealed["uri"]
-        step(core,"restarting-control-checking-persistence")
-        control.stop();control.start()
-        persisted=control.request("POST",prefix+"/ingress/client",{"confirm":True},expect=200)
-        live.require(persisted["uri"]==before_uri,"control restart replaced client credentials")
-        step(core,"starting-isolated-vpn")
-        running=control.request("POST",prefix+"/start",expect=200)
-        live.require(running["proof"]["kernel_verified"] and running["proof"]["dns_verified"],"restored VPN proof missing")
-        step(core,"verifying-direct-loopback-exit-before-encryption")
-        baseline=live.fetch_via(("127.0.0.1",created["exit"]["port"]),"example.com","/",created["exit"]["username"],created["password"])
-        live.require(b"Example Domain" in baseline,"restarted direct VPN frontend business failed")
-        step(core,"starting-owned-core")
-        core_state=control.request("POST",prefix+"/ingress/start",{"confirm":True},expect=200)
-        live.require(core_state["phase"]=="running" and core_state["listener_owned"] and core_state["core_validated"] and not core_state["data_verified"],"native runtime overstated evidence")
-        user="private-client";password=secrets.token_urlsafe(18)
-        inbound=config["inbounds"][0]
-        if core=="xray":
-            inbound["port"]=client_port;inbound["settings"]={"auth":"password","accounts":[{"user":user,"pass":password}],"udp":False}
-        else:
-            inbound["listen_port"]=client_port;inbound["users"]=[{"username":user,"password":password}]
-        step(core,"starting-generated-client")
-        config["log"]["loglevel" if core=="xray" else "level"]="info"
-        client=CoreClient(control.cores[core],core,json.dumps(config).encode(),client_port)
+        live.require(live.connection_refused(("127.0.0.1",port)),"encrypted entrance survived explicit exit stop")
+        runtime=control.request("GET",prefix+"/ingress/runtime",expect=200)
+        live.require(runtime["phase"]=="stopped","stopped exit retained active core state")
+        observation={"core":core,"template":"vless-reality-vision","native_listener_owned":True,"business_https_verified":True,"exit_ip_matches_vpn":True,"exit_ipv4_sha256":hashlib.sha256(raw_ip.encode()).hexdigest(),"client_identity_survives_restart":True,"mutation_refused":True,"exit_stop_revokes_core":True,"listener_public":False,"success":True}
+    except BaseException:
+        phase=control.request("GET",prefix+"/ingress/runtime",expect=200)
+        print("ENCRYPTED_VPN_DIAGNOSTICS "+json.dumps({"core":core,"client_categories":client.diagnostics(),"owned_runtime_phase":phase["phase"],"owned_pid_listener":phase.get("listener_owned",False),"owned_core_categories":phase.get("diagnostic_categories",[])}),flush=True)
+        raise
+    finally:client.close()
+    control.request("DELETE",prefix+"/ingress",expect=204)
+    return observation
+
+def encrypted_path(control,created,state):
+    observations=[];prefix="/api/exits/"+created["exit"]["id"]
+    for core in ("xray","sing-box"):
         try:
-            step(core,"business-https-through-encrypted-path")
-            body=encrypted_fetch(core,("127.0.0.1",client_port),"example.com","/",user,password)
-            live.require(b"Example Domain" in body,"encrypted ingress business HTTPS failed")
-            step(core,"checking-business-public-exit-ip")
-            raw_ip=encrypted_fetch(core,("127.0.0.1",client_port),"api.ipify.org","/",user,password).decode().strip()
-            ip=ipaddress.ip_address(raw_ip)
-            live.require(ip.version==4 and ip.is_global and raw_ip==running["proof"]["exit_ip"],"encrypted business path exit IP mismatched VPN proof")
-            step(core,"checking-live-mutation-lock")
-            status,_=control.call("PUT",prefix+"/ingress",{"request":request,"exit_password":created["password"],"confirm":True,"confirm_network":True})
-            live.require(status==409,"live ingress changed without stop")
-            step(core,"checking-exit-stop-revokes-core")
+            observations.append(encrypted_one(control,created,state,core))
+        except Exception as exc:
+            # Aggregate each supported core separately; do not let one success
+            # mask another failure. Never store exception text/API secrets.
+            print("ENCRYPTED_VPN_CORE_FAILED "+json.dumps({"core":core,"category":type(exc).__name__}),flush=True)
+            observations.append({"core":core,"success":False,"failure_category":type(exc).__name__})
             control.request("POST",prefix+"/stop",expect=204)
-            live.require(live.connection_refused(("127.0.0.1",port)),"encrypted entrance survived explicit exit stop")
-            runtime=control.request("GET",prefix+"/ingress/runtime",expect=200)
-            live.require(runtime["phase"]=="stopped","stopped exit retained active core state")
-            observations.append({"core":core,"template":"vless-reality-vision","native_listener_owned":True,"business_https_verified":True,"exit_ip_matches_vpn":True,"exit_ipv4_sha256":hashlib.sha256(raw_ip.encode()).hexdigest(),"client_identity_survives_restart":True,"mutation_refused":True,"exit_stop_revokes_core":True,"listener_public":False})
-        except BaseException:
-            phase=control.request("GET",prefix+"/ingress/runtime",expect=200)
-            print("ENCRYPTED_VPN_DIAGNOSTICS "+json.dumps({"core":core,"client_categories":client.diagnostics(),"owned_runtime_phase":phase["phase"],"owned_pid_listener":phase.get("listener_owned",False),"owned_core_categories":phase.get("diagnostic_categories",[])}),flush=True)
-            raise
-        finally:client.close()
-        control.request("DELETE",prefix+"/ingress",expect=204)
-    # The shared public acceptance resumes its own probe/stop/delete lifecycle.
+            control.request("DELETE",prefix+"/ingress",expect=204)
     control.request("POST",prefix+"/start",expect=200)
     return observations
 
@@ -191,6 +201,8 @@ def main():
     data=Path(args.data);info=data.lstat();live.require(data.resolve(strict=True)==data and info.st_uid==65534 and stat.S_IMODE(info.st_mode)==0o700 and not any(data.iterdir()),"fresh private test data required")
     group,limits=live.effective_limits();memory=live.counters(group/"memory.events");pids=live.counters(group/"pids.events");started=time.monotonic()
     result=public.exercise(binary,data,EncryptedControl,encrypted_path)
+    if result.get("encrypted_ingress"):
+        result["success"] = result["success"] and all(item.get("success") for item in result["encrypted_ingress"])
     result.update(source_binary_sha256=args.sha256,elapsed_seconds=round(time.monotonic()-started,3),limits=limits,memory_peak_bytes=int((group/"memory.peak").read_text()),memory_events_delta={k:v-memory[k] for k,v in live.counters(group/"memory.events").items()},pids_events_delta={k:v-pids[k] for k,v in live.counters(group/"pids.events").items()})
     result["remaining_scope_pids"]=[int(pid) for pid in (group/"cgroup.procs").read_text().split() if int(pid)!=os.getpid()]
     live.require(not result["remaining_scope_pids"] and not any(result["memory_events_delta"].values()) and not any(result["pids_events_delta"].values()),"test children/resource events remain")

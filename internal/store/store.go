@@ -52,7 +52,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	var protected int
-	if err := db.QueryRow("SELECT (SELECT count(*) FROM upstreams)+(SELECT count(*) FROM vpn_configs)").Scan(&protected); err != nil {
+	if err := db.QueryRow("SELECT (SELECT count(*) FROM upstreams)+(SELECT count(*) FROM vpn_configs)+(SELECT count(*) FROM managed_ingress)").Scan(&protected); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -70,8 +70,8 @@ func (s *Store) migrate() error {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 5 {
-		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 5，拒绝降级打开", version)
+	if version > 6 {
+		return fmt.Errorf("数据库版本 %d 高于程序支持的版本 6，拒绝降级打开", version)
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -85,6 +85,7 @@ func (s *Store) migrate() error {
  INSERT OR IGNORE INTO schema_version VALUES(3);
  INSERT OR IGNORE INTO schema_version VALUES(4);
  INSERT OR IGNORE INTO schema_version VALUES(5);
+ INSERT OR IGNORE INTO schema_version VALUES(6);
  CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS accounts(username TEXT PRIMARY KEY,password_hash TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,username TEXT NOT NULL REFERENCES accounts(username),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
@@ -93,7 +94,8 @@ func (s *Store) migrate() error {
  CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,level TEXT NOT NULL,kind TEXT NOT NULL,message TEXT NOT NULL,exit_id TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS upstreams(exit_id TEXT PRIMARY KEY REFERENCES exits(id) ON DELETE CASCADE,kind TEXT NOT NULL,sealed BLOB NOT NULL,updated_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS vpn_configs(exit_id TEXT PRIMARY KEY REFERENCES exits(id) ON DELETE CASCADE,sealed BLOB NOT NULL);
- PRAGMA user_version=5;
+ CREATE TABLE IF NOT EXISTS managed_ingress(exit_id TEXT PRIMARY KEY REFERENCES exits(id) ON DELETE CASCADE,core TEXT NOT NULL,port INTEGER NOT NULL UNIQUE,sealed BLOB NOT NULL,updated_at TEXT NOT NULL);
+ PRAGMA user_version=6;
  `)
 	if err != nil {
 		return err
@@ -233,7 +235,7 @@ func (s *Store) CreateExit(in domain.ExitInput) (domain.Exit, string, error) {
 	if port == 0 {
 		for port = 20000; port <= 29999; port++ {
 			var used int
-			if err = tx.QueryRow(`SELECT COUNT(*) FROM exits WHERE port=?`, port).Scan(&used); err != nil {
+			if err = tx.QueryRow(`SELECT (SELECT COUNT(*) FROM exits WHERE port=?)+(SELECT COUNT(*) FROM managed_ingress WHERE port=?)`, port, port).Scan(&used); err != nil {
 				return domain.Exit{}, "", err
 			}
 			if used == 0 {
@@ -243,6 +245,13 @@ func (s *Store) CreateExit(in domain.ExitInput) (domain.Exit, string, error) {
 		if port > 29999 {
 			return domain.Exit{}, "", domain.ErrConflict
 		}
+	}
+	var managedPortCount int
+	if err = tx.QueryRow("SELECT count(*) FROM managed_ingress WHERE port=?", port).Scan(&managedPortCount); err != nil {
+		return domain.Exit{}, "", err
+	}
+	if managedPortCount > 0 {
+		return domain.Exit{}, "", domain.ErrConflict
 	}
 	e := domain.Exit{ID: id, Name: in.Name, Country: in.Country, Policy: in.Policy, Port: port, Listen: "127.0.0.1", Username: "mg_" + id[:8], Status: "stopped", Reason: "配置已保存；未建立 VPN 或监听代理，隔离状态需单独查询。", CreatedAt: time.Now().UTC()}
 	_, err = tx.Exec(`INSERT INTO exits VALUES(?,?,?,?,?,?,?,?,?,?,?)`, e.ID, e.Name, e.Country, e.Policy, e.Port, e.Listen, e.Username, hash, e.Status, e.Reason, e.CreatedAt.Format(time.RFC3339Nano))
@@ -349,6 +358,14 @@ func (s *Store) DeleteExit(id string) error {
 	return tx.Commit()
 }
 func (s *Store) RotateCredentials(id string) (string, error) {
+	configured, e := s.HasManaged(id)
+	if e != nil {
+		return "", e
+	}
+	if configured {
+		return "", errors.New("已绑定受管入口；先停止并移除/重建入口，再轮换逻辑出口凭据，避免静默失配")
+	}
+
 	pass, err := security.Token(18)
 	if err != nil {
 		return "", err

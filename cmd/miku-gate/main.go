@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"mikugate/internal/coreruntime"
 	"mikugate/internal/diagnostics"
 	"mikugate/internal/domain"
 	"mikugate/internal/executoripc"
@@ -91,10 +92,15 @@ func run() error {
 	sandboxIPC := flags.Bool("sandbox-ipc", false, "显式接入本实例 Unix socket 隔离执行器；不启用 VPN")
 	vpnExecutor := flags.Bool("vpn-executor", false, "显式接入独立最小权限OpenVPN执行器")
 	controlOnly := flags.Bool("control-plane-only", false, "禁用代理上游运行时，仅保留配置控制台")
+	xrayPath := flags.String("xray-core", "", "显式信任的root所有Xray可执行文件绝对路径；不自动执行已有面板程序")
+	singPath := flags.String("sing-box-core", "", "显式信任的root所有sing-box可执行文件绝对路径")
 	maxActive := flags.Int("max-active", 3, "同时运行的代理出口上限，1–8（不是容量保证）")
 	listen := flags.String("listen", "127.0.0.1:3939", "本机管理监听地址")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
+	}
+	if (*xrayPath != "" || *singPath != "") && (os.Args[1] != "serve" || *controlOnly) {
+		return errors.New("受管核心路径仅用于具备出口运行时的serve")
 	}
 	if flags.NArg() != 0 {
 		return errors.New("存在不支持的位置参数")
@@ -200,6 +206,21 @@ func run() error {
 			defer cancel()
 			if err := manager.Close(closing); err != nil {
 				log.Printf("代理运行时关闭未全部确认: %v", err)
+			}
+		}()
+	}
+
+	if *xrayPath != "" || *singPath != "" {
+		cores, err := coreruntime.New(ctx, s, options.Gateway, coreruntime.Options{XrayPath: *xrayPath, SingBoxPath: *singPath, MaxActive: *maxActive})
+		if err != nil {
+			return err
+		}
+		options.Cores = cores
+		defer func() {
+			closing, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if cores.Close(closing) != nil {
+				log.Print("受管核心停止未确认")
 			}
 		}()
 	}

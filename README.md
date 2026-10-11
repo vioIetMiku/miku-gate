@@ -1,14 +1,14 @@
 # Miku Gate
 
-**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.9`。**
+**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.10`。**
 
 > 当前可运行的是带认证的本机代理上游网关：HTTP/SOCKS入口 → 用户提供的SOCKS5、HTTP或HTTPS代理。完整VPN网关仍在开发。
 >
 > 保存上游后，“启动”会实际验证代理/TLS/DNS路径，再开放固定的127.0.0.1认证入口；失败不会使用宿主直连后备。Linux OpenVPN 已接入独立 root 执行器/非 root worker 和 Web 节点绑定，并在授权 VPS 实测一个官方公共节点通过；不保证全库可用。Xray/sing-box加密入口、域名与交互安装向导尚未完成。未配置上游时仍返回 `409 executor_unavailable`，不会冒充VPN已连接。
 
-> 升级提示：dev.8 数据库 schema 升为 5（dev.6为3），上游凭据用独立的数据库同名 `.key` 文件加密。升级前停止旧服务并备份完整数据目录（数据库、WAL及密钥）；旧版本不能直接打开升级后的数据库。丢失密钥时不重新生成冒充恢复。
+> 升级提示：dev.10 数据库 schema 升为 6（dev.8为5、dev.6为3），上游凭据用独立的数据库同名 `.key` 文件加密。升级前停止旧服务并备份完整数据目录（数据库、WAL及密钥）；旧版本不能直接打开升级后的数据库。丢失密钥时不重新生成冒充恢复。
 
-最新已发布：[v0.1.0-dev.8 隔离 VPN Gate 出口预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.8)，含三平台压缩包及校验文件。[公共节点验收](docs/validation/2026-10-10-public-vpngate.md)。主线新增的只读主机检测见 [HOST_INVENTORY](docs/HOST_INVENTORY.md)，尚未包含于 dev.8 资产。另新增[已有入口摘要和私有路由候选](docs/EXISTING_INGRESS.md)，需明确同意读取，尚不自动应用或持久复用面板。新增[受管入口模板/证书/REALITY流程](docs/MANAGED_INGRESS.md)，可本机生成私有配置和客户端导入材料，界面仅预览/检测，常驻运行仍待接线。
+最新已发布：[v0.1.0-dev.8 隔离 VPN Gate 出口预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.8)，含三平台压缩包及校验文件。[公共节点验收](docs/validation/2026-10-10-public-vpngate.md)。主线新增的只读主机检测见 [HOST_INVENTORY](docs/HOST_INVENTORY.md)，尚未包含于 dev.8 资产。另新增[已有入口摘要和私有路由候选](docs/EXISTING_INGRESS.md)，需明确同意读取，尚不自动应用或持久复用面板。新增[受管入口模板/证书/REALITY流程](docs/MANAGED_INGRESS.md)，可本机生成私有配置和客户端导入材料，dev.10已新增加密保存/出口绑定/客户端显示及显式核心启停接线；[运行器说明](docs/MANAGED_RUNTIME.md)。完整公共旅程/生产安装仍待验收。
 
 上一发布：[v0.1.0-dev.6 代理上游预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.6)。提供Linux amd64/arm64、Windows amd64及校验文件；[实际VPS/发行验收](docs/validation/2026-10-10-proxy-runtime.md)。旧dev.2标签与资产保留，main继续完整网关开发。
 

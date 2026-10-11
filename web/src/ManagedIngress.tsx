@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CircleNotch, Info } from '@phosphor-icons/react';
-import { api, timestamp } from './api';
+import { api, timestamp, type Exit } from './api';
 
 type Template = {
   id: string;
@@ -38,7 +38,31 @@ type CheckedTarget = {
   suitable: boolean;
   network_path: string;
 };
+type SavedIngress = {
+  configured: boolean;
+  exit_id: string;
+  request: { core: string; template: string; address: string; port: number; server_name: string };
+  applied: boolean;
+  updated_at: string;
+};
+type CoreState = {
+  phase: string;
+  core?: string;
+  listen?: string;
+  pid?: number;
+  core_validated: boolean;
+  listener_owned: boolean;
+  data_verified: boolean;
+  reason: string;
+};
 export function ManagedIngress() {
+  const [exits, setExits] = useState<Exit[]>([]);
+  const [exitId, setExitId] = useState('');
+  const [exitPassword, setExitPassword] = useState('');
+  const [confirmSave, setConfirmSave] = useState(false);
+  const [saved, setSaved] = useState<SavedIngress | null>(null);
+  const [runtime, setRuntime] = useState<CoreState | null>(null);
+  const [client, setClient] = useState<{ uri: string; client_config: string } | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [candidates, setCandidates] = useState<Target[]>([]);
   const [core, setCore] = useState('xray');
@@ -62,9 +86,11 @@ export function ManagedIngress() {
     Promise.all([
       api<Template[]>('/ingress/templates'),
       api<Target[]>('/ingress/reality/candidates'),
+      api<Exit[]>('/exits'),
     ])
-      .then(([t, c]) => {
+      .then(([t, c, x]) => {
         if (active) {
+          setExits(x);
           setTemplates(t);
           setCandidates(c);
         }
@@ -76,6 +102,81 @@ export function ManagedIngress() {
       active = false;
     };
   }, []);
+  useEffect(() => {
+    let active = true;
+    setSaved(null);
+    setRuntime(null);
+    setClient(null);
+    setExitPassword('');
+    setConfirmSave(false);
+    if (exitId)
+      Promise.all([
+        api<SavedIngress>(`/exits/${exitId}/ingress`),
+        api<CoreState>(`/exits/${exitId}/ingress/runtime`),
+      ])
+        .then(([v, state]) => {
+          if (active) {
+            setSaved(v);
+            setRuntime(state);
+          }
+        })
+        .catch((e) => {
+          if (active) setError((e as Error).message);
+        });
+    return () => {
+      active = false;
+    };
+  }, [exitId]);
+  const request = () => ({
+    core,
+    template,
+    address,
+    listen: '0.0.0.0',
+    port: Number(port),
+    server_name: isReality ? targetHost : domain,
+    reality_hostname: isReality ? targetHost : '',
+  });
+  async function refreshRuntime() {
+    if (!exitId) return;
+    setSaved(await api<SavedIngress>(`/exits/${exitId}/ingress`));
+    setRuntime(await api<CoreState>(`/exits/${exitId}/ingress/runtime`));
+  }
+  async function action(kind: 'save' | 'start' | 'stop' | 'client' | 'remove' | 'status') {
+    if (!exitId) return;
+    setBusy(kind);
+    setError('');
+    try {
+      const prefix = `/exits/${exitId}/ingress`;
+      if (kind === 'save') {
+        setSaved(
+          await api<SavedIngress>(prefix, 'PUT', {
+            request: request(),
+            exit_password: exitPassword,
+            confirm: confirmSave,
+            confirm_read: confirmRead,
+            confirm_network: confirmNetwork,
+          }),
+        );
+        setExitPassword('');
+        setClient(null);
+      } else if (kind === 'start') {
+        setRuntime(await api<CoreState>(prefix + '/start', 'POST', { confirm: true }));
+      } else if (kind === 'stop') {
+        await api(prefix + '/stop', 'POST', {});
+        await refreshRuntime();
+      } else if (kind === 'client') {
+        setClient(await api(prefix + '/client', 'POST', { confirm: true }));
+      } else if (kind === 'remove') {
+        await api(prefix, 'DELETE');
+        setClient(null);
+        await refreshRuntime();
+      } else await refreshRuntime();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
   function clear() {
     setPreview(null);
     setError('');
@@ -130,6 +231,23 @@ export function ManagedIngress() {
         <Info size={21} />
       </div>
       <div className="managed-content">
+        <label>
+          绑定逻辑出口
+          <select value={exitId} disabled={disabled} onChange={(e) => setExitId(e.target.value)}>
+            <option value="">仅预览（未绑定出口）</option>
+            {exits.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name} · 本机端口 {e.port}
+              </option>
+            ))}
+          </select>
+        </label>
+        {exitId && (
+          <p className="muted">
+            先保存独立入口，再启动健康的逻辑出口，最后启动加密入口。不接管已有面板，也不自动开放防火墙。
+          </p>
+        )}
+
         <div className="managed-form-grid">
           <label>
             受管核心
@@ -349,9 +467,103 @@ export function ManagedIngress() {
             </ul>
           </div>
         )}
+
+        {exitId && (
+          <div className="managed-binding">
+            <label>
+              逻辑出口入口密码
+              <input
+                type="password"
+                value={exitPassword}
+                disabled={disabled}
+                autoComplete="off"
+                placeholder="创建出口时的一次性密码，服务端核对后加密保存"
+                onChange={(e) => setExitPassword(e.target.value)}
+              />
+            </label>
+            <label className="managed-confirm">
+              <input
+                type="checkbox"
+                checked={confirmSave}
+                disabled={disabled}
+                onChange={(e) => setConfirmSave(e.target.checked)}
+              />
+              我确认保存或替换此独立受管入口（需入口和出口均停止）；不修改已有面板。
+            </label>
+            <button
+              className="button primary"
+              disabled={disabled || !confirmSave || !exitPassword || !address}
+              onClick={() => void action('save')}
+            >
+              保存并绑定入口
+            </button>
+            {saved?.configured && (
+              <>
+                <p>
+                  已保存：{saved.request.core} · {saved.request.template} · {saved.request.address}:
+                  {saved.request.port}（保存不等于运行）
+                </p>
+                <p>
+                  运行状态：{runtime?.phase ?? '未知'} · {runtime?.reason}
+                </p>
+                <p>
+                  核心校验：{runtime?.core_validated ? '通过' : '未确认'} · 监听进程归属：
+                  {runtime?.listener_owned ? '已核验' : '未确认'} · 客户端业务：
+                  {runtime?.data_verified ? '已验证' : '尚未逐条验证'}
+                </p>
+                <div className="managed-actions">
+                  <button
+                    className="button secondary"
+                    disabled={disabled || runtime?.phase === 'running'}
+                    onClick={() => void action('start')}
+                  >
+                    启动已保存入口
+                  </button>
+                  <button
+                    className="button secondary"
+                    disabled={disabled}
+                    onClick={() => void action('stop')}
+                  >
+                    停止受管入口
+                  </button>
+                  <button
+                    className="button secondary"
+                    disabled={disabled}
+                    onClick={() => void action('status')}
+                  >
+                    刷新入口状态
+                  </button>
+                  <button
+                    className="button secondary"
+                    disabled={disabled}
+                    onClick={() => void action('client')}
+                  >
+                    显示客户端导入（含凭据）
+                  </button>
+                  <button
+                    className="button secondary"
+                    disabled={disabled || runtime?.phase === 'running'}
+                    onClick={() => void action('remove')}
+                  >
+                    移除入口配置
+                  </button>
+                </div>
+                {client && (
+                  <details open className="managed-client">
+                    <summary>客户端材料（敏感，仅自行导入；不含服务器私钥或Miku出口密码）</summary>
+                    <textarea readOnly aria-label="入口客户端分享链接" value={client.uri} />
+                    <textarea readOnly aria-label="入口客户端配置" value={client.client_config} />
+                    <button className="button secondary" onClick={() => setClient(null)}>
+                      隐藏客户端材料
+                    </button>
+                  </details>
+                )}
+              </>
+            )}
+          </div>
+        )}
         <p className="muted">
-          本阶段通过本机 ingress managed 命令自动生成私有
-          server/client/导入URI；界面只显示计划。常驻运行、凭据保存、核心切换、备份/回滚与证书自动续期还需接线。
+          常驻核心由管理员serve参数明确指定root所有的受信任程序，以普通UID运行。重启不自动启动入口；新core/API功能仍需完整公共链路和安装向导验收。
         </p>
       </div>
     </section>

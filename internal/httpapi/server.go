@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"mikugate/internal/certassets"
+	"mikugate/internal/coreruntime"
 	"mikugate/internal/diagnostics"
 	"mikugate/internal/domain"
 	"mikugate/internal/executoripc"
@@ -40,6 +41,7 @@ type SandboxClient interface {
 	Capabilities(context.Context) (executoripc.Capabilities, error)
 }
 type Options struct {
+	Cores               *coreruntime.Manager
 	DiscoverCertificate func(string) (certassets.Discovery, *certassets.Asset, error)
 	ProbeReality        func(context.Context, string) (ingress.RealityTarget, error)
 	InspectIngress      func(ingress.Source) (ingress.Report, error)
@@ -49,6 +51,7 @@ type Options struct {
 	VPN                 *vpnipc.Client
 }
 type Server struct {
+	cores               *coreruntime.Manager
 	assetSlot           chan struct{}
 	lastAsset           time.Time
 	discoverCertificate func(string) (certassets.Discovery, *certassets.Asset, error)
@@ -111,7 +114,7 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 	if reality == nil {
 		reality = ingress.ProbeReality
 	}
-	a := &Server{assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
+	a := &Server{cores: options.Cores, assetSlot: make(chan struct{}, 1), discoverCertificate: discover, probeReality: reality, ingressSlot: make(chan struct{}, 1), inspectIngress: inspectIngress, hostSlot: make(chan struct{}, 1), nodeIdentities: map[string]domain.NodeIdentity{}, identitySlot: make(chan struct{}, 1), inspectIdentity: inspect, gateway: options.Gateway, vpnClient: options.VPN, sandbox: options.Sandbox, sandboxSlot: make(chan struct{}, 1), store: s, assets: assets, dummyHash: dummy, authSlots: make(chan struct{}, 2), writeSlots: make(chan struct{}, 2), refreshSlot: make(chan struct{}, 1), attempts: map[string]attempt{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]any{"version": domain.Version, "status": a.mode()})
@@ -170,6 +173,13 @@ func NewWithOptions(s *store.Store, assets fs.FS, options Options) (http.Handler
 		}
 		write(w, 200, v)
 	}))
+	mux.HandleFunc("GET /api/exits/{id}/ingress", a.auth(a.managedGet))
+	mux.HandleFunc("PUT /api/exits/{id}/ingress", a.auth(a.managedSave))
+	mux.HandleFunc("DELETE /api/exits/{id}/ingress", a.auth(a.managedRemove))
+	mux.HandleFunc("POST /api/exits/{id}/ingress/client", a.auth(a.managedClient))
+	mux.HandleFunc("GET /api/exits/{id}/ingress/runtime", a.auth(a.managedRuntime))
+	mux.HandleFunc("POST /api/exits/{id}/ingress/start", a.auth(a.managedStart))
+	mux.HandleFunc("POST /api/exits/{id}/ingress/stop", a.auth(a.managedStop))
 	mux.HandleFunc("GET /api/ingress/templates", a.auth(a.ingressTemplates))
 	mux.HandleFunc("POST /api/ingress/preview", a.auth(a.ingressPreview))
 	mux.HandleFunc("GET /api/ingress/reality/candidates", a.auth(a.realityCandidates))
@@ -448,6 +458,13 @@ func (a *Server) startExit(w http.ResponseWriter, r *http.Request, s domain.Sess
 	fail(w, 409, "executor_unavailable", reason)
 }
 func (a *Server) stopExit(w http.ResponseWriter, r *http.Request, s domain.Session) {
+	if a.cores != nil {
+		if err := a.cores.Stop(r.Context(), r.PathValue("id")); err != nil {
+			a.coreError(w, err)
+			return
+		}
+	}
+
 	if a.gateway != nil {
 		if err := a.gateway.Stop(r.Context(), r.PathValue("id")); err != nil {
 			a.runtimeError(w, err)

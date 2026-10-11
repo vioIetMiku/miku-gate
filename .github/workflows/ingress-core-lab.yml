@@ -32,6 +32,7 @@ jobs:
           tar -xOf .cache/ingress-lab/sing-box.tar.gz sing-box-1.14.3-linux-amd64/sing-box > .cache/ingress-lab/sing-box
           chmod 755 .cache/ingress-lab/xray .cache/ingress-lab/sing-box
           go test -c -o .cache/ingress-lab/ingress.test ./internal/ingress
+          go test -c -o .cache/ingress-lab/core-runtime.test ./internal/coreruntime
           git rev-parse HEAD
           .cache/ingress-lab/xray version
           .cache/ingress-lab/sing-box version
@@ -45,8 +46,9 @@ jobs:
           sudo install -m 555 .cache/ingress-lab/xray "$stage/xray"
           sudo install -m 555 .cache/ingress-lab/sing-box "$stage/sing-box"
           sudo install -m 555 .cache/ingress-lab/ingress.test "$stage/ingress.test"
+          sudo install -m 555 .cache/ingress-lab/core-runtime.test "$stage/core-runtime.test"
           cleanup() {
-            sudo rm -f -- "$stage/xray" "$stage/sing-box" "$stage/ingress.test"
+            sudo rm -f -- "$stage/xray" "$stage/sing-box" "$stage/ingress.test" "$stage/core-runtime.test"
             sudo rmdir -- "$stage"
           }
           trap cleanup EXIT
@@ -55,10 +57,14 @@ jobs:
             --property=CPUQuota=100% --property=MemoryMax=384M --property=MemorySwapMax=0 --property=TasksMax=64 \
             /usr/bin/unshare --net /bin/sh -c '
               /usr/sbin/ip link set lo up
-              exec /usr/bin/setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs \
+              /usr/bin/setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs \
                 /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C \
                 MIKU_GATE_INGRESS_TEST=1 MIKU_GATE_XRAY="$1/xray" MIKU_GATE_SINGBOX="$1/sing-box" GOMAXPROCS=1 GOMEMLIMIT=96MiB \
-                "$1/ingress.test" -test.v -test.run "^TestLinux(IngressCoreRouting|ManagedCoreTemplates)$" -test.timeout=180s
+                "$1/ingress.test" -test.v -test.run "^TestLinux(IngressCoreRouting|ManagedCoreTemplates)$" -test.timeout=180s &&
+              /usr/bin/setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs \
+                /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C \
+                MIKU_GATE_INGRESS_TEST=1 MIKU_GATE_XRAY="$1/xray" MIKU_GATE_SINGBOX="$1/sing-box" GOMAXPROCS=1 GOMEMLIMIT=96MiB \
+                "$1/core-runtime.test" -test.v -test.run "^TestLinuxManagedNativeRuntime$" -test.timeout=90s
             ' sh "$stage" 2>&1 | tee .cache/ingress-lab/result.txt
       - name: Save only bounded assertions and source results
         if: always()

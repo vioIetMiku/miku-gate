@@ -1978,3 +1978,21 @@ label input:disabled {
     gap: 0;
   }
 }
+
+.managed-binding {
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  padding-top: 15px;
+}
+.managed-client textarea {
+  width: 100%;
+  min-height: 70px;
+  margin: 10px 0;
+  padding: 10px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: 12px var(--mono);
+  resize: vertical;
+}

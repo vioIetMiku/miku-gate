@@ -107,6 +107,7 @@ type ManagedFiles struct {
 	PrivateKey  string
 }
 type ManagedBundle struct {
+	Material     *ManagedMaterial    `json:"-"`
 	Plan         ManagedPlan         `json:"plan"`
 	ServerJSON   []byte              `json:"-"`
 	ClientJSON   []byte              `json:"-"`
@@ -118,6 +119,9 @@ type ManagedBundle struct {
 }
 
 func GenerateManaged(request ManagedRequest, proxy Proxy, certificate *certassets.Asset, files ManagedFiles, target *RealityTarget) (ManagedBundle, error) {
+	return generateManaged(request, proxy, certificate, files, target, nil)
+}
+func generateManaged(request ManagedRequest, proxy Proxy, certificate *certassets.Asset, files ManagedFiles, target *RealityTarget, identity *ManagedIdentity) (ManagedBundle, error) {
 	plan, e := ManagedPlanFor(request)
 	if e != nil {
 		return ManagedBundle{}, e
@@ -158,6 +162,23 @@ func GenerateManaged(request ManagedRequest, proxy Proxy, certificate *certasset
 			return ManagedBundle{}, ErrReality
 		}
 		shortID = hex.EncodeToString(sid)
+	}
+	if identity != nil {
+		if err := identity.Validate(plan.NeedsRealityTarget); err != nil {
+			return ManagedBundle{}, err
+		}
+		uuid, password, privateKey, shortID = identity.UUID, identity.Password, identity.RealityPrivateKey, identity.ShortID
+		if plan.NeedsRealityTarget {
+			raw, err := base64.RawURLEncoding.DecodeString(privateKey)
+			if err != nil {
+				return ManagedBundle{}, ErrConfig
+			}
+			key, err := ecdh.X25519().NewPrivateKey(raw)
+			if err != nil {
+				return ManagedBundle{}, ErrConfig
+			}
+			publicKey = base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes())
+		}
 	}
 	protocol := "vless"
 	if r.Template == "trojan-tls" {
@@ -234,7 +255,15 @@ func GenerateManaged(request ManagedRequest, proxy Proxy, certificate *certasset
 		query.Del("alpn")
 	}
 	uri := (&url.URL{Scheme: protocol, User: url.User(credential), Host: net.JoinHostPort(r.Address, strconv.Itoa(r.Port)), RawQuery: query.Encode(), Fragment: "Miku Gate " + r.Core}).String()
-	bundle := ManagedBundle{Plan: plan, ServerJSON: serverRaw, ClientJSON: clientRaw, URI: uri, ServerSHA256: digest(serverRaw), ClientSHA256: digest(clientRaw)}
+	material := &ManagedMaterial{Request: r, Proxy: proxy, Identity: ManagedIdentity{uuid, password, privateKey, shortID}}
+	if certificate != nil {
+		material.CertificatePEM, material.PrivateKeyPEM = certificate.PEM()
+	}
+	if target != nil {
+		copy := *target
+		material.Target = &copy
+	}
+	bundle := ManagedBundle{Material: material, Plan: plan, ServerJSON: serverRaw, ClientJSON: clientRaw, URI: uri, ServerSHA256: digest(serverRaw), ClientSHA256: digest(clientRaw)}
 	if certificate != nil {
 		summary := certificate.Summary()
 		bundle.Certificate = &summary

@@ -93,6 +93,11 @@ try {
   check(managedPreview.udp_blocked, true, 'managed plan specifies UDP drop');
   check((await request('/api/ingress/certificate', 'POST', { hostname: 'entry.example', confirm_read: false })).status, 400, 'certificate files require explicit read consent');
   check((await request('/api/ingress/reality/probe', 'POST', { hostname: '127.0.0.1', confirm_network: true })).status, 400, 'private REALITY target refused before network');
+  const managedView = await request(`/api/exits/${id}/ingress`).then(r => r.json());
+  check(managedView.configured, false, 'managed ingress initially absent');
+  check((await request(`/api/exits/${id}/ingress/runtime`).then(r => r.json())).phase, 'stopped', 'durable configuration never claims core active');
+  check((await request(`/api/exits/${id}/ingress/start`, 'POST', { confirm: true })).status, 503, 'no implicit core executable');
+  check((await request(`/api/exits/${id}/ingress/client`, 'POST', { confirm: false })).status, 400, 'client secrets need explicit reveal consent');
   const inventory = await request('/api/host/inventory').then(r => r.json());
   check(inventory.read_only, true, 'host inventory is read-only');
   check(inventory.components.every(c => c.reuse_ready === false), true, 'inventory cannot authorize reuse');

@@ -168,3 +168,15 @@ VPN选择请求字段：`node_id`、`peer_name`、`allow_legacy`、`confirm`。�
 - `POST /api/ingress/certificate`：hostname、confirm_read:true；常见受控ACME路径，返回有效期/摘要，不返回私钥。
 
 后两项共享单并行和3秒限频，均需认证、CSRF与同源。完整server/client/URI只由本机私有bundle命令生成，不作为API响应。详见MANAGED_INGRESS.md。
+
+## dev.10：保存并运行独立受管入口
+
+- `GET /api/exits/{id}/ingress`：脱敏保存参数/时间；configured不等于运行。
+- `PUT /api/exits/{id}/ingress`：request、exit_password、confirm以及模板所需confirm_read/confirm_network；核对逻辑出口代理凭据，重新检测素材，入口/出口均停止才能加密保存。
+- `DELETE /api/exits/{id}/ingress`：入口/出口均停止才能移除。
+- `POST /api/exits/{id}/ingress/client`：confirm:true才返回客户端config/URI；不返回服务器私钥或出口密码。
+- `GET /api/exits/{id}/ingress/runtime`：真实进程状态；PID/core_validated/listener_owned/data_verified分开。
+- `POST /api/exits/{id}/ingress/start`：confirm:true，需显式CLI核心路径和健康活动逻辑出口；原配置不应用到已有服务。
+- `POST /api/exits/{id}/ingress/stop`：只停止Miku持有子核心，出口租约结束也撤销入口。
+
+变更/显示/启停均认证+CSRF+同源；保存参数没有任意配置/程序路径。启动不可用503、冲突409、核心未验证422；私钥/原始core日志不进入API。详见MANAGED_RUNTIME.md。

@@ -507,3 +507,19 @@ func Reason(err error) string {
 	}
 	return "代理运行失败：请检查上游、端口占用与运行日志；没有直连后备"
 }
+
+// WithActive reserves short entrance startup work against simultaneous explicit
+// stop/mutation; the exit lifecycle cancels its child core even after startup.
+func (m *Manager) WithActive(id string, operation func(context.Context, State) error) error {
+	m.mu.Lock()
+	e := m.entries[id]
+	if m.closed || e == nil || m.reserved[id] || !e.state.ProxyListening || !e.state.Healthy || e.ctx.Err() != nil {
+		m.mu.Unlock()
+		return ErrBusy
+	}
+	m.reserved[id] = true
+	state := e.state
+	m.mu.Unlock()
+	defer func() { m.mu.Lock(); delete(m.reserved, id); m.mu.Unlock() }()
+	return operation(e.ctx, state)
+}

@@ -22,15 +22,25 @@ func (a *Server) mode() string {
 }
 func (a *Server) stopped(fn func(http.ResponseWriter, *http.Request, domain.Session)) func(http.ResponseWriter, *http.Request, domain.Session) {
 	return func(w http.ResponseWriter, r *http.Request, session domain.Session) {
-		if a.gateway == nil {
-			fn(w, r, session)
+		operation := func() error {
+			if a.gateway == nil {
+				fn(w, r, session)
+				return nil
+			}
+			return a.gateway.WithStopped(r.PathValue("id"), func() error { fn(w, r, session); return nil })
+		}
+		if a.cores != nil {
+			if err := a.cores.WithStopped(r.PathValue("id"), operation); err != nil {
+				a.coreError(w, err)
+			}
 			return
 		}
-		if err := a.gateway.WithStopped(r.PathValue("id"), func() error { fn(w, r, session); return nil }); err != nil {
+		if err := operation(); err != nil {
 			a.runtimeError(w, err)
 		}
 	}
 }
+
 func (a *Server) listExits(w http.ResponseWriter, r *http.Request, _ domain.Session) {
 	exits, err := a.store.ListExits()
 	if err != nil {

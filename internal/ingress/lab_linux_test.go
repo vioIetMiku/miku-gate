@@ -112,6 +112,18 @@ func (d *coreDiagnostics) Write(raw []byte) (int, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.bytes += len(raw)
+	// Tokens are a closed vocabulary from protocol/runtime diagnostics, not raw
+	// log words (which may be encoded credentials). Case-independent matching.
+	lower := strings.ToLower(string(raw))
+	for _, token := range []string{"argument", "socket", "operation", "permission", "certificate", "cipher", "finished", "padding", "decryption", "signature", "traffic", "unsupported", "fingerprint", "peer", "handshake", "compress", "user", "client", "server", "public key", "private key", "authentication", "connection", "invalid", "timeout", "refused", "alert", "record", "packet", "protocol", "bad", "read", "write", "retry", "closed"} {
+		if strings.Contains(lower, token) {
+			if d.counts == nil {
+				d.counts = map[string]int{}
+			}
+			d.counts["token_"+strings.ReplaceAll(token, " ", "_")]++
+		}
+	}
+
 	if d.counts == nil {
 		d.counts = map[string]int{}
 	}

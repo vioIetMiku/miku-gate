@@ -91,7 +91,10 @@ jobs:
             sudo systemctl is-active --quiet miku-gate-vpn.service
             instance=$(sudo "$MIKU_INSTALL_STAGE/miku-gate" instance --data=/var/lib/miku-gate/data)
             # Only capability/status metadata; no node connections or credentials.
-            sudo "$MIKU_INSTALL_STAGE/miku-gate" vpn-executor info --instance="$instance" \
+            control_uid=$(id -u miku-gate)
+            control_gid=$(id -g miku-gate)
+            sudo setpriv --reuid="$control_uid" --regid="$control_gid" --clear-groups --no-new-privs \
+              "$MIKU_INSTALL_STAGE/miku-gate" vpn-executor info --instance="$instance" \
               | tee .cache/installation-lab/vpn-service-result.txt
           fi
           echo 'Actual install coordinator and IP HTTPS health/fingerprint passed on disposable runner; ports80/443 and existing panels were not controlled. This step does not independently compare host network snapshots.'

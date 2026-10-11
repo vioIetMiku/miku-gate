@@ -40,6 +40,16 @@ class InstallerPlanningSafety(unittest.TestCase):
         self.assertIn('User=miku-gate',control);self.assertIn('NoNewPrivileges=yes',control);self.assertIn('MemoryMax=384M',control);self.assertIn('--allow-bootstrap-certificate',control)
         self.assertIn('User=root',root);self.assertIn('--allow-uid=1000',root);self.assertIn('--tunnel-uid=1001',root);self.assertIn('--worker-uid=1002',root)
         self.assertNotIn('sh -c',control);self.assertNotIn('iptables',control+root);self.assertNotIn('nginx',control+root)
+    def test_vpn_health_uses_only_authorized_ordinary_control_uid(self):
+        ids={name:(1000+i,1000+i) for i,name in enumerate(install.USERS)}
+        response={'instance':'a'*22,'mode':'isolated-openvpn','version':1,'options':{'tunnel_uid':1001,'worker_uid':1002}}
+        with mock.patch.object(install,'trusted_tool',return_value='/usr/bin/setpriv'),mock.patch.object(install,'run',return_value=__import__('json').dumps(response).encode()) as run:
+            install.verify_vpn_executor(PurePosixPath('/usr/local/lib/miku-gate/miku-gate'),'a'*22,ids)
+            args=run.call_args.args[0]
+            self.assertIn('--reuid=1000',args);self.assertIn('--regid=1000',args);self.assertIn('--no-new-privs',args)
+        response['options']['tunnel_uid']=0
+        with mock.patch.object(install,'trusted_tool',return_value='/usr/bin/setpriv'),mock.patch.object(install,'run',return_value=__import__('json').dumps(response).encode()):
+            with self.assertRaises(install.InstallError):install.verify_vpn_executor(PurePosixPath('/usr/local/lib/miku-gate/miku-gate'),'a'*22,ids)
     def test_hostname_rejects_shell_paths_and_ip(self):
         for bad in ('/etc/shadow','../domain.example','example.com:443','https://example.com','8.8.8.8','x;reboot.example','*.example'):
             with self.assertRaises(install.InstallError):install.hostname(bad)

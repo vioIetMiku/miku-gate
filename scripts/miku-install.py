@@ -240,6 +240,15 @@ def verify_served_management(plan,cert_path,certificate_summary):
             last_category=type(exc).__name__;time.sleep(0.3)
     raise InstallError('管理HTTPS尚未验证可达（'+last_category+'），不标记安装完成')
 
+def verify_vpn_executor(binary,instance,uids):
+    uid,gid=uids[USERS[0]]
+    raw=run([trusted_tool('setpriv'),'--reuid='+str(uid),'--regid='+str(gid),'--clear-groups','--no-new-privs',str(binary),'vpn-executor','info','--instance='+instance],timeout=8)
+    caps=json.loads(raw)
+    require(caps.get('instance')==instance and caps.get('mode')=='isolated-openvpn' and caps.get('version')==1,'授权控制身份读取的VPN能力响应不匹配')
+    options=caps.get('options',{})
+    require(options.get('tunnel_uid')==uids[USERS[1]][0] and options.get('worker_uid')==uids[USERS[2]][0],'VPN工作身份与安装计划不匹配')
+    return caps
+
 def apply(binary_raw,expected,plan,prompt):
     refusal_preflight()
     require(port_available(plan['port']),'管理端口已被占用，不抢占已有服务')
@@ -294,6 +303,7 @@ def apply(binary_raw,expected,plan,prompt):
                 run([trusted_tool('systemctl'),'enable','--now',name],timeout=35)
             run([trusted_tool('systemctl'),'is-active','--quiet','miku-gate.service'])
             verify_served_management(plan,cert,summary)
+            if plan['vpn']:verify_vpn_executor(copied,instance,uids)
         print('管理地址：'+plan['origin'])
         print('证书指纹SHA256：'+summary['leaf_sha256'])
         if certificate['mode']=='ip-bootstrap':print('这是自签IP引导证书，浏览器不默认信任。通过已信任SSH通道/安装输出核对指纹或导入certificate.pem后再输入密码，不能忽略证书警告。')

@@ -1,0 +1,86 @@
+{
+  "date": "2026-10-11",
+  "source": "177aa6e8688ec664d69f7995bd6095e36e1abadf",
+  "installation_run": 38114561022,
+  "verify_run": 38114558358,
+  "conclusion": "success",
+  "jobs": [
+    {
+      "job": 114396773179,
+      "vpn": true,
+      "conclusion": "success",
+      "assertions": {
+        "data_identity_retained": true,
+        "ordinary_service_https_restart_verified": true,
+        "paired_encrypted_db_key_verified": true,
+        "private_archive_mode": "0600",
+        "raw_private_material_returned": false,
+        "restore_verified": true,
+        "upgrade_verified": true,
+        "vpn_mode": true
+      }
+    },
+    {
+      "job": 114396773245,
+      "vpn": false,
+      "conclusion": "success",
+      "assertions": {
+        "data_identity_retained": true,
+        "ordinary_service_https_restart_verified": true,
+        "paired_encrypted_db_key_verified": true,
+        "private_archive_mode": "0600",
+        "raw_private_material_returned": false,
+        "restore_verified": true,
+        "upgrade_verified": true,
+        "vpn_mode": false
+      }
+    }
+  ],
+  "scope": {
+    "platform": "linux-amd64 disposable Ubuntu runner",
+    "candidate": "same source/version, alternate stripped build changes executable digest",
+    "restore": "same instance/account/origin/core choices schema6; encrypted config changed after snapshot then original pair restored",
+    "not_proven": [
+      "cross-version schema migration",
+      "cross-host recovery",
+      "actual power interruption recovery",
+      "public VPS permanent install",
+      "public DNS ACME issuance or renewal",
+      "external internet management/client reachability",
+      "long-running installed VPN business sessions"
+    ]
+  },
+  "release": {
+    "url": "https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.11",
+    "tag": "v0.1.0-dev.11",
+    "commit": "177aa6e8688ec664d69f7995bd6095e36e1abadf",
+    "prerelease": true,
+    "private": true,
+    "assets": [
+      {
+        "name": "miku-gate-v0.1.0-dev.11-linux-amd64.tar.gz",
+        "bytes": 11702214,
+        "sha256": "39651c6e92f44eea973ce24fb20712f34ae323df26154351b603d175dadc1563",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.11/miku-gate-v0.1.0-dev.11-linux-amd64.tar.gz"
+      },
+      {
+        "name": "miku-gate-v0.1.0-dev.11-linux-arm64.tar.gz",
+        "bytes": 10898293,
+        "sha256": "63f79db487de6edb4de0aee06b1dcf8157259f7053cfd078a865df6d6a104ba8",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.11/miku-gate-v0.1.0-dev.11-linux-arm64.tar.gz"
+      },
+      {
+        "name": "miku-gate-v0.1.0-dev.11-windows-amd64.zip",
+        "bytes": 11426982,
+        "sha256": "13ab63550cdb5e141bb111273e2d4a62cb9a3b1ce987de8d3c6cdd017e6c027c",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.11/miku-gate-v0.1.0-dev.11-windows-amd64.zip"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 326,
+        "sha256": "5eced5f01d061682d5882e1f827a02126a2306ae5f7fd88a9e03eb1925b98ad2",
+        "url": "https://github.com/vioIetMiku/miku-gate/releases/download/v0.1.0-dev.11/SHA256SUMS.txt"
+      }
+    ]
+  }
+}

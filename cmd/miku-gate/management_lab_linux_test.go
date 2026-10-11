@@ -355,6 +355,7 @@ func TestLinuxManagementHTTPSDomainCLI(t *testing.T) {
 		t.Fatal("renewal changed identities/bindings or did not persist certificate")
 	}
 	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel() // Also explicit for vet: cleanup closes the current restarted process.
 	cmd = exec.CommandContext(ctx, binary, "serve", "--data", data, "--listen=127.0.0.1:"+port, "--public-origin="+origin, "--tls-certificate="+rotateCP, "--tls-key="+rotateKP)
 	cmd.Env = append(os.Environ(), "SSL_CERT_FILE="+cap, "SSL_CERT_DIR="+filepath.Join(root, "empty"))
 	cmd.Stdout = io.Discard

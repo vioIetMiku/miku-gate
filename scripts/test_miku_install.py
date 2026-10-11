@@ -40,6 +40,11 @@ class InstallerPlanningSafety(unittest.TestCase):
         self.assertIn('User=miku-gate',control);self.assertIn('NoNewPrivileges=yes',control);self.assertIn('MemoryMax=384M',control);self.assertIn('--allow-bootstrap-certificate',control)
         self.assertIn('User=root',root);self.assertIn('--allow-uid=1000',root);self.assertIn('--tunnel-uid=1001',root);self.assertIn('--worker-uid=1002',root)
         self.assertNotIn('sh -c',control);self.assertNotIn('iptables',control+root);self.assertNotIn('nginx',control+root)
+    def test_selected_core_download_failure_precedes_all_installation_writes(self):
+        plan={'port':8443,'arch':'amd64','cores':['xray','sing-box']}
+        with mock.patch.object(install,'refusal_preflight'),mock.patch.object(install,'port_available',return_value=True),mock.patch.object(install,'core_bytes',side_effect=install.InstallError('pinned download failed')),mock.patch.object(install,'make_dir') as mkdir,mock.patch.object(install,'exclusive') as write,mock.patch.object(install,'run') as run:
+            with self.assertRaises(install.InstallError):install.apply(b'ELF','a'*64,plan,install.Prompt({}))
+            mkdir.assert_not_called();write.assert_not_called();run.assert_not_called()
     def test_vpn_health_uses_only_authorized_ordinary_control_uid(self):
         ids={name:(1000+i,1000+i) for i,name in enumerate(install.USERS)}
         response={'instance':'a'*22,'mode':'isolated-openvpn','version':1,'options':{'tunnel_uid':1001,'worker_uid':1002}}

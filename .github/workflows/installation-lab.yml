@@ -31,6 +31,7 @@ jobs:
           mkdir -p .cache/installation-lab
           go build -trimpath -o .cache/installation-lab/miku-gate ./cmd/miku-gate
           go test -c -o .cache/installation-lab/cli.test ./cmd/miku-gate
+          go test -c -o .cache/installation-lab/core-runtime.test ./internal/coreruntime
           python3 -B -m unittest discover -s scripts -p 'test_*.py' -v
       - name: Stage root-owned independent CLI without changing existing services
         shell: bash
@@ -41,6 +42,7 @@ jobs:
           sudo install -d -m 755 "$stage"
           sudo install -m 555 .cache/installation-lab/miku-gate "$stage/miku-gate"
           sudo install -m 555 .cache/installation-lab/cli.test "$stage/cli.test"
+          sudo install -m 555 .cache/installation-lab/core-runtime.test "$stage/core-runtime.test"
           sudo install -m 555 scripts/miku-install.py "$stage/miku-install.py"
           echo "MIKU_INSTALL_STAGE=$stage" >> "$GITHUB_ENV"
       - name: Actual ordinary-user IP HTTPS CLI, Host Origin and Secure session
@@ -61,7 +63,7 @@ jobs:
           python3 - <<'PY'
           import json
           from pathlib import Path
-          Path('.cache/installation-lab/answers.json').write_text(json.dumps({'enable_vpn':'${{ matrix.vpn }}','install_dependencies':'yes','vps_ip':'192.0.2.10','use_domain':'no','management_port':'39443','managed_core':'none','confirm_ip_certificate':'yes','confirm_install':'yes','start_services':'yes','reuse_existing':'no'}))
+          Path('.cache/installation-lab/answers.json').write_text(json.dumps({'enable_vpn':'${{ matrix.vpn }}','install_dependencies':'yes','vps_ip':'192.0.2.10','use_domain':'no','management_port':'39443','managed_core':'both','confirm_ip_certificate':'yes','confirm_install':'yes','start_services':'yes','reuse_existing':'no'}))
           PY
           sha=$(sha256sum "$MIKU_INSTALL_STAGE/miku-gate" | cut -d' ' -f1)
           sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 \
@@ -98,6 +100,36 @@ jobs:
               | tee .cache/installation-lab/vpn-service-result.txt
           fi
           echo 'Actual install coordinator and IP HTTPS health/fingerprint passed on disposable runner; ports80/443 and existing panels were not controlled. This step does not independently compare host network snapshots.'
+      - name: Verify downloaded installed cores and runtime under the installed ordinary identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          control_uid=$(id -u miku-gate)
+          control_gid=$(id -g miku-gate)
+          # Verify the installer's exact archive/member digest provenance, not a
+          # separately staged example core. No usernames/passwords in this output.
+          sudo python3 - <<'PY'
+          import hashlib,json,os,stat
+          from pathlib import Path
+          state=json.loads(Path('/etc/miku-gate/install-state.json').read_text())
+          assert len(state['core_sources'])==2
+          for record in state['core_sources']:
+              binary=Path('/usr/local/lib/miku-gate')/record['core']
+              info=binary.lstat()
+              assert stat.S_ISREG(info.st_mode) and info.st_uid==0 and info.st_nlink==1 and not info.st_mode&0o022
+              assert hashlib.sha256(binary.read_bytes()).hexdigest()==record['binary_sha256']
+          print('Installed core provenance and immutable root ownership verified for two official fixed-version binaries.')
+          PY
+          sudo systemd-run --quiet --scope --collect --unit="miku-installed-core-lab-$GITHUB_RUN_ID" \
+            --property=CPUQuota=100% --property=MemoryMax=384M --property=MemorySwapMax=0 --property=TasksMax=64 \
+            /usr/bin/unshare --net /bin/sh -c '
+              /usr/sbin/ip link set lo up
+              exec /usr/bin/setpriv --reuid="$2" --regid="$3" --clear-groups --no-new-privs \
+                /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C GOMAXPROCS=1 GOMEMLIMIT=128MiB \
+                MIKU_GATE_INGRESS_TEST=1 MIKU_GATE_XRAY=/usr/local/lib/miku-gate/xray MIKU_GATE_SINGBOX=/usr/local/lib/miku-gate/sing-box \
+                "$1/core-runtime.test" -test.v -test.run "^TestLinuxManagedNativeRuntime$" -test.timeout=60s
+            ' sh "$MIKU_INSTALL_STAGE" "$control_uid" "$control_gid" \
+            2>&1 | tee .cache/installation-lab/installed-core-runtime.txt
       - name: Retain bounded non-secret assertion output only
         if: always()
         uses: actions/upload-artifact@v4
@@ -108,5 +140,6 @@ jobs:
             .cache/installation-lab/plan-result.txt
             .cache/installation-lab/service-result.txt
             .cache/installation-lab/vpn-service-result.txt
+            .cache/installation-lab/installed-core-runtime.txt
           if-no-files-found: warn
           retention-days: 14

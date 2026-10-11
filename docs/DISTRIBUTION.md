@@ -1,6 +1,6 @@
 # 使用新版发行包安装与维护
 
-> 本说明对应dev.11开发源码和新版包格式。dev.10已发布包不含此安装器；只有正式发布、带完整BUILD清单的新版压缩包可按下面无参数入口安装。同安装/schema6升级与配套回滚已接线，Linux实际验收待回读；跨机灾备、未来schema迁移与卸载未实现。
+> 本说明对应dev.11起的新版包格式；当前dev.12已发布。dev.10已发布包不含此安装器；只有正式发布、带完整BUILD清单的新版压缩包可按下面无参数入口安装。同安装/schema6升级与配套回滚已接线，Linux实际验收待回读；跨机灾备、未来schema迁移与卸载未实现。
 
 ## 在VPS安装
 
@@ -38,8 +38,8 @@ sudo python3 -B /usr/local/lib/miku-gate/miku-maintain.py backup \
 ```sh
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o bin/miku-gate ./cmd/miku-gate
 python3 -B scripts/package-dist.py --binary=bin/miku-gate \
-  --version=v0.1.0-dev.11 --platform=linux-amd64 \
-  --output-dir=.cache/release/dev11/assets
+  --version=v0.1.0-dev.12 --platform=linux-amd64 \
+  --output-dir=.cache/release/dev12/assets
 ```
 
 打包器读取Go嵌入的来源，要求vcs.revision等于当前HEAD、vcs.modified=false、目标平台匹配、CGO关闭。文档/协调器从Git确切提交取出；生成BUILD清单、固定权限压缩包与独立摘要JSON，对归档逐项读回，不执行任何归档程序、不下载latest、不覆盖既有输出。开发源码有未提交修改时拒绝。

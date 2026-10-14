@@ -35,10 +35,12 @@ def main():
         source='archive-sha256:'+digest.hexdigest()
     with tempfile.TemporaryDirectory(prefix='miku-release-',dir=args.output) as temporary:
         stage=Path(temporary)/'miku-fanout';(stage/'bin').mkdir(parents=True);(stage/'scripts').mkdir()
-        for name in ('install.sh','install-online.sh','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','CORE_ASSETS.json'):
+        for name in ('install.sh','install-online.sh','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','CORE_ASSETS.json'):
             shutil.copy2(ROOT/name,stage/name)
         for name in ('common.py','install.py','maintain.py','miku.sh'):
             shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
+        (stage/'docs').mkdir()
+        shutil.copyfile(ROOT/'docs/DEV_HISTORY.md',stage/'docs/DEV_HISTORY.md')
         (stage/'assets').mkdir()
         shutil.copyfile(ROOT/'assets/miku-hero-v1.png',stage/'assets/miku-hero-v1.png')
         def build(architecture,helper):

@@ -143,6 +143,7 @@ const sessionCookie = "miku_session"
 // Wrap 保护一个 handler，未登录时 API 返回 401、页面跳登录。
 func (a *Auth) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Miku-Gate", "1")
 		if strings.HasPrefix(r.URL.Path, "/assets/") {
 			next.ServeHTTP(w, r)
 			return

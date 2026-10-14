@@ -4,7 +4,7 @@ set -euo pipefail
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   printf '%s\n' 'Miku Gate VPS installer (Linux amd64/arm64, root).' \
     'Usage: bash install-online.sh [--download-only DIRECTORY]' \
-    'Environment: MIKU_VERSION=v0.2.0 (default: latest stable), GITHUB_TOKEN (private repository), WEB_PORT (default: 8899).'
+    'Environment: MIKU_VERSION=v0.2.1 (default: latest stable), GITHUB_TOKEN (private repository), WEB_PORT (default: 8899).'
   exit 0
 fi
 [[ "$(uname -s)" == Linux ]] || { echo '仅支持 Linux VPS。' >&2; exit 1; }
@@ -51,7 +51,7 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
 def fetch(url, limit, binary=False):
     if urllib.parse.urlsplit(url).scheme != 'https':
         raise RuntimeError('只允许 HTTPS 下载')
-    headers = {'User-Agent': 'MikuGateInstaller/0.2.0', 'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}
+    headers = {'User-Agent': 'MikuGateInstaller/0.2.1', 'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}
     token = os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN')
     if token and urllib.parse.urlsplit(url).hostname == 'api.github.com':
         headers['Authorization'] = 'Bearer ' + token
@@ -64,7 +64,7 @@ def fetch(url, limit, binary=False):
 
 def stable_release(version):
     if version != 'latest' and not re.fullmatch(r'v\d+\.\d+\.\d+', version):
-        raise RuntimeError('MIKU_VERSION 只能是 latest 或正式版本标签，例如 v0.2.0')
+        raise RuntimeError('MIKU_VERSION 只能是 latest 或正式版本标签，例如 v0.2.1')
     endpoint = '/releases/latest' if version == 'latest' else '/releases/tags/' + version
     release = json.loads(fetch(API + endpoint, 4 << 20))
     if release.get('draft') or release.get('prerelease') or not re.fullmatch(r'v\d+\.\d+\.\d+', release.get('tag_name', '')):
@@ -99,31 +99,35 @@ def unpack(package, destination, version):
         entries = archive.getmembers()
         if not 5 <= len(entries) <= 100:
             raise RuntimeError('安装包成员数量异常')
+        bundle_root = entries[0].name.split('/')[0]
+        if bundle_root not in ('miku-gate', 'miku-fanout'):
+            raise RuntimeError('安装包根目录异常')
+        prefix = bundle_root + '/'
         names = set()
         total = 0
         for entry in entries:
             parts = PurePosixPath(entry.name).parts
-            if not entry.isfile() or entry.name in names or not parts or parts[0] != 'miku-fanout' or len(parts) < 2 or any(not re.fullmatch(r'[A-Za-z0-9_.-]+', part) or part in ('.', '..') for part in parts) or entry.name != '/'.join(parts):
+            if not entry.isfile() or entry.name in names or not parts or parts[0] != bundle_root or len(parts) < 2 or any(not re.fullmatch(r'[A-Za-z0-9_.-]+', part) or part in ('.', '..') for part in parts) or entry.name != '/'.join(parts):
                 raise RuntimeError('安装包包含重复、链接或不安全路径')
             if entry.uid != 0 or entry.gid != 0 or entry.mode not in (0o644, 0o755) or not 0 <= entry.size <= MAX_ARCHIVE:
                 raise RuntimeError('安装包权限或大小异常')
             names.add(entry.name)
             total += entry.size
-        if total > MAX_UNPACKED or 'miku-fanout/BUILD.json' not in names:
+        if total > MAX_UNPACKED or prefix + 'BUILD.json' not in names:
             raise RuntimeError('安装包超限或没有构建清单')
-        manifest_entry = archive.getmember('miku-fanout/BUILD.json')
+        manifest_entry = archive.getmember(prefix + 'BUILD.json')
         if manifest_entry.size > 64 << 10:
             raise RuntimeError('构建清单过大')
         meta = json.loads(archive.extractfile(manifest_entry).read())
         files = meta.get('files', {})
         if meta.get('product') != 'miku-fanout' or meta.get('format') != 1 or meta.get('version') != version.removeprefix('v') or not isinstance(files, dict):
             raise RuntimeError('构建清单版本或类型不匹配')
-        if names != {'miku-fanout/' + name for name in files} | {'miku-fanout/BUILD.json'}:
+        if names != {prefix + name for name in files} | {prefix + 'BUILD.json'}:
             raise RuntimeError('安装包内容与构建清单不一致')
         if not {'install.sh', 'scripts/install.py', 'scripts/common.py', 'scripts/maintain.py', 'scripts/miku.sh', 'bin/miku-linux-amd64', 'bin/miku-linux-arm64', 'bin/miku-export-linux-amd64', 'bin/miku-export-linux-arm64', 'CORE_ASSETS.json'} <= files.keys():
             raise RuntimeError('安装包缺少必要程序')
         for entry in entries:
-            name = entry.name.removeprefix('miku-fanout/')
+            name = entry.name.removeprefix(prefix)
             raw = archive.extractfile(entry).read()
             if name != 'BUILD.json' and hashlib.sha256(raw).hexdigest() != files[name]:
                 raise RuntimeError('文件 SHA256 校验失败：' + name)
@@ -132,7 +136,7 @@ def unpack(package, destination, version):
             with target.open('xb') as stream:
                 stream.write(raw)
             target.chmod(entry.mode)
-    return destination / 'miku-fanout'
+    return destination / bundle_root
 
 def main():
     parser = argparse.ArgumentParser(description='Miku Gate 正式版安装器')

@@ -8,6 +8,7 @@ import (
 
 // ExitInbound 是挂在某个出口上的一个 3x-ui 入站。
 type ExitInbound struct {
+	Stack    string `json:"stack"`
 	ID       int    `json:"id"`
 	Port     int    `json:"port"`
 	Remark   string `json:"remark"`
@@ -178,7 +179,8 @@ func (m *Manager) ExitsOf() ExitsView {
 			continue
 		}
 		row := ExitInbound{
-			ID: ib.ID, Port: ib.Port, Remark: ib.Remark,
+			Stack: ib.Stack,
+			ID:    ib.ID, Port: ib.Port, Remark: ib.Remark,
 			Protocol: ib.Protocol, Enable: ib.Enable, Tag: ib.Tag,
 		}
 		attached := map[int]bool{}

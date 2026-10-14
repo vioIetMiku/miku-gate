@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
+	"syscall"
 )
 
 // 随机端口的取值范围，落在 IANA 动态端口区间内，避开常见服务。
@@ -31,10 +33,15 @@ func freeRandomPort(taken map[int]bool) (int, error) {
 
 // portAvailable 通过尝试监听来判断端口是否真的空闲。
 func portAvailable(port int) bool {
-	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
-	if err != nil {
-		return false
+	for _, family := range []struct{ network, host string }{{"tcp4", "0.0.0.0"}, {"tcp6", "::"}} {
+		ln, err := net.Listen(family.network, net.JoinHostPort(family.host, fmt.Sprint(port)))
+		if err != nil {
+			if family.network == "tcp6" && (errors.Is(err, syscall.EAFNOSUPPORT) || errors.Is(err, syscall.EPROTONOSUPPORT) || errors.Is(err, syscall.EADDRNOTAVAIL)) {
+				continue
+			}
+			return false
+		}
+		ln.Close()
 	}
-	ln.Close()
 	return true
 }

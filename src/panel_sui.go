@@ -301,7 +301,7 @@ func (s *SUIPanel) Inbounds(live map[string]bool) ([]Inbound, error) {
 	values := []Inbound{}
 	for _, raw := range suiObjects(snapshot["inbounds"]) {
 		ib := s.native(snapshot, raw)
-		values = append(values, Inbound{ID: ib.ID, Port: ib.Port, Protocol: ib.Protocol, Remark: ib.Remark, Enable: ib.Enable, Tag: suiString(raw["tag"]), BoundTo: ib.BoundTo, BoundUp: live[ib.BoundTo]})
+		values = append(values, Inbound{Stack: ib.protocolStack(), ID: ib.ID, Port: ib.Port, Protocol: ib.Protocol, Remark: ib.Remark, Enable: ib.Enable, Tag: suiString(raw["tag"]), BoundTo: ib.BoundTo, BoundUp: live[ib.BoundTo]})
 	}
 	return values, nil
 }

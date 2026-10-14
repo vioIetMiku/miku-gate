@@ -12,7 +12,7 @@ import time
 import common as c
 
 UNIT=b'''[Unit]
-Description=Miku - fanout VPN Gate gateway
+Description=Miku Gate connection service
 After=network-online.target
 Wants=network-online.target
 [Service]
@@ -28,7 +28,7 @@ WantedBy=multi-user.target
 '''
 OPENRC=b'''#!/sbin/openrc-run
 name="miku"
-description="Miku - fanout VPN Gate gateway"
+description="Miku Gate connection service"
 command="/usr/local/lib/miku/miku"
 command_args="-dir /var/lib/miku"
 command_background=true
@@ -101,15 +101,15 @@ def migrate(module,state):
     print('旧版配套备份：'+record['backup']['file']+'\n恢复旧版：miku rollback')
     return record
 
-def _install(directory,update=False):
+def _install(directory,update=False,reinstall=False):
     c.root();directory,meta=c.verify_distribution(directory);architecture=c.arch()
     c.require(c.systemd() or shutil.which('rc-service',path=c.ENV['PATH']),'需要systemd或OpenRC')
-    old_module,old=c.old_maintenance()
+    old_module,old=(None,None) if reinstall else c.old_maintenance()
     previous=c.installed() if (c.DATA/'install.json').exists() else None
     if previous:
         c.require(hashlib.sha256(c.trusted(c.LIB/'miku',0o755)).hexdigest()==previous['binary_sha256'],'已安装程序摘要变化')
     else:
-        c.require(not c.UNIT.exists() and not Path('/etc/init.d/miku').exists(),'已有同名服务，无法自动接管')
+        c.require(not c.UNIT.exists() and not c.OPENRC.exists(),'已有同名服务，无法自动接管')
         c.require(old is not None or not c.MENU.exists(),'已有其他miku快捷命令')
         c.require(not c.LIB.exists(),'已有未登记程序目录，停止覆盖')
         if c.DATA.exists():c.require(set(p.name for p in c.DATA.iterdir())<={'.maintenance.lock'},'已有未登记数据，请先完成 miku rollback 或恢复')
@@ -141,8 +141,14 @@ def _install(directory,update=False):
             print('检测到旧版Miku，先备份并迁移可用入口、落地与凭据。',flush=True)
             record=migrate(old_module,old)
         else:
-            value={'port':c.choose_port(int(os.environ.get('WEB_PORT','8899'))),'listen_addr':'','public_ip':c.public_ip(),'residential_only':False}
+            preferred=os.environ.get('WEB_PORT')
+            value={'port':c.choose_port(int(preferred) if preferred else None),'listen_addr':'','public_ip':c.public_ip(),'residential_only':False}
             c.write_json(c.DATA/'settings.json',value)
+        value=c.settings();old_port=value['port']
+        value['port']=c.choose_port(old_port)
+        if value['port']!=old_port:
+            c.write_json(c.DATA/'settings.json',value)
+            print('原管理端口不可用或与现有面板预留端口重合，已改用空闲端口 '+str(value['port'])+'。')
         for source,name,mode in [('bin/miku-linux-'+architecture,'miku',0o755),('scripts/common.py','common.py',0o644),('scripts/maintain.py','maintain.py',0o644),('scripts/install.py','install.py',0o644),('CORE_ASSETS.json','CORE_ASSETS.json',0o600),('LICENSE','LICENSE',0o644)]:
             c.atomic(c.LIB/name,c.trusted(directory/source),mode)
         c.atomic(c.MENU,c.trusted(directory/'scripts/miku.sh'),0o755)
@@ -153,7 +159,7 @@ def _install(directory,update=False):
         c.write_json(c.DATA/'install.json',state)
         if c.systemd():
             c.atomic(c.UNIT,UNIT,0o644);c.run(['systemctl','daemon-reload']);c.run(['systemctl','enable','miku.service'])
-        else:c.atomic(Path('/etc/init.d/miku'),OPENRC,0o755);c.run(['rc-update','add','miku','default'])
+        else:c.atomic(c.OPENRC,OPENRC,0o755);c.run(['rc-update','add','miku','default'])
         if previous and previous.get('version')=='0.2.0-dev.24':
             value=c.settings();value['residential_only']=False;c.write_json(c.DATA/'settings.json',value)
         c.service('start');c.wait_ready()
@@ -168,18 +174,33 @@ def _install(directory,update=False):
             receipt=record or (json.loads(c.trusted(c.DATA/'legacy-switch.json',0o600)) if (c.DATA/'legacy-switch.json').exists() else None)
             if receipt:restore_old(old_module,receipt);print('切换失败，旧版配套数据和服务已恢复。',file=sys.stderr)
         raise
-    print('\n安装完成：Miku '+meta['version']);c.info()
+    print('\n安装完成：Miku Gate '+meta['version']);c.info()
+    print('完整卸载并清除本服务数据：miku purge')
     if not previous and not old and os.isatty(0):
         if input('\n有自己的域名吗？[y/N]（以后也可 miku domain）：').strip().lower() in ('y','yes'):
             os.execv(sys.executable,[sys.executable,'-B',str(c.LIB/'maintain.py'),'domain'])
 
 def main():
-    parser=argparse.ArgumentParser(description='Miku fanout版VPS安装');parser.add_argument('--directory',type=Path,default=Path(__file__).resolve().parents[1]);parser.add_argument('--update',action='store_true');args=parser.parse_args()
-    install(args.directory,args.update)
+    parser=argparse.ArgumentParser(description='Miku Gate VPS安装');parser.add_argument('--directory',type=Path,default=Path(__file__).resolve().parents[1]);parser.add_argument('--update',action='store_true');parser.add_argument('--reinstall',action='store_true',help='卸载此 Miku Gate 并清除数据，然后重新安装');args=parser.parse_args()
+    c.require(not (args.update and args.reinstall),'--update 与 --reinstall 不能同时使用')
+    install(args.directory,args.update,args.reinstall)
 
-def install(directory,update=False):
+def install(directory,update=False,reinstall=False):
     c.root()
-    with c.maintenance_lock():_install(directory,update)
+    # Validate the incoming bundle before offering to remove anything.
+    directory,_=c.verify_distribution(directory);c.banner()
+    with c.maintenance_lock():
+        existing=any(p.exists() or p.is_symlink() for p in (c.DATA,c.LIB,c.MENU,c.UNIT,c.OPENRC))
+        if existing and not update and not reinstall and os.isatty(0):
+            print('检测到已有 Miku Gate 或安装残留。\n1 保留配置和节点，更新安装（默认）\n2 清除本服务数据后重新安装\n0 取消')
+            choice=input('选择 [1]：').strip() or '1'
+            c.require(choice in ('0','1','2'),'请选择 0、1 或 2')
+            if choice=='0':return
+            reinstall=choice=='2'
+        if reinstall:c.purge_current()
+        elif existing and not (c.DATA/'install.json').exists() and c.DATA.exists() and any(p.name!='.maintenance.lock' for p in c.DATA.iterdir()):
+            raise RuntimeError('发现未登记的旧数据；确认不再需要后，运行 bash install.sh --reinstall 清除并重新安装')
+        _install(directory,update,reinstall)
 
 if __name__=='__main__':
     try:main()

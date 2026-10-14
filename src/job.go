@@ -16,27 +16,35 @@ type JobStep struct {
 
 // Job 是一次批量开出口的作业。
 type Job struct {
-	mu      sync.Mutex
-	id      string
-	summary string
-	status  string
-	steps   []*JobStep
-	started time.Time
-	ended   time.Time
+	mu        sync.Mutex
+	id        string
+	summary   string
+	status    string
+	steps     []*JobStep
+	started   time.Time
+	ended     time.Time
+	resultURL string
 }
 
 // JobView 是 Job 的只读快照，用于返回给界面。
 type JobView struct {
-	ID      string    `json:"id"`
-	Summary string    `json:"summary"`
-	Status  string    `json:"status"` // running | done | failed
-	Steps   []JobStep `json:"steps"`
-	Started time.Time `json:"started"`
-	Done    int       `json:"done"`
-	Total   int       `json:"total"`
+	ResultURL string    `json:"result_url,omitempty"`
+	ID        string    `json:"id"`
+	Summary   string    `json:"summary"`
+	Status    string    `json:"status"` // running | done | failed
+	Steps     []JobStep `json:"steps"`
+	Started   time.Time `json:"started"`
+	Done      int       `json:"done"`
+	Total     int       `json:"total"`
 }
 
 func (j *Job) ID() string { return j.id }
+
+func (j *Job) SetResultURL(url string) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.resultURL = url
+}
 
 // Set 更新某一步的状态。
 func (j *Job) Set(i int, status, detail string) {
@@ -67,7 +75,8 @@ func (j *Job) View() JobView {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	v := JobView{
-		ID: j.id, Summary: j.summary, Status: j.status,
+		ResultURL: j.resultURL,
+		ID:        j.id, Summary: j.summary, Status: j.status,
 		Started: j.started, Total: len(j.steps),
 		Steps: make([]JobStep, 0, len(j.steps)),
 	}

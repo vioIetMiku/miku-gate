@@ -1,17 +1,17 @@
-# Miku · fanout 版
+# Miku Gate
 
-直接基于 byJoey/fanout 的单页节点搭建工具。版本：0.2.0-dev.34。
+单页节点与出口管理工具。版本：0.2.0-dev.35。
 
 ## 安装
 
-把 `miku-fanout-vps-dev34.tar.gz` 上传到 VPS，然后运行：
+把 `miku-fanout-vps-dev35.tar.gz` 上传到 VPS，然后运行：
 
 ```bash
-sudo tar --no-same-owner -xzf miku-fanout-vps-dev34.tar.gz
+sudo tar --no-same-owner -xzf miku-fanout-vps-dev35.tar.gz
 sudo bash miku-fanout/install.sh
 ```
 
-如果下载的是 `miku-fanout-dev34.zip`，解压后进入其中的 `miku-fanout` 目录，运行 `sudo bash install.sh` 即可，已包含两种架构的程序。
+如果下载的是 `miku-fanout-dev35.zip`，解压后进入其中的 `miku-fanout` 目录，运行 `sudo bash install.sh` 即可，已包含两种架构的程序。
 
 支持 amd64 / arm64 的 Linux VPS，支持 systemd / OpenRC；VPS 必须提供 TUN。
 安装器先检测并补齐 Python、OpenVPN、curl、OpenSSL、iptables、iproute 和 CA。
@@ -22,6 +22,18 @@ sudo bash miku-fanout/install.sh
 无域名默认 `http://VPS_IP:端口/随机路径/`；有域名可在安装结束时选择绑定，也可之后运行 `miku domain`。
 新域名先设置 A 记录指向 VPS；自动签证书需要能访问 80 端口，也支持复用 Certbot 的已有证书。
 域名可更换或用 `none` 解绑。REALITY 使用自己的握手目标，不需要管理域名证书。
+
+## 本次更新
+
+- 已有安装可保留升级，也可选择清除后重新安装。兼容旧版 root 所有、755 权限的数据目录。
+- 新安装自动选取空闲管理端口，同时检查 IPv4 / IPv6，避开 8899 和已识别面板端口。更新时修复被占用的原端口；安装完成显示实际地址。
+- 安装和快捷菜单显示 Miku Gate 动态字样，非交互终端显示静态版本。
+- `miku purge` 完整删除本服务程序、配置、节点、凭据与备份；不会删除 3x-ui 或共享证书。重新安装也可运行 `sudo bash install.sh --reinstall`。清除前请将需要的备份复制到本服务目录之外。
+- 域名绑定自动复用匹配的有效证书，包括 3x-ui 的已配置证书。80 端口被网站占用时可填写网站根目录，通过 Webroot 验证；也可明确选择只绑定 HTTP 管理域名。独立签发仍需可用的 80 端口。
+- 绑定后持续显示可复制、可打开的完整登录地址。异步签发会先显示待启用地址，任务失败时不会标记成功。
+- 入口显示实际协议、传输、安全层与已启用的 Vision；混合客户端标注 Vision 可选。
+- Go 源码、测试与内嵌图片统一收纳到 `src/`，编译入口为 `go build ./src`，测试为 `go test ./...`。
+- 保留日间 / 夜间主题、双列展示、30 秒延迟采样和近 10 分钟超过 3 次自动重连的温和提醒。
 
 ## 怎么搭节点
 
@@ -44,7 +56,7 @@ miku info            # 管理地址和当前口令
 miku password        # 忘记密码时直接修改，无需旧口令
 miku domain          # 随时绑定 / 更换 / 解绑域名
 miku repair          # 自动补依赖和核心，重启服务
-miku port            # 修改管理端口
+miku port            # 修改管理端口；留空自动选择
 miku start
 miku stop
 miku restart
@@ -53,6 +65,7 @@ miku backup
 miku update /绝对路径/新版安装包.tar.gz
 miku rollback        # 仅从旧 Miku 切换的安装：恢复配套旧版快照
 miku uninstall       # 停止、取消自启，保留程序和数据
+miku purge           # 完整卸载并清除本服务数据（等同 miku uninstall --purge）
 ```
 
 改密码、核心、域名等操作可能重启入口与 VPN；客户端会重新连接。
@@ -81,7 +94,7 @@ python3 scripts/build-release.py
 
 来源、变更与第三方说明见 PROVENANCE.md；原项目说明见 README.fanout.md；MIT 许可和 byJoey 作者署名保留在 LICENSE。
 
-## 当前功能（dev34）
+## 当前功能（dev35）
 
 - 登录页和工作台加入 Miku 插画、青绿色主题与移动布局，移除交流群、油管和博客入口；原 MIT 许可与项目署名保留。
 - 默认包括全部 VPN Gate 节点。合并官方 API、Worker CSV 镜像、HTTPS CSV 快照、自定义 CSV，以及七天滚动池；移除无效的无 www API 地址，不再把网页镜像误当成 CSV API。滚动池固定提交并验证目录、配置文件和解码配置的 SHA256。镜像记录或 TCP 检查不能证明 VPN 在本机可用。
@@ -130,7 +143,7 @@ python3 scripts/build-release.py
 
 类型判断思路参考 [AimiliVPN vpn_utils.py](https://github.com/OpenMili/aimili-vpngate/blob/main/vpn_utils.py)，字段依照 [IP-API 文档](https://ip-api.com/docs/api:json)和 [ipapi.is 文档](https://ipapi.is/developers.html)实现。住宅分类是本项目的展示规则，不代表来源对家庭宽带属性的认证。
 
-升级时用新版安装包运行 `sudo bash miku-fanout/install.sh`，或执行 `sudo miku update /绝对路径/miku-fanout-vps-dev34.tar.gz`。安装器沿用现有配置。已有重复自动入口在出口恢复、重连或“修复入口”时对账停用，保留选中入口的端口及凭据。
+升级时用新版安装包运行 `sudo bash miku-fanout/install.sh`，或执行 `sudo miku update /绝对路径/miku-fanout-vps-dev35.tar.gz`。安装器沿用现有配置。已有重复自动入口在出口恢复、重连或“修复入口”时对账停用，保留选中入口的端口及凭据。
 
 VPS 新安装及升级时自动补齐 `ping` 依赖（Debian / Ubuntu 为 `iputils-ping`，其他支持系统为 `iputils`）。服务端不响应 ICMP 时自动尝试备用测量；全部方式暂不可用会显示“暂未测得”，稍后重试。
 
@@ -162,7 +175,7 @@ VPS 新安装及升级时自动补齐 `ping` 依赖（Debian / Ubuntu 为 `iputi
 
 验证覆盖第 3 / 4 次阈值、十分钟窗口边界、历史恢复、重复健康结果、手动重连排除、每出口独立统计、前后台 / 刷新限频，以及提示在两种展示模式中的位置与过期处理。
 
-## dev34 白天 / 夜间模式
+## dev35 白天 / 夜间模式
 
 - 工作台右上角和登录页提供太阳 / 月亮切换按钮。点击“白天模式”使用浅灰底、白色卡片、深色文字和青绿色主色；按钮显示“夜间模式”时可切回原深色主题。
 - 选择在当前浏览器中记忆，刷新、重新登录后自动恢复，同源标签页同步。首次访问默认夜间；浏览器禁止本地存储时仍可在当前页面切换。主题在页面绘制前初始化，减少主题闪烁。

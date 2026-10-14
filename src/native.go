@@ -111,7 +111,8 @@ func (n *Native) Inbounds(live map[string]bool) ([]Inbound, error) {
 	out := make([]Inbound, 0, len(list))
 	for _, ib := range list {
 		out = append(out, Inbound{
-			ID: ib.ID, Port: ib.Port, Protocol: ib.Protocol,
+			Stack: ib.protocolStack(),
+			ID:    ib.ID, Port: ib.Port, Protocol: ib.Protocol,
 			Remark: ib.Remark, Enable: ib.Enable, Tag: ib.tag(),
 			BoundTo: ib.BoundTo, BoundUp: live[ib.BoundTo],
 		})
@@ -129,7 +130,8 @@ func (n *Native) InboundDetail(id int, publicHost string) (*InboundDetail, error
 	}
 	detail := &InboundDetail{
 		Inbound: Inbound{
-			ID: ib.ID, Port: ib.Port, Protocol: ib.Protocol,
+			Stack: ib.protocolStack(),
+			ID:    ib.ID, Port: ib.Port, Protocol: ib.Protocol,
 			Remark: ib.Remark, Enable: ib.Enable, Tag: ib.tag(),
 			BoundTo: ib.BoundTo,
 		},

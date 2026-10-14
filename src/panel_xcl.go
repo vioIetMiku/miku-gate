@@ -154,6 +154,7 @@ func (x *XCL) Inbounds(live map[string]bool) ([]Inbound, error) {
 		proto, _ := m["protocol"].(string)
 		port := jsonInt(m["port"])
 		out = append(out, Inbound{
+			Stack:    inboundStackJSON(proto, json.RawMessage(mustJSON(m["streamSettings"])), json.RawMessage(mustJSON(m["settings"]))),
 			ID:       port, // xray-cf-lite 没有数值 ID，用端口做稳定标识
 			Port:     port,
 			Protocol: proto,

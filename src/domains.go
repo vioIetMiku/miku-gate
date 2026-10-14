@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -180,6 +181,11 @@ func (d *DomainRegistry) catalogLocked() []CertificateChoice {
 			}
 		}
 	}
+	// Reuse the panel's configured certificate without changing its files,
+	// listener or renewal configuration.
+	if cert, key := xuiCertificatePaths(); cert != "" && key != "" {
+		add(cert, key, "3x-ui 管理证书")
+	}
 	sort.Slice(choices, func(i, j int) bool { return choices[i].Source < choices[j].Source })
 	return choices
 }
@@ -334,6 +340,45 @@ type domainRequest struct {
 	CertificateID string `json:"certificate_id"`
 	Email         string `json:"email"`
 	Management    bool   `json:"management"`
+	Webroot       string `json:"webroot"`
+}
+
+func xuiCertificatePaths() (string, string) {
+	const binary = "/usr/local/x-ui/x-ui"
+	if _, err := os.Stat(binary); err != nil {
+		return "", ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	raw, err := exec.CommandContext(ctx, binary, "setting", "-getCert").Output()
+	if err != nil {
+		return "", ""
+	}
+	text := reANSI.ReplaceAllString(string(raw), "")
+	cert := reXUICert.FindStringSubmatch(text)
+	key := regexp.MustCompile(`(?m)^key:[^\S\r\n]*(\S+)`).FindStringSubmatch(text)
+	if len(cert) == 2 && len(key) == 2 {
+		return cert[1], key[1]
+	}
+	return "", ""
+}
+
+func certificateCommandArgs(input domainRequest) ([]string, error) {
+	mode := []string{"--standalone"}
+	if input.Webroot != "" {
+		root := filepath.Clean(input.Webroot)
+		resolved, err := filepath.EvalSymlinks(root)
+		if err != nil || !filepath.IsAbs(root) || root == "/" || resolved != root {
+			return nil, fmt.Errorf("请填写实际存在的网站根目录，不能使用根目录或符号链接")
+		}
+		info, err := os.Stat(root)
+		if err != nil || !info.IsDir() {
+			return nil, fmt.Errorf("网站根目录不存在")
+		}
+		mode = []string{"--webroot", "-w", root}
+	}
+	args := append([]string{"certonly"}, mode...)
+	return append(args, "--preferred-challenges", "http", "--non-interactive", "--agree-tos", "--email", input.Email, "--cert-name", input.Domain, "-d", input.Domain), nil
 }
 
 func (d *DomainRegistry) Handler() http.HandlerFunc {
@@ -376,9 +421,12 @@ func (d *DomainRegistry) Handler() http.HandlerFunc {
 			writeJSON(w, 400, map[string]string{"error": "请填写有效域名，不带协议、端口或路径"})
 			return
 		}
-		if input.Action == "unbind" {
+		if input.Action == "unbind" || input.Action == "bind-http" {
 			next := getWebSettings()
 			next.PublicHost = next.PublicIP
+			if input.Action == "bind-http" {
+				next.PublicHost = input.Domain
+			}
 			next.TLSCert = ""
 			next.TLSKey = ""
 			next.CertificateDomain = ""
@@ -386,7 +434,7 @@ func (d *DomainRegistry) Handler() http.HandlerFunc {
 				writeJSON(w, 400, map[string]string{"error": err.Error()})
 				return
 			}
-			writeJSON(w, 200, map[string]string{"url": next.origin(next.PublicIP) + currentBasePath() + "/"})
+			writeJSON(w, 200, map[string]any{"url": next.origin(next.PublicHost) + currentBasePath() + "/", "management": true})
 			return
 		}
 		if input.Action == "remove" {
@@ -411,9 +459,23 @@ func (d *DomainRegistry) Handler() http.HandlerFunc {
 			writeJSON(w, 200, map[string]string{"ok": "已从绑定列表移除；已有入口和证书保留"})
 			return
 		}
+		// A matching, unexpired certificate avoids ACME and port 80 entirely.
+		if input.Action == "issue" {
+			for _, choice := range d.Catalog() {
+				if !choice.SelfSigned && certificateSupports(choice, input.Domain) {
+					input.Action, input.CertificateID = "bind", choice.ID
+					break
+				}
+			}
+		}
 		if input.Action == "issue" {
 			if !strings.Contains(input.Email, "@") || strings.ContainsAny(input.Email, "\r\n\x00") || len(input.Email) > 254 {
 				writeJSON(w, 400, map[string]string{"error": "申请证书需要有效联系邮箱"})
+				return
+			}
+			args, err := certificateCommandArgs(input)
+			if err != nil {
+				writeJSON(w, 400, map[string]string{"error": err.Error()})
 				return
 			}
 			d.mu.Lock()
@@ -426,11 +488,11 @@ func (d *DomainRegistry) Handler() http.HandlerFunc {
 				writeJSON(w, 409, map[string]string{"error": "已有证书签发任务，请等待完成"})
 				return
 			}
-			if !portAvailable(80) {
+			if input.Webroot == "" && !portAvailable(80) {
 				d.mu.Lock()
 				d.issuing = false
 				d.mu.Unlock()
-				writeJSON(w, 400, map[string]string{"error": "80端口已占用，无法使用独立模式签发；请在现有站点签发后选择证书"})
+				writeJSON(w, 400, map[string]string{"error": "80端口正由其他服务使用。可选择已有证书，填写现有网站根目录验证，或选择仅绑定HTTP管理域名；无需停止其他面板。"})
 				return
 			}
 			job := d.manager.jobs.New("绑定域名 "+input.Domain, []string{"申请证书", "保存域名", "启用管理域名"})
@@ -449,7 +511,7 @@ func (d *DomainRegistry) Handler() http.HandlerFunc {
 				}
 				ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 				defer cancel()
-				cmd := exec.CommandContext(ctx, "certbot", "certonly", "--standalone", "--preferred-challenges", "http", "--non-interactive", "--agree-tos", "--email", input.Email, "--cert-name", input.Domain, "-d", input.Domain)
+				cmd := exec.CommandContext(ctx, "certbot", args...)
 				if err := cmdRun(cmd); err != nil {
 					job.Set(0, "failed", "签发失败；请检查DNS、80端口及certbot日志")
 					return
@@ -471,12 +533,20 @@ func (d *DomainRegistry) Handler() http.HandlerFunc {
 						job.Set(2, "failed", err.Error())
 						return
 					}
-					job.Set(2, "ok", getWebSettings().origin(entry.Domain)+currentBasePath()+"/")
+					url := getWebSettings().origin(entry.Domain) + currentBasePath() + "/"
+					job.SetResultURL(url)
+					job.Set(2, "ok", "管理域名已启用，请打开新的登录地址")
 				} else {
 					job.Set(2, "ok", "域名可用于TLS入口，管理地址保留")
 				}
 			}()
-			writeJSON(w, 202, map[string]string{"job": job.ID()})
+			result := map[string]string{"job": job.ID()}
+			if input.Management {
+				next := getWebSettings()
+				next.PublicHost = input.Domain
+				result["next_url"] = "https://" + net.JoinHostPort(input.Domain, fmt.Sprint(next.Port)) + currentBasePath() + "/"
+			}
+			writeJSON(w, 202, result)
 			return
 		}
 		if input.Action != "bind" {

@@ -350,6 +350,7 @@ func (x *XUI) saveXray(setting map[string]any, testURL string) error {
 
 // Inbound 是面板里已有的一个入站。
 type Inbound struct {
+	Stack    string `json:"stack"`
 	ID       int    `json:"id"`
 	Port     int    `json:"port"`
 	Protocol string `json:"protocol"`
@@ -374,6 +375,7 @@ func (x *XUI) Inbounds(live map[string]bool) ([]Inbound, error) {
 		Enable   bool            `json:"enable"`
 		Tag      string          `json:"tag"`
 		Stream   json.RawMessage `json:"streamSettings"`
+		Settings json.RawMessage `json:"settings"`
 	}
 	if err := json.Unmarshal(obj, &raw); err != nil {
 		return nil, fmt.Errorf("解析入站列表失败: %w", err)
@@ -392,7 +394,8 @@ func (x *XUI) Inbounds(live map[string]bool) ([]Inbound, error) {
 		// a routing rule that can never match the running Xray inbound.
 		tag := resolvedInboundTag(r.Tag, r.Port, r.Stream)
 		out = append(out, Inbound{
-			ID: r.ID, Port: r.Port, Protocol: r.Protocol,
+			Stack: inboundStackJSON(r.Protocol, r.Stream, r.Settings),
+			ID:    r.ID, Port: r.Port, Protocol: r.Protocol,
 			Remark: r.Remark, Enable: r.Enable,
 			Tag: tag, BoundTo: bound[tag], BoundUp: live[bound[tag]],
 		})

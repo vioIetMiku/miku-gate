@@ -12,6 +12,7 @@ import ssl
 import sys
 import tarfile
 import tempfile
+from datetime import datetime,timezone
 import common as c
 
 def restart():c.service('restart');c.wait_ready()
@@ -29,7 +30,7 @@ def password():
     print('口令已修改，原登录会话已失效。');c.info()
 
 def port():
-    value=c.settings();requested=int(input('新的管理端口（当前 '+str(value['port'])+'）：').strip())
+    value=c.settings();answer=input('新的管理端口（当前 '+str(value['port'])+'，留空自动选择）：').strip();requested=int(answer) if answer else c.choose_port()
     if requested==value['port']:return c.info()
     c.require(1024<=requested<=65535 and c.port_available(requested),'端口不合法或已被占用')
     with c.maintenance_lock():
@@ -38,24 +39,57 @@ def port():
         except BaseException:c.atomic(c.DATA/'settings.json',old);c.service('restart');raise
     c.info()
 
-def certificate_pair(domain,issue=True):
-    root=Path('/etc/letsencrypt/live')/domain
-    if not (root/'fullchain.pem').exists() or not (root/'privkey.pem').exists():
-        c.require(issue,'未找到原签发证书')
-        c.require(c.port_available(80),'申请证书需要80端口；已有服务占用时请先提供已签发证书')
-        import socket
-        addresses={v[4][0] for v in socket.getaddrinfo(domain,80,socket.AF_INET,socket.SOCK_STREAM)}
-        c.require(c.settings().get('public_ip') in addresses,'域名A记录尚未指向VPS公网IP，请解析后再运行 miku domain')
-        if not shutil.which('certbot',path=c.ENV['PATH']):c.packages(['certbot'])
-        email=input('证书联系邮箱：').strip();c.require(re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email),'邮箱格式无效')
-        c.run(['certbot','certonly','--standalone','--preferred-challenges','http','--non-interactive','--agree-tos','--email',email,'--cert-name',domain,'-d',domain],timeout=240)
-    cert=(root/'fullchain.pem').resolve(strict=True);key=(root/'privkey.pem').resolve(strict=True)
-    expected=Path('/etc/letsencrypt/archive')/domain
-    c.require(cert.parent==expected and key.parent==expected,'证书来源路径异常')
-    cert_raw=c.trusted(cert,max_bytes=128<<10);key_raw=c.trusted(key,max_bytes=128<<10)
+def certificate_sources(domain):
+    pairs=[(Path('/etc/letsencrypt/live')/domain/'fullchain.pem',Path('/etc/letsencrypt/live')/domain/'privkey.pem')]
+    for root in Path('/root/.acme.sh').glob('*'):
+        if root.is_dir():pairs.append((root/'fullchain.cer',root/(root.name.removesuffix('_ecc')+'.key')))
+    value=c.settings()
+    if value.get('tls_cert') and value.get('tls_key'):pairs.append((Path(value['tls_cert']),Path(value['tls_key'])))
+    for name,field in (('domains.json',None),('native.json','inbounds')):
+        path=c.DATA/name
+        if not path.exists():continue
+        packet=json.loads(c.trusted(path,max_bytes=4<<20));items=packet.get(field,[]) if field else packet
+        for item in items:
+            tls=item.get('tls',{}) if field else item
+            if tls.get('cert_file') and tls.get('key_file'):pairs.append((Path(tls['cert_file']),Path(tls['key_file'])))
+    binary=Path('/usr/local/x-ui/x-ui')
+    if binary.is_file() and os.access(binary,os.X_OK):
+        result=c.run([binary,'setting','-getCert'],timeout=8,checked=False)
+        text=re.sub(r'\x1b\[[0-9;]*m','',result.stdout.decode(errors='replace'))
+        cert=re.search(r'(?m)^cert:[^\S\r\n]*(\S+)',text);key=re.search(r'(?m)^key:[^\S\r\n]*(\S+)',text)
+        if cert and key:pairs.append((Path(cert[1]),Path(key[1])))
+    return pairs
+
+def checked_certificate(cert,key,domain,min_valid_seconds=86400):
+    cert=cert.resolve(strict=True);key=key.resolve(strict=True)
+    cert_raw=c.trusted(cert,max_bytes=256<<10);key_raw=c.trusted(key,max_bytes=256<<10)
+    c.require(not key.stat().st_mode&0o077,'证书私钥需要私有权限600')
     context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(cert,key)
-    c.run(['openssl','x509','-in',cert,'-noout','-checkhost',domain]);c.run(['openssl','x509','-in',cert,'-noout','-checkend','86400'])
+    result=c.run(['openssl','x509','-in',cert,'-noout','-checkhost',domain])
+    # x509 -checkhost can exit 0 even for a mismatch; inspect its result.
+    c.require(b'does match certificate' in result.stdout,'证书不匹配域名：'+domain)
+    c.run(['openssl','x509','-in',cert,'-noout','-checkend',str(min_valid_seconds)])
     return cert_raw,key_raw
+
+def certificate_pair(domain,issue=True,allow_http=False):
+    for cert,key in certificate_sources(domain):
+        try:return (*checked_certificate(cert,key,domain),str(cert),str(key))
+        except (OSError,RuntimeError,ssl.SSLError):continue
+    c.require(issue,'未找到匹配且有效的证书')
+    mode=['--standalone']
+    if not c.port_available(80):
+        print('80 端口正由其他服务使用。\n1 使用现有网站目录验证并签发 HTTPS 证书\n2 仅绑定 HTTP 管理域名\n0 取消')
+        choice=input('选择：').strip()
+        if choice=='2' and allow_http:return None
+        c.require(choice=='1','已取消；也可在原面板签发证书后重新运行 miku domain 自动复用')
+        root=Path(input('现有网站根目录（需能访问 /.well-known/acme-challenge/）：').strip())
+        c.require(root.is_absolute() and root!=Path('/') and root.is_dir(),'请填写有效网站根目录')
+        mode=['--webroot','-w',str(root.resolve(strict=True))]
+    if not shutil.which('certbot',path=c.ENV['PATH']):c.packages(['certbot'])
+    email=input('证书联系邮箱：').strip();c.require(re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email),'邮箱格式无效')
+    c.run(['certbot','certonly',*mode,'--preferred-challenges','http','--non-interactive','--agree-tos','--email',email,'--cert-name',domain,'-d',domain],timeout=240)
+    root=Path('/etc/letsencrypt/live')/domain
+    return (*checked_certificate(root/'fullchain.pem',root/'privkey.pem',domain),str(root/'fullchain.pem'),str(root/'privkey.pem'))
 
 def refresh_native_tls(old_host,new_host,old_cert,new_cert,new_key):
     path=c.DATA/'native.json'
@@ -85,24 +119,32 @@ def domain():
     host=input('域名（留空取消，输入 none 解绑回HTTP+IP）：').strip().lower().rstrip('.')
     if not host:return
     c.require(host=='none' or c.valid_domain(host),'请只填域名，不带https://或端口')
-    pair=certificate_pair(host) if host!='none' else None
+    pair=certificate_pair(host,allow_http=True) if host!='none' else None
     with c.maintenance_lock():
         backup=c.snapshot('before-domain');was_active=c.active()
         try:
             if was_active:c.service('stop')
-            if host=='none':value['public_host']=value.get('public_ip','');value.pop('tls_cert',None);value.pop('tls_key',None);value.pop('certificate_domain',None)
+            if not pair:value['public_host']=value.get('public_ip','') if host=='none' else host;value.pop('tls_cert',None);value.pop('tls_key',None);value.pop('certificate_domain',None)
             else:
-                c.private_dir(c.DATA/'management');cert=c.DATA/'management/certificate.pem';key=c.DATA/'management/private.key'
+                directory=c.private_dir(c.DATA/'certificates'/host);cert=directory/'certificate.pem';key=directory/'private.key'
                 c.atomic(cert,pair[0]);c.atomic(key,pair[1]);refresh_native_tls(old_host,host,value.get('tls_cert',''),str(cert),str(key))
+                registry=c.DATA/'domains.json';entries=json.loads(c.trusted(registry,0o600,1<<20)) if registry.exists() else []
+                c.require(isinstance(entries,list),'域名登记异常')
+                previous=next((entry for entry in entries if entry.get('domain')==host),{})
+                source_cert,source_key=pair[2:4]
+                if Path(source_cert)==cert and Path(source_key)==key:source_cert=previous.get('source_cert','');source_key=previous.get('source_key','')
+                entry={'domain':host,'cert_file':str(cert),'key_file':str(key),'source_cert':source_cert,'source_key':source_key,'added':datetime.now(timezone.utc).isoformat().replace('+00:00','Z')}
+                entries=[e for e in entries if e.get('domain')!=host]+[entry];c.write_json(registry,entries)
                 value.update(public_host=host,tls_cert=str(cert),tls_key=str(key),certificate_domain=host)
-            c.write_json(c.DATA/'settings.json',value);c.service('start');c.wait_ready();certificate_timer(host!='none')
+            registry=c.DATA/'domains.json';has_domains=registry.exists() and bool(json.loads(c.trusted(registry,0o600,1<<20)))
+            c.write_json(c.DATA/'settings.json',value);c.service('start');c.wait_ready();certificate_timer(bool(pair) or has_domains)
         except BaseException:
             if c.active():c.service('stop')
             from install import restore_new
             restore_new(backup)
             if was_active:c.service('start')
             raise
-    print('域名设置已生效；请在网页重新复制节点/订阅。');c.info()
+    print('域名设置已生效。\n新的管理登录地址：'+c.login_url(value)+'\n请使用新地址登录；需要时重新复制节点/订阅。');c.info()
     if not c.systemd() and host!='none':print('OpenRC：定期运行 miku certificate-refresh 更新证书。')
 
 def certificate_refresh():
@@ -119,9 +161,7 @@ def certificate_refresh():
         if not source_cert or not source_key:continue
         if str(source_cert).startswith('/etc/letsencrypt/live/') and shutil.which('certbot',path=c.ENV['PATH']):c.run(['certbot','renew','--cert-name',domain,'--quiet'],timeout=240)
         source_cert=Path(source_cert).resolve(strict=True);source_key=Path(source_key).resolve(strict=True)
-        cert_raw=c.trusted(source_cert,max_bytes=256<<10);key_raw=c.trusted(source_key,max_bytes=256<<10)
-        context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(source_cert,source_key)
-        c.run(['openssl','x509','-in',source_cert,'-noout','-checkhost',domain]);c.run(['openssl','x509','-in',source_cert,'-noout','-checkend','3600'])
+        cert_raw,key_raw=checked_certificate(source_cert,source_key,domain,min_valid_seconds=3600)
         if cert_raw!=c.trusted(cert,0o600) or key_raw!=c.trusted(key,0o600):changed.append((cert,key,cert_raw,key_raw))
     host=value.get('certificate_domain')
     if host and value.get('tls_cert') and not any(str(cert)==value['tls_cert'] for cert,_,_,_ in changed):
@@ -150,7 +190,12 @@ def certificate_prepare():
 
 
 def repair():
-    with c.maintenance_lock():c.dependencies();c.ensure_cores();restart()
+    with c.maintenance_lock():
+        c.dependencies();c.ensure_cores()
+        was_active=c.active()
+        if was_active:c.service('stop')
+        value=c.settings();value['port']=c.choose_port(value['port']);c.write_json(c.DATA/'settings.json',value)
+        restart()
     print('依赖和服务已修复。');c.info()
 
 def backup():
@@ -204,17 +249,26 @@ def uninstall():
         else:c.run(['rc-update','del','miku','default'])
     print('已停止并取消开机启动；数据、程序和备份保留。重新启动：miku start\n备份：'+str(target))
 
+def purge():
+    with c.maintenance_lock():c.purge_current()
+
+def menu_purge():
+    print('将删除 Miku Gate 的配置、节点、凭据、程序和本服务备份。')
+    if input('输入 DELETE 确认清除：').strip()=='DELETE':purge()
+
 def menu():
-    print('\nMiku '+c.installed()['version']+' · 基于 byJoey/fanout\n1 管理地址 / 查看口令\n2 修改口令\n3 域名：绑定 / 更换 / 解绑\n4 修复依赖（含OpenVPN）\n5 启动\n6 停止\n7 重启\n8 日志\n9 修改管理端口\n10 备份\n11 恢复切换前旧版\n12 停止并取消自启（保留数据）\n0 退出')
+    c.banner()
+    print('Miku Gate '+c.installed()['version']+'\n1 管理地址 / 查看口令\n2 修改口令\n3 域名：绑定 / 更换 / 解绑\n4 修复依赖与端口（含OpenVPN）\n5 启动\n6 停止\n7 重启\n8 日志\n9 修改管理端口 / 自动选择\n10 备份\n11 恢复切换前旧版\n12 停止并取消自启（保留数据）\n13 完整卸载并清除数据\n0 退出')
     choice=input('选择：').strip()
-    commands={'1':c.info,'2':password,'3':domain,'4':repair,'5':lambda:(c.service('start'),c.wait_ready(),c.info()),'6':lambda:c.service('stop'),'7':restart,'8':logs,'9':port,'10':backup,'11':rollback,'12':uninstall}
+    commands={'1':c.info,'2':password,'3':domain,'4':repair,'5':lambda:(c.service('start'),c.wait_ready(),c.info()),'6':lambda:c.service('stop'),'7':restart,'8':logs,'9':port,'10':backup,'11':rollback,'12':uninstall,'13':menu_purge}
     if choice in commands:commands[choice]()
 
 def main():
     c.root();args=sys.argv[1:];command=args[0] if args else 'menu'
-    commands={'menu':menu,'info':c.info,'status':lambda:print('运行中' if c.active() else '已停止'),'password':password,'passwd':password,'domain':domain,'port':port,'repair':repair,'backup':backup,'rollback':rollback,'logs':logs,'certificate-refresh':certificate_refresh,'certificate-prepare':certificate_prepare,'certificate-automation':certificate_timer,'start':lambda:(c.service('start'),c.wait_ready(),c.info()),'stop':lambda:c.service('stop'),'restart':restart,'uninstall':uninstall}
+    commands={'menu':menu,'info':c.info,'status':lambda:print('运行中' if c.active() else '已停止'),'password':password,'passwd':password,'domain':domain,'port':port,'repair':repair,'backup':backup,'rollback':rollback,'logs':logs,'certificate-refresh':certificate_refresh,'certificate-prepare':certificate_prepare,'certificate-automation':certificate_timer,'start':lambda:(c.service('start'),c.wait_ready(),c.info()),'stop':lambda:c.service('stop'),'restart':restart,'uninstall':uninstall,'purge':purge}
+    if args==['uninstall','--purge']:return purge()
     if command=='update':c.require(len(args)==2,'用法：miku update /绝对路径/新版安装包.tar.gz');return update(args[1])
-    c.require(command in commands and len(args)<=1,'可用命令：miku [info|password|domain|repair|start|stop|restart|logs|port|backup|rollback|update 安装包|uninstall]');commands[command]()
+    c.require(command in commands and len(args)<=1,'可用命令：miku [info|password|domain|repair|start|stop|restart|logs|port|backup|rollback|update 安装包|uninstall|purge]');commands[command]()
 
 if __name__=='__main__':
     try:main()

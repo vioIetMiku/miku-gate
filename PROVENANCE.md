@@ -45,3 +45,10 @@ dev34 独立实现白天 / 夜间主题、浏览器偏好保存与跨标签页�
 新增 install-online.sh 从 GitHub 正式 Release 下载，经外部 SHA256 清单及内部 BUILD.json 校验后安全解包并调用现有安装器。支持私有仓库 Contents 读取令牌；跨主机重定向剥离 Authorization，实际安装子进程不继承令牌。应用及兼容导出程序均从源码重建 amd64 / arm64 版本。
 
 正式构建首次回归发现测试以普通账号执行 netns 操作失败，两个状态恢复测试直接修改后台工作器使用的 Status 字段，触发 race detector。CI 改为编译后以 root 运行测试，状态恢复读取与启动回调分离，夹具使用无副作用回调；生产入口仍异步启动原恢复逻辑，不修改应用功能。
+
+## v0.2.1 / dev35
+
+将 Go 源码、测试和内嵌素材移到 src/，改进旧安装兼容、完整卸载、IPv4 / IPv6 端口检查、实际入口协议展示和域名登录地址反馈。证书 Webroot 验证遵循 Certbot 官方说明：https://eff-certbot.readthedocs.io/en/stable/using.html#webroot 。保留原上游许可证与来源记录。
+
+
+正式版对外统一为 Miku Gate，源码位于 src/，Release 附件与包内根目录均使用 miku-gate。保留 miku 命令、服务名、现有数据路径及内部 miku-fanout 清单标识，确保兼容 v0.2.0 安装。继续从源码重新构建双架构二进制，保留正式发布校验和上游 MIT 署名。

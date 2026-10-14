@@ -135,10 +135,10 @@ label.f>span{display:block;color:var(--dim);font-size:11px;margin-bottom:6px}
 .stepper{display:flex;align-items:center;gap:0;width:fit-content;
   border:1px solid var(--line);border-radius:4px;overflow:hidden;background:#0e1116}
 .stepper button{border:0;border-radius:0;background:transparent;padding:5px 11px}
-select,input[type=search],input[type=text]{font:inherit;background:#0e1116;
+select,input:not([type]),input[type=email],input[type=url],input[type=search],input[type=text]{font:inherit;background:#0e1116;
   border:1px solid var(--line);color:var(--text);border-radius:4px;
   padding:5px 8px;width:100%}
-select:focus,input[type=search]:focus,input[type=text]:focus{outline:none;border-color:var(--accent)}
+select:focus,input:not([type]):focus,input[type=email]:focus,input[type=url]:focus,input[type=search]:focus,input[type=text]:focus{outline:none;border-color:var(--accent)}
 .stepper input[type=text]{width:56px;text-align:center;font:inherit;background:transparent;
   border:0;border-left:1px solid var(--line);border-right:1px solid var(--line);
   color:var(--text);padding:5px 0;font-variant-numeric:tabular-nums}
@@ -204,6 +204,7 @@ button,input,select,textarea{border-radius:8px}button{padding:7px 12px}h2,.bar h
 .ip-summary{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:8px 14px 12px;border-top:1px solid rgba(40,64,71,.4);color:var(--dim);font-size:12px}.ip-summary strong{color:var(--accent)}.ip-summary button{margin-left:auto;font-size:11px;padding:3px 8px}.ipbadge{background:rgba(57,197,187,.08);border:1px solid rgba(57,197,187,.18);padding:2px 8px;border-radius:6px}
 .exit-number{font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}.exit-location{font-weight:600;font-size:12px;color:var(--text);max-width:260px;overflow-wrap:anywhere}.exit-proxies{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 14px 12px}.exit-proxies button,.exit-proxies a{font-size:11px;padding:5px 9px}.exit-proxies a{color:var(--accent);text-decoration:none;margin-left:auto}.ip-summary .ip-label{color:var(--dim)}#setSources{min-height:88px;height:100px;max-height:220px;resize:vertical}.f input[type=password]{width:100%;background:#0e1116;color:var(--text);border:1px solid var(--line);padding:10px;font:inherit}.ip-details-link{display:inline-block;color:var(--accent);margin-top:12px}
 .source-list{font-size:11px;margin:12px 0}.source-list>div{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}.source-list span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.source-list b{font-weight:400;color:var(--dim);white-space:nowrap}.source-list button{flex:none;width:30px;padding:3px 5px}#nimport{min-height:90px;max-height:240px;resize:vertical}summary{cursor:pointer;color:var(--dim)}
+.domain-result{border:1px solid var(--accent);border-radius:12px;padding:16px;margin:12px 0;background:rgba(57,197,187,.08)}.domain-login-link{display:grid;gap:9px;margin-top:10px}.domain-login-link a{color:var(--accent);overflow-wrap:anywhere;line-height:1.6}.domain-login-link button{justify-self:start}.chip .entry-stack{display:block;font-weight:700;white-space:normal;line-height:1.45}.chip small{display:block;font-size:11px;opacity:.78;margin-top:4px}.chips .chip{max-width:240px;text-align:left;display:grid;gap:2px;padding:7px 10px}.orow>.chip{max-width:100%;text-align:left;display:grid;gap:2px;padding:7px 10px}.node-card-protocol{white-space:normal;overflow-wrap:anywhere}
 .domain-card{border:1px solid var(--line);border-radius:10px;padding:13px;margin:10px 0}.domain-card strong{color:var(--accent)}.domain-card small{display:block;color:var(--dim);margin:4px 0}.domain-card .domain-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.domain-current{padding:12px;background:rgba(57,197,187,.07);border-radius:10px;overflow-wrap:anywhere}.kv dd{overflow-wrap:anywhere}
 @media(max-width:760px){header{padding:9px 12px;gap:8px;flex-wrap:wrap}header #panel{display:none}header .links{display:none}.brand-name h1{font-size:16px}.brand-avatar{width:36px;height:40px}.miku-welcome{padding:20px;min-height:125px}.miku-welcome h2{font-size:19px}.miku-welcome img{right:-50px;height:260px;opacity:.45}.miku-welcome>div{max-width:90%}main{padding:12px}.bar{flex-wrap:wrap}.sheet{max-height:92vh}.ip-summary{font-size:11px}}
 ` + showcaseCSS + workspaceCSS + appearanceCSS + `
@@ -535,7 +536,7 @@ button,input,select,textarea{border-radius:8px}button{padding:7px 12px}h2,.bar h
 </div>
 
 
-<div class="modal" id="domainbox"><div class="sheet"><div class="head"><h2>域名与证书</h2><span class="spacer"></span><button class="icon" data-close="domainbox">关闭</button></div><div class="body"><div class="domain-current" id="domainCurrent"></div><div id="domainList"></div><label class="f"><span>绑定域名</span><input id="domainName" placeholder="node.example.com" autocomplete="off"></label><label class="f"><span>已有证书</span><select id="domainCert"><option value="">申请新的证书</option></select></label><label class="f" id="domainEmailWrap"><span>联系邮箱（签发证书时使用）</span><input id="domainEmail" type="email" placeholder="you@example.com"></label><label class="chk"><input id="domainManagement" type="checkbox"> 同时设为管理域名，启用HTTPS</label><div class="hint">可以绑定多个域名供TLS入口选择。申请证书前先解析到VPS并放行80端口；已有证书可直接复用。</div><div class="hint" id="domainHint"></div></div><div class="foot"><button id="domainUnbind">管理地址解绑回IP</button><button id="domainRefresh">重新扫描证书</button><span class="spacer"></span><button class="primary" id="domainSubmit">绑定域名</button></div></div></div>
+<div class="modal" id="domainbox"><div class="sheet"><div class="head"><h2>域名与证书</h2><span class="spacer"></span><button class="icon" data-close="domainbox">关闭</button></div><div class="body"><div class="domain-current" id="domainCurrent"></div><div class="domain-result" id="domainResult" role="status" aria-live="polite" hidden></div><div id="domainList"></div><label class="f"><span>绑定域名</span><input id="domainName" placeholder="node.example.com" autocomplete="off"></label><label class="f"><span>绑定方式 / 已有证书</span><select id="domainCert"><option value="">申请新的证书</option></select></label><label class="f" id="domainEmailWrap"><span>联系邮箱（签发证书时使用）</span><input id="domainEmail" type="email" placeholder="you@example.com"></label><label class="f" id="domainWebrootWrap"><span>现有网站根目录（可选）</span><input id="domainWebroot" placeholder="/var/www/html"><small class="hint">80 端口被网站使用时，通过该目录验证；需允许访问 /.well-known/acme-challenge/。</small></label><label class="chk"><input id="domainManagement" type="checkbox" checked> 同时更新管理登录地址</label><div class="hint">优先复用匹配的有效证书。申请 HTTPS 证书需先解析到 VPS 并放行 80 端口；仅绑定 HTTP 域名无需签发证书。取消勾选时，仅保存供 TLS 入口使用。</div><div class="hint" id="domainHint"></div></div><div class="foot"><button id="domainUnbind">管理地址解绑回IP</button><button id="domainRefresh">重新扫描证书</button><span class="spacer"></span><button class="primary" id="domainSubmit">绑定域名</button></div></div></div>
 <div class="modal" id="ipbox"><div class="sheet"><div class="head"><h2>IP / ASN 信息</h2><span class="spacer"></span><button class="icon" data-close="ipbox">关闭</button></div><div class="body"><div class="setrow"><label class="f"><span>公网IP</span><input id="ipAddress" placeholder="IPv4 / IPv6 地址"></label><button class="primary" id="ipLookup">查询</button></div><div id="ipDetails" class="domain-card">输入IP，或点击出口上的“查看IP”。</div><div class="hint">显示来源、时间、网络类型、判断依据与置信程度。结合机房 / 移动标记和运营商信息分类；检测失败会自动重试。</div></div></div></div>
 <div class="toast" id="toast"></div>
 
@@ -614,6 +615,9 @@ const STATUS = {up:'已连通', starting:'连接中', failed:'失败', stopped:'
 
 ` + latencyJS + showcaseJS + `
 
+function entranceLabel(i){ return i.stack || String(i.protocol || "入口").toUpperCase(); }
+function entranceChip(i){ return '<span class="entry-stack">'+esc(entranceLabel(i))+'</span><small>#'+i.id+' · :'+i.port+'</small>'; }
+
 function renderExits(){
   setShowcaseMode();
   const list = $('#list');
@@ -635,8 +639,8 @@ function renderExits(){
     const label = e.exit_ip || (e.status === 'starting' ? '连接中…' : '—');
     const chips = enabledEntrances(e).length
       ? enabledEntrances(e).map(i => '<button class="chip" data-detail="' + i.id + '" title="'
-          + esc((i.remark || i.protocol) + ' · ' + i.protocol + ' :' + i.port) + '">'
-          + esc(i.protocol) + ' :' + i.port + '</button>').join('')
+          + esc((i.remark || '入口 #'+i.id) + ' · ' + entranceLabel(i) + ' :' + i.port) + '">'
+          + entranceChip(i) + '</button>').join('')
       : (e.needs_node ? '<button class="chip none" data-repair="'+e.slot+'" title="补建或修复此出口入口">'+(e.entry_error ? '修复入口' : '入口准备中')+'</button>' : '<button class="chip" data-cred="'+e.slot+'">SOCKS5 / HTTP</button>');
     const error = e.entry_error || e.err;
     const err = error && (e.status === 'failed' || e.entry_error)
@@ -683,8 +687,8 @@ function renderOrphans(){
     + list.map(i =>
         '<div class="orow">'
         + '<button class="chip" data-detail="' + i.id + '" title="'
-        +   esc((i.remark || i.protocol) + ' · ' + i.protocol + ' :' + i.port) + '">'
-        +   esc(i.remark || i.protocol) + ' :' + i.port + '</button>'
+        +   esc((i.remark || '入口 #'+i.id) + ' · ' + entranceLabel(i) + ' :' + i.port) + '">'
+        +   entranceChip(i) + '</button>'
         + '<span class="spacer"></span>'
         + (hasUp
             ? '<select class="obind" data-tag="' + esc(i.tag) + '">' + exitOptions('') + '</select>'
@@ -698,6 +702,7 @@ function renderOrphans(){
 }
 
 function renderJobs(jobs){
+  syncDomainJob(jobs);
   const box = $('#jobs');
   box.innerHTML = jobs.map(j => {
     const steps = j.steps.map(s => {
@@ -711,7 +716,7 @@ function renderJobs(jobs){
     return '<div class="job"><div class="top"><strong>' + esc(j.summary) + '</strong>'
       + '<span class="count">' + j.done + '/' + j.total + '</span>'
       + '<span class="spacer"></span>' + close + '</div>'
-      + '<div class="steps">' + steps + '</div></div>';
+      + '<div class="steps">' + steps + '</div>' + (j.result_url ? domainLink(j.result_url,'新的管理登录地址') : '') + '</div>';
   }).join('');
 }
 
@@ -823,7 +828,7 @@ async function loadWizard(){
       return;
     }
     const opt = i => '<option value="' + i.id + '">'
-      + esc(i.remark || ('端口 ' + i.port)) + ' · ' + esc(i.protocol)
+      + esc(i.remark || ('入口 #' + i.id)) + ' · ' + esc(entranceLabel(i))
       + ' :' + i.port + '</option>';
     sel.innerHTML =
       (free.length ? '<optgroup label="未绑定出口">' + free.map(opt).join('') + '</optgroup>' : '')
@@ -1531,9 +1536,24 @@ if($('#setIPKey').value.trim()) body.ip_info_key = $('#setIPKey').value.trim();
   e.target.disabled = false;
 };
 
-let domainData = {certificates:[], registered:[]};
+let domainData = {certificates:[], registered:[]}, domainPending = null;
+function domainLink(url,label){
+  if(!/^https?:\/\//.test(url || '')) return '';
+  return '<div class="domain-login-link"><strong>'+esc(label)+'</strong><a target="_blank" rel="noopener noreferrer" href="'+esc(url)+'">'+esc(url)+'</a><button type="button" data-copy-domain="'+esc(url)+'">复制登录地址</button></div>';
+}
+function showDomainResult(url,label,note){
+  const box=$('#domainResult');box.hidden=false;box.innerHTML=domainLink(url,label)+'<p class="hint">'+esc(note || '')+'</p>';
+}
+function syncDomainJob(jobs){
+  if(!domainPending) return;
+  const job=jobs.find(j=>j.id===domainPending.id);
+  if(!job) return;
+  if(job.result_url){showDomainResult(job.result_url,'新的管理登录地址','绑定已完成，请打开新地址登录。');domainPending=null;}
+  else if(job.status==='failed'){const fail=job.steps.find(s=>s.status==='failed');$('#domainResult').hidden=true;$('#domainHint').textContent='绑定未完成：'+(fail ? fail.detail : '请检查签发任务');domainPending=null;}
+}
+document.addEventListener('click',async event=>{const button=event.target.closest('[data-copy-domain]');if(button){try{await copy(button.dataset.copyDomain);}catch(err){toast(err.message,true);}}});
 function certificateOptions(list, includeSpecial){
-  let result = includeSpecial ? '<option value="auto">自动选择当前管理域名的证书</option>' : '<option value="">申请新的证书</option>';
+  let result = includeSpecial ? '<option value="auto">自动选择当前管理域名的证书</option>' : '<option value="">自动复用证书 / 申请 HTTPS 证书</option><option value="__http__">仅绑定 HTTP 管理域名（不签发证书）</option>';
   (list || []).forEach(c => (c.domains || []).forEach(name => {
     result += '<option value="' + esc(c.id + '|' + name) + '">' + esc(name + ' · ' + c.source + (c.self_signed ? ' · 自签' : '')) + '</option>';
   }));
@@ -1574,22 +1594,24 @@ async function openDomains(){
       const c = (domainData.certificates || []).find(c => (c.domains || []).includes(d.domain));
       return '<div class="domain-card"><strong>' + esc(d.domain) + '</strong><small>' + (c ? '有效期至 ' + new Date(c.expires).toLocaleDateString() + (c.self_signed ? ' · 自签证书' : '') : '证书需检查') + '</small><div class="domain-actions"><button data-domain-use="' + esc(d.domain) + '" data-certificate="' + esc(c ? c.id : '') + '">设为管理域名</button><button data-domain-select="' + esc(d.domain) + '">用于新建TLS入口</button><button data-domain-remove="' + esc(d.domain) + '">移出列表</button></div></div>';
     }).join('') || '<div class="hint">还没有绑定记录。已有Certbot、acme.sh、管理或入口证书会自动列出。</div>';
-    $('#domainEmailWrap').hidden = !!$('#domainCert').value;
+    syncDomainMethod();
     $('#domainHint').textContent = '';
   }catch(err){ $('#domainHint').textContent = err.message; }
 }
 $('#domainBtn').onclick = openDomains;
 $('#domainRefresh').onclick = openDomains;
-$('#domainCert').onchange = () => {
-  const selection = $('#domainCert').value.split('|');
-  $('#domainEmailWrap').hidden = !!selection[0];
-  if(selection.length > 1 && !selection[1].includes('*')) $('#domainName').value = selection[1];
-};
+function syncDomainMethod(){
+  const selection=$('#domainCert').value.split('|'),http=selection[0]==='__http__';
+  $('#domainEmailWrap').hidden=!!selection[0];$('#domainWebrootWrap').hidden=!!selection[0];
+  $('#domainManagement').disabled=http;if(http) $('#domainManagement').checked=true;
+  if(selection.length>1 && !selection[1].includes('*')) $('#domainName').value=selection[1];
+}
+$('#domainCert').onchange=syncDomainMethod;
 async function domainAction(body){
   const result = await api('/api/domains',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(result.job){ $('#domainHint').textContent = '签发任务已开始，进度显示在主页面。完成后刷新域名列表；设为管理域名时请打开新的HTTPS地址。';closeModal('domainbox');poll();return; }
-  if(body.management || body.action === 'unbind'){
-    $('#domainHint').innerHTML = '管理地址已更新：<a href="' + esc(result.url) + '">' + esc(result.url) + '</a>。新域名需要重新登录。';
+  if(result.job){domainPending={id:result.job,url:result.next_url};$('#domainHint').textContent='证书签发进行中，可在任务区查看进度。';if(result.next_url) showDomainResult(result.next_url,'签发成功后的登录地址','此地址将在签发成功后启用。启用 HTTPS 后当前页面可能断开，请稍后打开上方地址登录。');poll();return;}
+  if(result.management || body.action === 'unbind'){
+    $('#domainHint').textContent='绑定已生效，请使用新地址登录。';showDomainResult(result.url,'新的管理登录地址','已包含实际管理端口和完整登录路径。');$('#domainCurrent').textContent='当前管理地址：'+result.url;
     toast('管理地址已更新，请打开新地址');
   }else{ toast('域名已保存');await openDomains(); }
   loadNodeCertificates();
@@ -1597,7 +1619,7 @@ async function domainAction(body){
 $('#domainSubmit').onclick = async event => {
   const selection = $('#domainCert').value.split('|');
   event.target.disabled=true;
-  try{ await domainAction({action:selection[0] ? 'bind' : 'issue',domain:$('#domainName').value.trim(),certificate_id:selection[0],email:$('#domainEmail').value.trim(),management:$('#domainManagement').checked}); }
+  try{ await domainAction({action:selection[0]==='__http__' ? 'bind-http' : selection[0] ? 'bind' : 'issue',domain:$('#domainName').value.trim(),certificate_id:selection[0]==='__http__' ? '' : selection[0],email:$('#domainEmail').value.trim(),webroot:$('#domainWebroot').value.trim(),management:$('#domainManagement').checked}); }
   catch(err){ $('#domainHint').textContent=err.message; }
   finally{event.target.disabled=false;}
 };

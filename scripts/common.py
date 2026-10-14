@@ -14,6 +14,7 @@ import socket
 import ssl
 import stat
 import subprocess
+import sys
 import tarfile
 import tempfile
 import time
@@ -24,6 +25,7 @@ DATA=Path('/var/lib/miku')
 LIB=Path('/usr/local/lib/miku')
 UNIT=Path('/etc/systemd/system/miku.service')
 MENU=Path('/usr/local/bin/miku')
+OPENRC=Path('/etc/init.d/miku')
 ENV={**os.environ,'PATH':'/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/sbin:/usr/local/bin','GOTELEMETRY':'off','DEBIAN_FRONTEND':'noninteractive'}
 SERVICE='miku'
 
@@ -50,7 +52,10 @@ def trusted(path,mode=None,max_bytes=160<<20):
 def private_dir(path):
     path=Path(path)
     if not path.exists():path.mkdir(mode=0o700,parents=True)
-    info=path.lstat();require(path.resolve(strict=True)==path and stat.S_ISDIR(info.st_mode) and info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700,'私有目录异常：'+str(path))
+    info=path.lstat();require(path.resolve(strict=True)==path and stat.S_ISDIR(info.st_mode) and info.st_uid==0 and not info.st_mode&0o022,'私有目录异常：'+str(path)+'；可使用安装器的清除重装选项')
+    # Older releases created root-owned 755 data directories. Narrowing their
+    # permissions is safe and allows an ordinary in-place upgrade.
+    if stat.S_IMODE(info.st_mode)!=0o700:os.chmod(path,0o700)
     return path
 
 def program_dir():
@@ -143,26 +148,95 @@ def ensure_cores(old=None):
         else:print('准备官方 '+core,flush=True);core_download(core,architecture)
 
 def port_available(port):
-    with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as channel:
-        try:channel.bind(('0.0.0.0',port));return True
-        except OSError:return False
+    if not 1<=port<=65535:return False
+    for family,host in ((socket.AF_INET,'0.0.0.0'),(socket.AF_INET6,'::')):
+        try:
+            with socket.socket(family,socket.SOCK_STREAM) as channel:
+                if family==socket.AF_INET6:channel.setsockopt(socket.IPPROTO_IPV6,socket.IPV6_V6ONLY,1)
+                channel.bind((host,port))
+        except OSError as exc:
+            import errno
+            if family==socket.AF_INET6 and exc.errno in (errno.EAFNOSUPPORT,errno.EPROTONOSUPPORT,errno.EADDRNOTAVAIL):continue
+            return False
+    return True
 
-def choose_port(requested=8899):
-    require(1024<=requested<=65535,'管理端口需1024至65535')
-    for port in range(requested,min(requested+1000,65536)):
-        if port_available(port):return port
+def reserved_ports():
+    ports={8899}  # Widely used by existing 3x-ui panels.
+    binary=Path('/usr/local/x-ui/x-ui')
+    if binary.is_file() and os.access(binary,os.X_OK):
+        try:
+            result=run([binary,'setting','-show'],timeout=8,checked=False)
+            clean=re.sub(r'\x1b\[[0-9;]*m','',result.stdout.decode(errors='replace'))
+            ports.update(int(p) for p in re.findall(r'(?m)^port:[^\S\r\n]*(\d+)',clean))
+        except (OSError,RuntimeError,subprocess.TimeoutExpired):pass
+    for path,field in ((DATA/'native.json','inbounds'),(DATA/'xray.json','inbounds'),(DATA/'state.json','tunnels'),(Path('/usr/local/x-ui/bin/config.json'),'inbounds')):
+        if not path.exists():continue
+        try:
+            value=json.loads(trusted(path,max_bytes=8<<20))
+            ports.update(int(i['port']) for i in value.get(field,[]) if str(i.get('port','')).isdigit())
+        except (ValueError,KeyError,RuntimeError):pass
+    return ports
+
+def choose_port(requested=None):
+    import secrets
+    reserved=reserved_ports()
+    if requested is not None:
+        require(1024<=requested<=65535,'管理端口需1024至65535')
+        if requested not in reserved and port_available(requested):return requested
+    start=secrets.randbelow(40000)+10000
+    for offset in range(50000):
+        port=10000+(start-10000+offset)%50000
+        if port not in reserved and port_available(port):return port
     raise RuntimeError('未找到空闲管理端口')
+
+def login_url(value=None):
+    return origin(value)+'/'+trusted(DATA/'basepath',0o600,1024).decode().strip().strip('/')+'/'
+
+def banner(animate=True):
+    lines=[r' __  __ _ _                ____       _       ',r'|  \/  (_) | ___   _      / ___| __ _| |_ ___ ',r'| |\/| | | |/ / | | |____| |  _ / _` | __/ _ \\',r'| |  | | |   <| |_| |____| |_| | (_| | ||  __/',r'|_|  |_|_|_|\_\\__,_|     \____|\__,_|\__\___|']
+    tty=sys.stdout.isatty() and os.environ.get('TERM','dumb')!='dumb' and not os.environ.get('NO_COLOR')
+    for line in lines:
+        print(('\033[96m' if tty else '')+line+('\033[0m' if tty else ''),flush=True)
+        if tty and animate:time.sleep(.045)
+    print('                    Miku Gate  /  你的连接，你的节奏\n')
+
+def purge_current():
+    """Remove only fixed Miku-owned destinations; callers hold the outer lock."""
+    destinations=[DATA,LIB,MENU,UNIT,OPENRC,UNIT.with_name('miku-certificate.service'),UNIT.with_name('miku-certificate.timer')]
+    for path in destinations:
+        if not path.exists() and not path.is_symlink():continue
+        info=path.lstat()
+        require(not path.is_symlink() and path.resolve()==path and info.st_uid==0,'拒绝清除归属或路径异常的文件：'+str(path))
+        if path.is_dir():
+            require(not os.path.ismount(path),'不能清除挂载点：'+str(path))
+            for child in path.rglob('*'):
+                require(child.lstat().st_uid==0 and not os.path.ismount(child),'目录中包含非本服务文件或挂载点：'+str(child))
+        elif path in (UNIT,OPENRC):require(str(LIB/'miku') in trusted(path).decode(errors='replace'),'同名服务不属于 Miku Gate')
+        elif path==MENU:require(str(LIB/'maintain.py') in trusted(path).decode(errors='replace'),'同名快捷命令不属于 Miku Gate')
+        elif path.name.startswith('miku-certificate.'):require(str(LIB/'maintain.py') in trusted(path).decode(errors='replace') or b'Unit=miku-certificate.service' in trusted(path) or b'Description=Daily Miku certificate renewal' in trusted(path),'同名定时服务不属于 Miku Gate')
+    if UNIT.exists() or OPENRC.exists():
+        if active():service('stop')
+        if systemd():run(['systemctl','disable','miku.service'],checked=False)
+        else:run(['rc-update','del','miku','default'],checked=False)
+    if systemd() and UNIT.with_name('miku-certificate.timer').exists():run(['systemctl','disable','--now','miku-certificate.timer'],checked=False)
+    if systemd() and UNIT.with_name('miku-certificate.service').exists():run(['systemctl','stop','miku-certificate.service'],checked=False)
+    for path in destinations:
+        if path.is_dir():shutil.rmtree(path)
+        elif path.exists():path.unlink()
+    if systemd():run(['systemctl','daemon-reload'])
+    print('Miku Gate 已卸载，配置、节点、凭据和本服务备份已清除，可重新运行安装命令。')
 
 def valid_domain(domain):
     return len(domain)<=253 and '.' in domain and all(re.fullmatch(r'[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?',label) for label in domain.split('.'))
 
 def origin(value=None):
     value=value or settings();host=value.get('public_host') or value.get('public_ip') or 'VPS_IP'
+    if ':' in host and not host.startswith('['):host='['+host+']'
     return ('https' if value.get('tls_cert') and value.get('tls_key') else 'http')+'://'+host+':'+str(value['port'])
 
 def info():
     value=settings();path=trusted(DATA/'basepath',0o600,1024).decode().strip();password=trusted(DATA/'password',0o600,1024).decode().strip()
-    print('管理地址：'+origin(value)+'/'+path.strip('/')+'/\n访问口令：'+password+'\n快捷菜单：miku\n修改口令：miku password\n域名设置：miku domain')
+    print('管理地址：'+origin(value)+'/'+path.strip('/')+'/\n访问口令：'+password+'\n快捷菜单：miku\n修改口令：miku password\n域名设置：miku domain\n卸载并清除数据：miku purge')
 
 def public_ip():
     for url in ('https://api.ipify.org','https://ipv4.icanhazip.com'):
@@ -192,7 +266,7 @@ def wait_ready(seconds=75):
             connection=LocalTLS(host,value['port'],context=context,timeout=3) if value.get('tls_cert') else http.client.HTTPConnection('127.0.0.1',value['port'],timeout=3)
             connection.request('GET','/'+path+'/',headers={'Host':host+':'+str(value['port'])})
             response=connection.getresponse();raw=response.read(1<<20)
-            if response.status==200 and b'<html' in raw.lower():return
+            if response.status==200 and response.getheader('X-Miku-Gate')=='1' and b'<html' in raw.lower():return
         except (OSError,ssl.SSLError,http.client.HTTPException):pass
         finally:
             if connection:connection.close()
@@ -202,8 +276,10 @@ def wait_ready(seconds=75):
 @contextlib.contextmanager
 def maintenance_lock():
     import fcntl
-    private_dir(DATA)
-    fd=os.open(DATA/'.maintenance.lock',os.O_RDWR|os.O_CREAT|os.O_CLOEXEC|os.O_NOFOLLOW,0o600)
+    # Outside DATA so even a purge/reinstall holds the same lock throughout.
+    parent=DATA.parent;parent.mkdir(mode=0o755,parents=True,exist_ok=True)
+    info=parent.lstat();require(parent.resolve()==parent and info.st_uid==0 and stat.S_ISDIR(info.st_mode) and not info.st_mode&0o022,'维护锁父目录异常')
+    fd=os.open(parent/('.'+DATA.name+'.maintenance.lock'),os.O_RDWR|os.O_CREAT|os.O_CLOEXEC|os.O_NOFOLLOW,0o600)
     try:
         info=os.fstat(fd);require(info.st_uid==0 and stat.S_ISREG(info.st_mode) and info.st_nlink==1,'维护锁异常')
         fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB);yield

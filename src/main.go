@@ -36,7 +36,7 @@ func main() {
 	}
 
 	if *showVersion {
-		fmt.Println("Miku", version)
+		fmt.Println("Miku Gate", version)
 		return
 	}
 
@@ -482,7 +482,7 @@ func apiSettings(auth *Auth, srv *webServer) http.HandlerFunc {
 
 // apiUpdateCheck 问 GitHub 最新 release，回报当前/最新版本与更新内容。
 func apiUpdateCheck(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, UpdateStatus{Current: version, Latest: version, HasUpdate: false, Notes: "此Miku版使用安装包更新：在VPS运行 miku update /路径/新版快速包.tar.gz，保留节点和口令。上游源码：byJoey/fanout。", URL: "https://github.com/byJoey/fanout"})
+	writeJSON(w, 200, UpdateStatus{Current: version, Latest: version, HasUpdate: false, Notes: "Miku Gate 使用安装包更新：在 VPS 运行 miku update /路径/新版安装包.tar.gz，保留节点和口令。", URL: "https://github.com/vioIetMiku/miku-gate"})
 }
 func apiUpdateApply(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 409, map[string]string{"error": "请在VPS运行 miku update /路径/新版快速包.tar.gz"})

@@ -8,7 +8,7 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
 
 ## 致谢 fanout
 
-特别感谢 **[byJoey/fanout](https://github.com/byJoey/fanout)**。Miku Gate 的当前单页版本直接基于该项目，保留按国家批量创建出口、网络命名空间隔离、自动重连及节点管理的基础能力，再加入 Miku 界面、自建核心、多格式订阅、快捷域名证书绑定、延迟测试、vpngate自定义源、ASN归属地检测展示、 ip属性展示、断线重连次数展示提醒与 VPS 维护流程。
+特别感谢 **[byJoey/fanout](https://github.com/byJoey/fanout)**。Miku Gate 的当前单页版本直接基于该项目，保留按国家批量创建出口、网络命名空间隔离、自动重连及节点管理的基础能力，再加入 Miku 界面、自建核心、多格式订阅、快捷域名证书绑定、延迟测试、vpngate自定义源、扩充ip数量、ASN归属地检测展示、 ip属性展示、断线重连次数展示提醒与 VPS 维护流程。
 
 原始基线提交为 `d7ce5224caf3469b19876982abdf8d1be16c4a8b`；原作者署名与 MIT 许可证完整保留。详见 [LICENSE](LICENSE)、[上游 README](README.fanout.md) 和 [源码来源](PROVENANCE.md)。
 

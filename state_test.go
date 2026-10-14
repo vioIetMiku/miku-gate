@@ -83,9 +83,8 @@ func TestRestoreStateReadsPrevHost(t *testing.T) {
 	}
 
 	m := NewManager(20, dir)
-	// 不让它真去拉隧道：restoreTunnel 会调 bringUpPersist，
-	// 这里只关心状态读没读对，所以读完立刻看字段。
-	n, err := m.restoreState()
+	// 使用不启动隧道的恢复回调，只验证持久化状态。
+	n, err := m.restoreStateWith(func(*Tunnel) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,8 +103,6 @@ func TestRestoreStateReadsPrevHost(t *testing.T) {
 	if got := tn.prevHostOf(); got != "vpn-old" {
 		t.Fatalf("没读回换节点标记，实际 %q", got)
 	}
-	// 收尾：别让后台的 bringUpPersist 继续折腾
-	tn.Status = "stopped"
 }
 
 // 老版本的状态文件里没有这个字段，读出来该是空的，不能误触发改绑。
@@ -116,7 +113,7 @@ func TestRestoreStateOldFormatHasNoPrevHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := NewManager(20, dir)
-	if _, err := m.restoreState(); err != nil {
+	if _, err := m.restoreStateWith(func(*Tunnel) {}); err != nil {
 		t.Fatal(err)
 	}
 	m.mu.RLock()
@@ -125,7 +122,6 @@ func TestRestoreStateOldFormatHasNoPrevHost(t *testing.T) {
 	if got := tn.prevHostOf(); got != "" {
 		t.Fatalf("老格式不该带标记，实际 %q", got)
 	}
-	tn.Status = "stopped"
 }
 
 func containsStr(s, sub string) bool {

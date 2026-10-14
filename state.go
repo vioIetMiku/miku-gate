@@ -86,6 +86,12 @@ func (m *Manager) saveState() error {
 // restoreState 读回上次的隧道并逐条拉起。
 // 节点配置一并存了盘，所以即使 VPN Gate 列表里该节点已消失也能重建。
 func (m *Manager) restoreState() (int, error) {
+	return m.restoreStateWith(func(t *Tunnel) { go m.restoreTunnel(t) })
+}
+
+// restoreStateWith separates persisted-state decoding from starting real tunnels.
+// Tests can verify old formats without creating privileged background workers.
+func (m *Manager) restoreStateWith(start func(*Tunnel)) (int, error) {
 	blob, err := os.ReadFile(statePath(m.workDir))
 	if os.IsNotExist(err) {
 		return 0, nil
@@ -159,7 +165,7 @@ func (m *Manager) restoreState() (int, error) {
 			m.nextOrder = t.Order
 		}
 		m.mu.Unlock()
-		go m.restoreTunnel(t)
+		start(t)
 	}
 	return len(st.Tunnels), nil
 }

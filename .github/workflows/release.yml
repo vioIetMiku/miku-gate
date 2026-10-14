@@ -37,7 +37,8 @@ jobs:
           python3 -m compileall -q scripts
       - name: Offline Go regression tests and vet
         run: |
-          go test -race -count=1 ./...
+          go test -race -c -o /tmp/miku-gate-tests .
+          sudo /tmp/miku-gate-tests -test.count=1 -test.timeout=5m
           go vet ./...
           (cd compat/miku-export && go test ./... && go vet ./...)
       - name: Offline installer regression tests

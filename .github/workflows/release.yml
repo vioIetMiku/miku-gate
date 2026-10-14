@@ -1,0 +1,92 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            compat/miku-export/go.sum
+      - name: Resolve stable version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(cat VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            [[ "${GITHUB_REF#refs/tags/}" == "v$version" ]]
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Check shell and Python syntax
+        run: |
+          for script in install.sh install-online.sh scripts/miku.sh; do bash -n "$script"; done
+          python3 -m compileall -q scripts
+      - name: Offline Go regression tests and vet
+        run: |
+          go test -race -count=1 ./...
+          go vet ./...
+          (cd compat/miku-export && go test ./... && go vet ./...)
+      - name: Offline installer regression tests
+        run: cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap
+      - name: Build both architectures from source
+        run: python3 scripts/build-release.py --version '${{ steps.version.outputs.version }}' --label 'v${{ steps.version.outputs.version }}' --output dist
+      - name: Verify release archives and embedded version
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c SHA256SUMS)
+          mkdir -m 700 smoke
+          tar --no-same-owner -xzf "dist/miku-gate-vps-v${{ steps.version.outputs.version }}.tar.gz" -C smoke
+          [[ "$(smoke/miku-fanout/bin/miku-linux-amd64 -version)" == 'Miku ${{ steps.version.outputs.version }}' ]]
+          python3 -m zipfile -t "dist/miku-gate-v${{ steps.version.outputs.version }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: miku-gate-release
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: miku-gate-release
+          path: dist
+      - name: Create draft, upload and verify attachments, then publish stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/}"
+          (cd dist && sha256sum -c SHA256SUMS)
+          if gh release view "$tag" --json isDraft --jq .isDraft > draft-state; then
+            [[ "$(cat draft-state)" == true ]] || { echo 'Refusing to overwrite a published release'; exit 1; }
+          else
+            gh release create "$tag" --verify-tag --draft --title "Miku Gate $tag" --notes-file scripts/release-notes.md
+          fi
+          gh release upload "$tag" dist/* --clobber
+          mkdir verify
+          gh release download "$tag" --dir verify --pattern '*'
+          (cd verify && sha256sum -c SHA256SUMS)
+          [[ "$(find verify -maxdepth 1 -type f | wc -l)" -eq 4 ]]
+          gh release edit "$tag" --draft=false --prerelease=false --latest --title "Miku Gate $tag" --notes-file scripts/release-notes.md

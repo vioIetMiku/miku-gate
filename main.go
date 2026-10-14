@@ -1,0 +1,966 @@
+package main
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+)
+
+// version 由构建时通过 -ldflags 注入。
+var version = "dev"
+
+func main() {
+	var (
+		webPort  = flag.Int("web", 8899, "Web 管理端口")
+		maxSlots = flag.Int("max", 0, "可选隧道数量限制；0不设置软件上限")
+		workDir  = flag.String("dir", "/var/lib/miku", "工作目录")
+	)
+	panelMode := flag.String("panel", "", "节点链接后端: 留空按界面设置/自动探测, 3x-ui, s-ui, native, sing-box, xray-cf-lite")
+	publicIP := flag.String("ip", "", "母机公网 IPv4，用于分享链接/SOCKS5 地址；留空则自动探测")
+	showVersion := flag.Bool("version", false, "显示版本后退出")
+	flag.Parse()
+
+	if *publicIP == "" {
+		*publicIP = os.Getenv("MIKU_PUBLIC_IP")
+		if *publicIP == "" {
+			*publicIP = os.Getenv("FANOUT_PUBLIC_IP")
+		}
+	}
+
+	if *showVersion {
+		fmt.Println("Miku", version)
+		return
+	}
+
+	if os.Geteuid() != 0 {
+		log.Fatal("需要 root 权限（要创建 netns 和改 iptables）")
+	}
+	if err := os.MkdirAll(*workDir, 0700); err != nil {
+		log.Fatalf("创建工作目录失败: %v", err)
+	}
+	portExplicit := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "web" {
+			portExplicit = true
+		}
+	})
+	webCfg, err := loadWebSettings(*workDir, *webPort, portExplicit)
+	if err != nil {
+		log.Fatalf("加载 Web 设置失败: %v", err)
+	}
+	if *publicIP == "" {
+		*publicIP = webCfg.PublicIP
+	}
+
+	// 先记下母机的网络命名空间，后面所有子进程都从这里起。
+	// 必须赶在建任何隧道之前，那之后线程就可能被带进隧道里了
+	if err := initMainNetns(); err != nil {
+		log.Fatal(err)
+	}
+
+	// 同一个工作目录只许跑一个实例：两份会共用 state.json 互相覆盖，隧道记录直接丢
+	unlock, err := lockWorkDir(*workDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer unlock()
+
+	// 定下这台机器上属于本实例的 netns 名与网段。默认目录沿用老名字，
+	// 换了目录就自动隔离，免得两个实例互相拆隧道（见 instance.go）
+	if err := initInstance(*workDir); err != nil {
+		log.Fatalf("初始化实例标识失败: %v", err)
+	}
+	if instTag != "" {
+		log.Printf("非默认工作目录，本实例用 netns fo%s* 与网段 10.%d.x", instTag, instBase)
+	}
+
+	setPublicIPOverride(*publicIP)
+	go hostPublicIP() // 预热探测，别让首个请求阻塞
+	if err := prepareHost(); err != nil {
+		log.Fatal(err)
+	}
+
+	configurePanel(*workDir, *panelMode)
+	if p, err := openPanel(); err != nil {
+		log.Printf("节点链接后端暂不可用（可在 Web 界面查看原因）: %v", err)
+	} else {
+		log.Printf("节点链接后端: %s", p.Describe())
+	}
+
+	mgr := NewManager(*maxSlots, *workDir)
+	mgr.inspector = newIPInspector(*workDir)
+	mgr.latencies = newLatencyInspector()
+	log.Printf("正在拉取节点列表...")
+	if n, err := mgr.RefreshNodes(); err != nil {
+		log.Printf("拉取失败（可在 Web 界面重试）: %v", err)
+	} else {
+		log.Printf("已获取 %d 个节点", n)
+	}
+
+	if n, err := mgr.restoreState(); err != nil {
+		log.Printf("恢复上次状态失败: %v", err)
+	} else if n > 0 {
+		log.Printf("正在恢复上次的 %d 条隧道", n)
+		// 3x-ui 模式重启不会自动重写面板出站，旧版本升上来时面板里的 socks
+		// 出站没有认证字段，端口一旦要认证就连不上，这里恢复后对账一次
+		go mgr.ReconcileOutbounds()
+	}
+	// Start saved native inbounds even when there are no persisted VPN tunnels.
+	if p, err := openPanel(); err == nil && p.Kind() != "3x-ui" {
+		if err := p.OnTunnelsChanged(mgr.Tunnels()); err != nil {
+			log.Printf("恢复入口配置失败: %v", err)
+		}
+	}
+
+	go mgr.WatchHealth()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-stop
+		log.Println("正在清理所有隧道...")
+		mgr.Shutdown()
+		closePanel()
+		unlock() // os.Exit 会绕过 defer，这里手动放锁
+		os.Exit(0)
+	}()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handleIndex)
+	mux.HandleFunc("/api/nodes", apiNodes(mgr))
+	mux.HandleFunc("/api/ipinfo", apiIPInfo(mgr.inspector))
+	mux.HandleFunc("/api/ping", apiBrowserPing)
+	mux.Handle("/assets/", brandAssets())
+	mux.HandleFunc("/api/tunnels", apiTunnels(mgr))
+	mux.HandleFunc("/api/start", apiStart(mgr))
+	mux.HandleFunc("/api/stop", apiStop(mgr))
+	mux.HandleFunc("/api/swap", apiSwap(mgr))
+	mux.HandleFunc("/api/cred", apiCred(mgr))
+	mux.HandleFunc("/api/refresh", apiRefresh(mgr))
+	mux.HandleFunc("/api/regions", apiRegions(mgr))
+	mux.HandleFunc("/api/provision", apiProvision(mgr))
+	mux.HandleFunc("/api/jobs", apiJobs(mgr))
+	mux.HandleFunc("/api/jobs/dismiss", apiJobDismiss(mgr))
+	mux.HandleFunc("/api/exits", apiExits(mgr))
+	mux.HandleFunc("/api/exits/links", apiExitLinks(mgr))
+	mux.HandleFunc("/api/xui", apiXUIStatus)
+	mux.HandleFunc("/api/xui/inbounds", apiXUIInbounds(mgr))
+	mux.HandleFunc("/api/xui/bind", apiXUIBind(mgr))
+	mux.HandleFunc("/api/xui/clone", apiXUIClone(mgr))
+	mux.HandleFunc("/api/xui/detail", apiXUIDetail)
+	mux.HandleFunc("/api/xui/links", apiXUILinks)
+	mux.HandleFunc("/api/xui/delete", apiXUIDelete(mgr))
+	mux.HandleFunc("/api/panel/inbound/new", apiInboundCreate(mgr))
+	mux.HandleFunc("/api/panel/inbound/update", apiInboundUpdate(mgr))
+	mux.HandleFunc("/api/panel/client/add", apiClientAdd(mgr))
+	mux.HandleFunc("/api/panel/client/del", apiClientDelete(mgr))
+	mux.HandleFunc("/api/panel/client/reset", apiClientReset(mgr))
+	mux.HandleFunc("/api/panel/client/bind", apiClientLanding(mgr))
+	mux.HandleFunc("/api/panel/mode", apiPanelMode(*workDir, mgr))
+	mux.HandleFunc("/api/sub", apiSub)
+	mux.HandleFunc("/api/nodes/import", apiImportedLinks(mgr))
+	mux.HandleFunc("/api/entry/repair", apiEntryRepair(mgr))
+	mux.HandleFunc("/api/sub/reset", apiSubReset)
+	// 订阅本体走免登录（见 auth.go 的放行），口令在 handleSub 里验
+	mux.HandleFunc("/sub", handleSub(mgr))
+
+	auth, created, err := NewAuth(*workDir)
+	if err != nil {
+		log.Fatalf("初始化访问口令失败: %v", err)
+	}
+	if created {
+		log.Printf("已生成访问口令，见 %s", filepath.Join(*workDir, "password"))
+	}
+
+	bpCreated, err := initBasePath(*workDir)
+	if err != nil {
+		log.Fatalf("初始化访问路径失败: %v", err)
+	}
+	if bpCreated {
+		log.Printf("已生成访问路径，见 %s", filepath.Join(*workDir, "basepath"))
+	}
+
+	srv := newWebServer(StripBasePath(auth.Wrap(mux)))
+	domains := newDomainRegistry(*workDir, srv, mgr)
+	mux.HandleFunc("/api/domains", domains.Handler())
+	certificateRegistry = domains
+	// 设置面板：改密码 / 改路径 / 改端口 / 改本地监听。
+	mux.HandleFunc("/api/settings", apiSettings(auth, srv))
+	mux.HandleFunc("/api/sources/add", apiSourceAdd(mgr))
+	mux.HandleFunc("/api/sources/order", apiSourceOrder(mgr))
+	mux.HandleFunc("/api/update/check", apiUpdateCheck)
+	mux.HandleFunc("/api/update/apply", apiUpdateApply)
+
+	log.Printf("管理界面: %s%s/", webCfg.origin(publishingHost()), currentBasePath())
+	log.Printf("SOCKS5 端口在 %d-%d 之间随机分配", randPortMin, randPortMax)
+	if err := srv.serve(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func writeJSON(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func apiNodes(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		nodes, fetched := m.Nodes()
+		total := len(nodes)
+		// 默认跟挑节点的口径一致：开了"只用家宽"就不列机房节点。
+		// 带 all=1 能看到完整列表，用来确认过滤掉了多少。
+		if residentialOnly() && r.URL.Query().Get("all") != "1" {
+			kept := make([]Node, 0, len(nodes))
+			for _, n := range nodes {
+				if n.Residential {
+					kept = append(kept, n)
+				}
+			}
+			nodes = kept
+		}
+		shown := len(nodes)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"nodes":            nodes,
+			"fetched":          fetched,
+			"total":            total,
+			"available":        shown,
+			"residential_only": residentialOnly(),
+		})
+	}
+}
+
+func apiTunnels(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, m.Tunnels())
+	}
+}
+
+func apiStart(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		host := r.URL.Query().Get("host")
+		if host == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "缺少 host 参数"})
+			return
+		}
+		nodes, _ := m.Nodes()
+		for _, n := range nodes {
+			if n.HostName == host {
+				t, err := m.Start(n)
+				if err != nil {
+					writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+					return
+				}
+				writeJSON(w, http.StatusOK, t)
+				return
+			}
+		}
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "节点不存在，可能列表已过期"})
+	}
+}
+
+func apiStop(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		slot, err := strconv.Atoi(r.URL.Query().Get("slot"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slot 参数无效"})
+			return
+		}
+		if err := m.Stop(slot); err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "已停止"})
+	}
+}
+
+func apiRefresh(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		n, err := m.RefreshNodes()
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]int{"count": n})
+	}
+}
+
+// apiSwap 就地把一个出口换到别的节点，端口不变。
+func apiSwap(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		slot, err := strconv.Atoi(r.URL.Query().Get("slot"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slot 参数无效"})
+			return
+		}
+		if err := m.Swap(slot); err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "正在换节点"})
+	}
+}
+
+// apiRegions 给新建向导用：各地区还剩多少空闲节点。
+func apiRegions(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, m.Regions())
+	}
+}
+
+// apiCred 改一个出口的 SOCKS5 用户名口令。两个参数都留空表示随机重置。
+func apiCred(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		slot, err := strconv.Atoi(q.Get("slot"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slot 参数无效"})
+			return
+		}
+		cred, err := m.SetCred(slot, SocksCred{
+			User: strings.TrimSpace(q.Get("user")),
+			Pass: strings.TrimSpace(q.Get("pass")),
+		})
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{
+			"user": cred.User,
+			"pass": cred.Pass,
+		})
+	}
+}
+
+// apiSettings 管理界面自身的设置：改密码 / 改路径 / 改端口 / 改本地监听。
+// GET 返回当前值（不含明文口令）；POST 按传入的字段逐项应用，任一项失败即整体回报。
+func apiSettings(auth *Auth, srv *webServer) http.HandlerFunc {
+	type settingsReq struct {
+		VPNGateSources     *[]string `json:"vpngate_sources"`
+		VPNGateSourceOrder *[]string `json:"vpngate_source_order"`
+		IPInfoKey          *string   `json:"ip_info_key"`
+		PublicHost         *string   `json:"public_host"`
+		Password           *string   `json:"password"`         // 非空则改口令
+		BasePath           *string   `json:"base_path"`        // 提供即改访问路径（空串=去掉前缀）
+		Port               *int      `json:"port"`             // 提供即改监听端口
+		ListenAddr         *string   `json:"listen_addr"`      // 提供即改监听地址
+		ResidentialOnly    *bool     `json:"residential_only"` // 提供即改"只用家宽"
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			var in settingsReq
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "请求格式错误"})
+				return
+			}
+			if in.PublicHost != nil {
+				host := strings.TrimSpace(*in.PublicHost)
+				if !validPublishingHost(host) {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": "发布地址请填写IP或域名，不带协议、端口或路径"})
+					return
+				}
+				webSettingsMu.Lock()
+				webSettingsCur.PublicHost = host
+				webSettingsMu.Unlock()
+				if err := saveWebSettings(); err != nil {
+					writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法保存发布地址"})
+					return
+				}
+			}
+			if in.VPNGateSourceOrder != nil {
+				for _, source := range *in.VPNGateSourceOrder {
+					if !validSourceURL(source) {
+						writeJSON(w, 400, map[string]string{"error": "来源顺序包含无效地址"})
+						return
+					}
+				}
+				webSettingsMu.Lock()
+				webSettingsCur.VPNGateSourceOrder = append([]string{}, (*in.VPNGateSourceOrder)...)
+				webSettingsMu.Unlock()
+				if err := saveWebSettings(); err != nil {
+					writeJSON(w, 500, map[string]string{"error": "来源顺序保存失败"})
+					return
+				}
+			}
+			if in.VPNGateSources != nil {
+				for _, source := range *in.VPNGateSources {
+					if !validSourceURL(source) {
+						writeJSON(w, 400, map[string]string{"error": "CSV来源请填写公网HTTP/HTTPS地址"})
+						return
+					}
+				}
+				webSettingsMu.Lock()
+				webSettingsCur.VPNGateSources = append([]string{}, (*in.VPNGateSources)...)
+				webSettingsMu.Unlock()
+				if err := saveWebSettings(); err != nil {
+					writeJSON(w, 500, map[string]string{"error": "无法保存CSV来源"})
+					return
+				}
+			}
+			if in.IPInfoKey != nil {
+				if len(*in.IPInfoKey) > 256 || strings.ContainsAny(*in.IPInfoKey, "\r\n\x00") {
+					writeJSON(w, 400, map[string]string{"error": "IP信息API Key无效"})
+					return
+				}
+				webSettingsMu.Lock()
+				webSettingsCur.IPInfoKey = *in.IPInfoKey
+				webSettingsMu.Unlock()
+				if err := saveWebSettings(); err != nil {
+					writeJSON(w, 500, map[string]string{"error": "无法保存IP信息设置"})
+					return
+				}
+			}
+
+			// 改口令
+			if in.Password != nil && *in.Password != "" {
+				if err := auth.SetPassword(*in.Password); err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+					return
+				}
+			}
+			// 改访问路径
+			if in.BasePath != nil {
+				if _, err := setBasePath(*in.BasePath); err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+					return
+				}
+			}
+			// 改"只用家宽"。放在改端口之前：applyWebSettings 会整份覆盖设置，
+			// 顺序颠倒会把这个开关写回旧值。
+			if in.ResidentialOnly != nil {
+				if err := setResidentialOnly(*in.ResidentialOnly); err != nil {
+					writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+					return
+				}
+			}
+			// 改端口 / 监听地址：合成一份新的 WebSettings 一起应用，避免绑两次
+			if in.Port != nil || in.ListenAddr != nil {
+				next := getWebSettings()
+				if in.Port != nil {
+					next.Port = *in.Port
+				}
+				if in.ListenAddr != nil {
+					next.ListenAddr = *in.ListenAddr
+				}
+				if err := srv.applyWebSettings(next); err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+					return
+				}
+			}
+		}
+
+		cfg := getWebSettings()
+		listen := cfg.ListenAddr
+		if listen == "" {
+			listen = "0.0.0.0"
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"public_host":            cfg.PublicHost,
+			"https":                  cfg.TLSCert != "" && cfg.TLSKey != "",
+			"base_path":              currentBasePath(),
+			"port":                   cfg.Port,
+			"listen_addr":            listen,
+			"has_password":           true,
+			"residential_only":       cfg.residentialOnly(),
+			"vpngate_sources":        cfg.VPNGateSources,
+			"vpngate_source_order":   cfg.VPNGateSourceOrder,
+			"source_catalog":         sourceCatalog(),
+			"source_status":          getSourceReports(),
+			"ip_info_key_configured": cfg.IPInfoKey != "",
+			"version":                version,
+		})
+	}
+}
+
+// apiUpdateCheck 问 GitHub 最新 release，回报当前/最新版本与更新内容。
+func apiUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, UpdateStatus{Current: version, Latest: version, HasUpdate: false, Notes: "此Miku版使用安装包更新：在VPS运行 miku update /路径/新版快速包.tar.gz，保留节点和口令。上游源码：byJoey/fanout。", URL: "https://github.com/byJoey/fanout"})
+}
+func apiUpdateApply(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 409, map[string]string{"error": "请在VPS运行 miku update /路径/新版快速包.tar.gz"})
+}
+
+func apiExits(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, m.ExitsOf())
+	}
+}
+
+// apiProvision 接收"开 N 个某地区的出口"这个意图，返回作业 id 供轮询。
+func apiProvision(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		count, err := strconv.Atoi(q.Get("count"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "count 参数无效"})
+			return
+		}
+		tpl := 0
+		if s := q.Get("template"); s != "" {
+			if tpl, err = strconv.Atoi(s); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "template 参数无效"})
+				return
+			}
+		}
+		job, err := m.Provision(ProvisionRequest{
+			Region: q.Get("region"), Count: count, TemplateID: tpl,
+			EveryRegion: q.Get("every") == "1",
+		})
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"job": job.ID()})
+	}
+}
+
+func apiJobs(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, m.jobs.Views())
+	}
+}
+
+func apiJobDismiss(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		m.jobs.Dismiss(r.URL.Query().Get("id"))
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "已关闭"})
+	}
+}
+
+// apiXUIStatus 报告当前的节点链接后端：接管的 3x-ui，或 fanout 自己跑的 Xray。
+func apiXUIStatus(w http.ResponseWriter, r *http.Request) {
+	p, err := openPanel()
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"available": false,
+			"reason":    err.Error(),
+		})
+		return
+	}
+	// xray-cf-lite 模式下节点由 xray-cf-lite 管，fanout 只改路由，不提供新建入口。
+	_, isXCL := p.(*XCL)
+	resp := map[string]any{
+		"available": true,
+		"kind":      p.Kind(),
+		"describe":  p.Describe(),
+		// 自建/3x-ui 能建入站；xray-cf-lite 只能改路由
+		"can_create": !isXCL,
+	}
+	if x, ok := p.(*XUI); ok {
+		resp["port"] = x.Port
+		resp["base_path"] = x.BasePath
+		resp["scheme"] = x.Scheme
+		resp["host"] = x.Host
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// apiPanelMode 读取/切换节点链接后端。
+// GET 返回当前模式与本机可选模式；POST {"mode":"..."} 运行时切换，空 mode = 恢复自动探测。
+func apiPanelMode(workDir string, managers ...*Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			var in struct {
+				Mode string `json:"mode"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "请求格式错误"})
+				return
+			}
+			previous := currentPanelMode()
+			p, err := switchPanelMode(in.Mode)
+			if err == nil && len(managers) > 0 {
+				err = p.OnTunnelsChanged(managers[0].Tunnels())
+				if err != nil {
+					if restored, restoreErr := switchPanelMode(previous); restoreErr == nil {
+						_ = restored.OnTunnelsChanged(managers[0].Tunnels())
+					}
+				}
+			}
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			invalidateInbounds()
+			writeJSON(w, http.StatusOK, map[string]any{
+				"mode":     currentPanelMode(),
+				"kind":     p.Kind(),
+				"describe": p.Describe(),
+			})
+			return
+		}
+		resp := map[string]any{
+			"mode":  currentPanelMode(),
+			"modes": availablePanelModes(workDir),
+		}
+		if p, err := openPanel(); err == nil {
+			resp["kind"] = p.Kind()
+			resp["describe"] = p.Describe()
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// apiXUIInbounds 列出面板里已有的入站及其绑定状态。
+func apiXUIInbounds(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		list, err := cachedInbounds(liveHosts(m))
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
+// liveHosts 返回当前有连通隧道的节点标识集合。
+func liveHosts(m *Manager) map[string]bool {
+	live := map[string]bool{}
+	for _, t := range m.Tunnels() {
+		if t.Status == "up" {
+			live[sanitizeTag(t.Node.HostName)] = true
+		}
+	}
+	return live
+}
+
+// apiXUIBind 把某个入站绑定到某条隧道，slot=0 表示解绑。
+func apiXUIBind(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tag := r.URL.Query().Get("tag")
+		if tag == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "缺少 tag 参数"})
+			return
+		}
+		host := r.URL.Query().Get("host")
+		x, err := openPanel()
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := x.Bind(tag, host, m.Tunnels()); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		invalidateInbounds()
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "已更新"})
+	}
+}
+
+// apiXUIClone 以某个入站为模板，为所有已连通的隧道各复制一个入站并绑好出口。
+func apiXUIClone(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.Atoi(r.URL.Query().Get("id"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id 参数无效"})
+			return
+		}
+
+		tunnels := m.Tunnels()
+		// 用节点主机名而非槽位号：槽位在重启后会重排，指代会错位
+		var hosts []string
+		if raw := r.URL.Query().Get("hosts"); raw != "" {
+			for _, part := range strings.Split(raw, ",") {
+				if h := strings.TrimSpace(part); h != "" {
+					hosts = append(hosts, h)
+				}
+			}
+		} else {
+			for _, t := range tunnels {
+				if t.Status == "up" {
+					hosts = append(hosts, t.Node.HostName)
+				}
+			}
+		}
+		if len(hosts) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "没有可用的隧道"})
+			return
+		}
+
+		x, err := openPanel()
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		ports, err := x.CloneToTunnels(id, hosts, tunnels)
+		invalidateInbounds()
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "created": ports})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"created": ports})
+	}
+}
+
+// apiXUIDetail 返回某个入站的详情，含客户端与可直接复制的分享链接。
+func apiXUIDetail(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id 参数无效"})
+		return
+	}
+	x, err := openPanel()
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	host := r.URL.Query().Get("host")
+	if host == "" {
+		host = publicHost(r)
+	}
+	detail, err := x.InboundDetail(id, host)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, detail)
+}
+
+// publicHost 决定分享链接里的连接地址。母机公网 IPv4 才是客户端真正能连上
+// 的地址，所以优先用它；探测不到（比如纯内网）再退回访问 fanout 时用的主机名。
+func publicHost(r *http.Request) string {
+	if host := getWebSettings().PublicHost; host != "" {
+		return host
+	}
+	if ip := hostPublicIP(); ip != "" {
+		return ip
+	}
+	host := r.Host
+	if i := strings.LastIndex(host, ":"); i > 0 {
+		host = host[:i]
+	}
+	if host == "" || host == "127.0.0.1" || host == "localhost" {
+		return "<服务器IP>"
+	}
+	return host
+}
+
+// apiXUILinks 批量导出多个入站的分享链接。
+func apiXUILinks(w http.ResponseWriter, r *http.Request) {
+	x, err := openPanel()
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var ids []int
+	if raw := r.URL.Query().Get("ids"); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil {
+				ids = append(ids, n)
+			}
+		}
+	} else {
+		list, err := x.Inbounds(nil)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		for _, ib := range list {
+			ids = append(ids, ib.ID)
+		}
+	}
+	if len(ids) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "没有可导出的入站"})
+		return
+	}
+
+	host := r.URL.Query().Get("host")
+	if host == "" {
+		host = publicHost(r)
+	}
+	links, err := x.InboundLinks(ids, host)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "links": links})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"links": links})
+}
+
+// apiXUIDelete 删除入站。停掉出口后它的入站会留下来，用户需要一个清理入口。
+func apiXUIDelete(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var ids []int
+		for _, part := range strings.Split(r.URL.Query().Get("ids"), ",") {
+			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil {
+				ids = append(ids, n)
+			}
+		}
+		if len(ids) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "没有指定要删除的入站"})
+			return
+		}
+		x, err := openPanel()
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		err = x.DeleteInbounds(ids, m.Tunnels())
+		invalidateInbounds()
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]int{"deleted": len(ids)})
+	}
+}
+
+// apiInboundCreate 新建一个入站。两种后端都支持：自建模式写自己的库，
+// 接管 3x-ui 时走面板的 inbounds/add API。
+// apiInboundUpdate 改入站的端口、备注与启停。两种后端都支持。
+func apiInboundUpdate(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p, err := openPanel()
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		q := r.URL.Query()
+		id, err := strconv.Atoi(q.Get("id"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id 参数无效"})
+			return
+		}
+
+		// 只有真正传了的参数才改，没传的保持原样
+		var patch InboundPatch
+		if v := q.Get("port"); v != "" {
+			port, err := strconv.Atoi(v)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "端口无效"})
+				return
+			}
+			patch.Port = &port
+		}
+		if q.Has("remark") {
+			remark := q.Get("remark")
+			patch.Remark = &remark
+		}
+		if v := q.Get("enable"); v != "" {
+			enable := v == "1"
+			patch.Enable = &enable
+		}
+
+		err = p.UpdateInbound(id, patch, m.Tunnels())
+		invalidateInbounds()
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "已保存"})
+	}
+}
+
+// clientAction 把三个客户端操作的公共部分收拢：解析 id/email 再调后端。
+func clientAction(m *Manager, what string,
+	do func(p Panel, id int, email string, tunnels []*Tunnel) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p, err := openPanel()
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		id, err := strconv.Atoi(r.URL.Query().Get("id"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id 参数无效"})
+			return
+		}
+		err = do(p, id, r.URL.Query().Get("email"), m.Tunnels())
+		invalidateInbounds()
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"ok": what})
+	}
+}
+
+func apiClientAdd(m *Manager) http.HandlerFunc {
+	return clientAction(m, "已添加", func(p Panel, id int, email string, t []*Tunnel) error {
+		return p.AddClient(id, email, t)
+	})
+}
+
+func apiClientDelete(m *Manager) http.HandlerFunc {
+	return clientAction(m, "已删除", func(p Panel, id int, email string, t []*Tunnel) error {
+		return p.DeleteClient(id, email, t)
+	})
+}
+
+func apiClientReset(m *Manager) http.HandlerFunc {
+	return clientAction(m, "已重置", func(p Panel, id int, email string, t []*Tunnel) error {
+		return p.ResetClient(id, email, t)
+	})
+}
+
+func apiInboundCreate(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p, err := openPanel()
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+
+		q := r.URL.Query()
+		port, _ := strconv.Atoi(q.Get("port"))
+		spec := NewInboundSpec{
+			Protocol: q.Get("protocol"),
+			Network:  q.Get("network"),
+			Port:     port,
+			Remark:   q.Get("remark"),
+			Path:     q.Get("path"),
+			Host:     q.Get("host"),
+			Security: q.Get("security"),
+			Vision:   q.Get("vision") == "1",
+
+			ServerName: q.Get("sni"),
+			CertFile:   q.Get("cert"),
+			KeyFile:    q.Get("key"),
+
+			Dest:        q.Get("dest"),
+			ServerNames: q.Get("server_names"),
+			ShortID:     q.Get("sid"),
+			Fingerprint: q.Get("fp"),
+		}
+		if spec.Security == "tls" && q.Get("certificate_mode") != "manual" && q.Get("certificate_mode") != "self_signed" && certificateRegistry != nil {
+			choice, domain, selectErr := certificateRegistry.resolveTLS(q.Get("certificate_id"), spec.ServerName)
+			if selectErr != nil {
+				writeJSON(w, 400, map[string]string{"error": selectErr.Error()})
+				return
+			}
+			if validDomain(domain) {
+				entry, keepErr := certificateRegistry.keepCertificate(choice, domain)
+				if keepErr != nil {
+					writeJSON(w, 400, map[string]string{"error": keepErr.Error()})
+					return
+				}
+				spec.CertFile, spec.KeyFile = entry.CertFile, entry.KeyFile
+			} else {
+				spec.CertFile, spec.KeyFile = choice.CertFile, choice.KeyFile
+			}
+			spec.ServerName = domain
+		}
+		ib, err := p.CreateInbound(spec, m.Tunnels())
+		invalidateInbounds()
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":       ib.ID,
+			"port":     ib.Port,
+			"protocol": ib.Protocol,
+			"remark":   ib.Remark,
+			"network":  ib.Network,
+			"security": ib.Security,
+		})
+	}
+}

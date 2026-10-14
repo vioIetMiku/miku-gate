@@ -1,0 +1,34 @@
+{
+  "xray-amd64": {
+    "repo": "XTLS/Xray-core",
+    "version": "v26.3.27",
+    "name": "Xray-linux-64.zip",
+    "sha256": "23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae",
+    "bytes": 21136402,
+    "member": "xray"
+  },
+  "xray-arm64": {
+    "repo": "XTLS/Xray-core",
+    "version": "v26.3.27",
+    "name": "Xray-linux-arm64-v8a.zip",
+    "sha256": "4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c",
+    "bytes": 19716427,
+    "member": "xray"
+  },
+  "sing-box-amd64": {
+    "repo": "SagerNet/sing-box",
+    "version": "v1.14.3",
+    "name": "sing-box-1.14.3-linux-amd64.tar.gz",
+    "sha256": "e2bdf179c15a3652955dc44867e33ca0965c9c9b91b34267dcc5a5d639a5feee",
+    "bytes": 31678266,
+    "member": "sing-box-1.14.3-linux-amd64/sing-box"
+  },
+  "sing-box-arm64": {
+    "repo": "SagerNet/sing-box",
+    "version": "v1.14.3",
+    "name": "sing-box-1.14.3-linux-arm64.tar.gz",
+    "sha256": "29dae24d76bea3bc62d07dd3e60cfc12003de7debbd6b768df9be9c68360174e",
+    "bytes": 29110944,
+    "member": "sing-box-1.14.3-linux-arm64/sing-box"
+  }
+}

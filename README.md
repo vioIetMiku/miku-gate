@@ -1,204 +1,197 @@
 # Miku Gate
 
-**本地优先的多出口代理控制台。当前开发版本：`0.1.0-dev.11`。**
+## VPN Gate 是什么？
 
-> 当前可运行的是带认证的本机代理上游网关：HTTP/SOCKS入口 → 用户提供的SOCKS5、HTTP或HTTPS代理。完整VPN网关仍在开发。
->
-> 保存上游后，“启动”会实际验证代理/TLS/DNS路径，再开放固定的127.0.0.1认证入口；失败不会使用宿主直连后备。Linux OpenVPN 已接入独立 root 执行器/非 root worker 和 Web 节点绑定，并在授权 VPS 实测一个官方公共节点通过；不保证全库可用。Xray/sing-box加密入口、域名与交互安装向导尚未完成。未配置上游时仍返回 `409 executor_unavailable`，不会冒充VPN已连接。
+[VPN Gate](https://www.vpngate.net/) 是日本筑波大学开展的学术实验项目，汇集世界各地志愿者提供的公共 VPN 中继。你可以从它的[服务器列表](https://www.vpngate.net/en/)获取公开连接配置；Miku Gate 使用其中的 **OpenVPN** 节点，为自己的 Linux VPS 配置和管理多个出口。
 
-> 升级提示：dev.10 数据库 schema 升为 6（dev.8为5、dev.6为3），上游凭据用独立的数据库同名 `.key` 文件加密。升级前停止旧服务并备份完整数据目录（数据库、WAL及密钥）；旧版本不能直接打开升级后的数据库。丢失密钥时不重新生成冒充恢复。
+VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的数量、国家、在线时间和连通性随时变化，**不能保证住宅 IP、固定出口或持续可用，也不是无日志服务**。请先阅读[项目介绍](https://www.vpngate.net/en/about_overview.aspx)、[日志政策](https://www.vpngate.net/en/about_abuse.aspx)和[使用条款](https://www.vpngate.net/en/about_agreement.aspx)，遵守当地法律与服务商规则，不用于滥用行为或需要严格保密的通信。
 
-最新已发布：[v0.1.0-dev.10 受管入口/公共VPN预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.10)。三平台包＋校验值，[同文件验收与明确边界](docs/validation/2026-10-11-dev10-release.md)，不是最终一键安装器。
+## 致谢 fanout
 
-先前发布：[v0.1.0-dev.8 隔离 VPN Gate 出口预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.8)，含三平台压缩包及校验文件。[公共节点验收](docs/validation/2026-10-10-public-vpngate.md)。主线新增的只读主机检测见 [HOST_INVENTORY](docs/HOST_INVENTORY.md)，尚未包含于 dev.8 资产。另新增[已有入口摘要和私有路由候选](docs/EXISTING_INGRESS.md)，需明确同意读取，尚不自动应用或持久复用面板。新增[受管入口模板/证书/REALITY流程](docs/MANAGED_INGRESS.md)，可本机生成私有配置和客户端导入材料，dev.10已新增加密保存/出口绑定/客户端显示及显式核心启停接线；[运行器说明](docs/MANAGED_RUNTIME.md)。两核心REALITY入口到公共VPN完整业务旅程已通过；[实测记录](docs/validation/2026-10-11-managed-runtime.md)。公网部署/生产安装仍待验收。
+特别感谢 **[byJoey/fanout](https://github.com/byJoey/fanout)**。Miku Gate 的当前单页版本直接基于该项目，保留按国家批量创建出口、网络命名空间隔离、自动重连及节点管理的基础能力，再加入 Miku 界面、自建核心、多格式订阅与 VPS 维护流程。
 
-上一发布：[v0.1.0-dev.6 代理上游预览](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.1.0-dev.6)。提供Linux amd64/arm64、Windows amd64及校验文件；[实际VPS/发行验收](docs/validation/2026-10-10-proxy-runtime.md)。旧dev.2标签与资产保留，main继续完整网关开发。
+原始基线提交为 `d7ce5224caf3469b19876982abdf8d1be16c4a8b`；原作者署名与 MIT 许可证完整保留。详见 [LICENSE](LICENSE)、[上游 README](README.fanout.md) 和 [源码来源](PROVENANCE.md)。
 
-主线dev.11新增[HTTPS/交互安装流程](docs/HTTPS_INSTALLATION.md)，实际安装验收仍待执行，尚未包含在已发布dev.10包中。旧包不添加/替换安装器。
+---
 
-## 如何使用本机代理上游
+<p align="center">
+  <img src="assets/miku-hero-v1.png" alt="Miku Gate 插画" width="300">
+</p>
 
-用普通用户运行 `miku-gate init --data .data`，保存一次性管理员密码，再运行 `miku-gate serve --data .data`。打开 `http://127.0.0.1:3939`，创建出口并保存入口凭据，然后点击“设置上游”，填写自己有权使用的代理服务器。保存后明确点击启动，验证通过才开始监听。
+<h1 align="center">世界，等你连接。</h1>
+<p align="center">把 VPN Gate 出口、代理入口和日常维护，放进一个自己的控制台。</p>
 
-入口需要用户名/密码，支持HTTP CONNECT、普通HTTP转发和SOCKS5 TCP。默认最多同时运行3个出口（不是容量承诺），用`--max-active`调整；`--control-plane-only`可关闭运行时。运行中修改上游、凭据、删除或隔离操作都会拒绝，需先停止。重启后不从配置伪造活动状态，也不自动恢复出口。
+<p align="center">
+  <a href="https://github.com/vioIetMiku/miku-gate/releases/latest">下载正式版</a> ·
+  <a href="#vps-一键安装">VPS 一键安装</a> ·
+  <a href="#第一次使用">第一次使用</a> ·
+  <a href="CHANGELOG.md">更新记录</a>
+</p>
 
-上游DNS/TLS探测不代表已测公网出口IP或住宅属性。地区是配置标签，严格住宅策略在缺乏证据时拒绝启动。域名/IP公网控制台与VPS自动安装仍待后续阶段；当前远程管理使用SSH转发，不要直接公开明文管理或代理端口。
+**当前正式版：`v0.2.0`**，基于 `dev34`。支持 Linux **amd64 / arm64**，管理界面支持白天 / 夜间主题、移动端布局和展示 / 管理模式。安装包已经编译，**VPS 不需要 Go**。
 
-## 已经能做什么
+> 升级提醒：`v0.2.0` 使用基于 fanout 的单页架构。旧版任务、远程 Agent、多账号和高级记录不会完整迁移；安装器仅迁移已识别旧安装的可用入口、普通 OpenVPN 出口及相关凭据，升级前请备份。不要将“正式 Release”理解为对所有 VPS、面板与 VPN Gate 节点均已完成实机验证。
 
-- 本机初始化单管理员，随机密码仅显示一次，不提供公共默认口令。
-- 登录、退出、8 小时会话、CSRF 校验、登录限速、回环 Host/Origin 检查。
-- 新建、编辑、删除出口配置；独立随机代理凭据、凭据重置、端口配置唯一性检查。
-- 修改名称、地区和策略时保留入口端口，最多保存 100 个出口配置。
-- 持久化事件记录：数据库保留最近 500 条，界面展示最近 100 条。
-- 手动获取 VPN Gate 官方 HTTPS 列表，进行大小限制、CSV 解析、OpenVPN 指令白名单校验。
-- 节点源失败保留原缓存，候选不被自动标记为已连接、住宅或可信。
-- 系统环境只读诊断和 Linux 既有面板/核心常见位置检测（不接管）；深浅主题、中文界面、桌面与移动布局。
-- 出口隔离计划预览；稳定的实例 / 出口资源标识；计划不执行系统命令。
-- 独立 Linux sandbox plan / inspect / prepare / cleanup 命令：仅全阻断隔离实验，显式 --apply、归属校验和失败回滚；dev.2 首轮与 dev.3 低资源边界实验已通过临时 Ubuntu runner 验证；该早期记录不是VPN/VPS验收，见 [验证记录](docs/validation/2026-10-09-linux-quarantine.md)；后续目标VPS受控复核见 [独立记录](docs/validation/2026-10-09-vps-lab.md)。
-- 独立的 HTTP CONNECT / HTTP 转发 / SOCKS5 TCP 协议库及测试，已在私有测试监听上接通HTTP/SOCKS/HTTPS上游与隧道外DoH，**现已接入显式的 Web 启动路径；Linux OpenVPN 使用独立授权执行器接线**。
+## 主要功能
 
-## 尚未实现
+| 功能 | 说明 |
+| --- | --- |
+| 批量出口 | 按国家及数量创建 OpenVPN 出口，自动选线、重连与补位；换线尽量保持端口、凭据、UUID 和分享链接 |
+| 多来源节点池 | 官方接口、公开 CSV、开源快照、近期 TCP 检测记录与 Worker 镜像；可添加公开来源并调整顺序 |
+| 自建或已有面板 | 自建 Xray / sing-box；检测并适配 3x-ui、S-UI、xray-cf-lite，不会安装这些外部面板 |
+| 入口与客户端 | 自建模式下同一监听端口可按客户端绑定不同出口；面板模式按出口复制入口 |
+| 认证代理 | 同一端口支持认证 SOCKS5 / HTTP，HTTP 支持 CONNECT；不是开放代理 |
+| 节点与订阅 | 通用 Base64、V2Ray/v2rayN、Clash/Mihomo YAML、sing-box JSON；仅导出有效的本机节点 |
+| 出口信息 | 国家、地区、ASN、归属商、IP 类型与来源说明；住宅属性是规则推断，不是认证 |
+| 连通与延迟 | 有界并发健康检查、同国家换线与地域 / ASN 偏好；30 秒刷新限频和断线稳定性提示 |
+| 日常运维 | 随机管理路径、登录口令、域名 / 证书管理、备份、更新、修复与旧版回滚 |
 
-- 自动重连、自动换线与长期容量/稳定性验收（基本 VPN 建连、隧道 DNS、内核断线保护已实现并有实际证据）。
-- 节点实测、住宅类型情报、严格住宅策略的运行时执行。
-- SOCKS5 UDP、Xray、节点订阅、热备和多服务器管理。
-- 生产安装器、在线升级、备份恢复和 Docker 发布。
+## VPS 一键安装
 
-地区与住宅优先仍是配置意图，不是分类证明；严格住宅在没有证据时拒绝启动。只有运行时确实完成校验和绑定后才显示已监听，保存端口本身不代表可用。
+### 安装要求
 
-## 在当前 Windows 工作区运行
+- Linux VPS，amd64（x86_64）或 arm64（aarch64），使用 **systemd 或 OpenRC**。
+- root 权限，可用的 `/dev/net/tun`，以及创建网络命名空间和修改 iptables 的权限。权限不足的容器不适用。
+- 可连接 GitHub、官方核心下载源和 VPN Gate。准备 Bash、curl、CA 证书；缺少 Python、OpenVPN 等运行依赖时安装器会通过包管理器补齐。
+- 在服务商安全组和防火墙放行管理端口及实际创建的入口 / 代理端口。管理端口默认 `8899`，占用时自动选择空闲端口。
 
-先打开 PowerShell，进入项目目录：
+### 公开仓库的一行安装
 
-```powershell
-Set-Location 'F:\codex\miku-vpngate\miku-gate'
-```
-
-本工作区已经准备了项目内 Go 工具链、前端依赖和 Windows 构建产物；没有修改系统 PATH。首次使用自己的数据目录时执行：
-
-```powershell
-.\scripts\run.ps1 -Action init
-.\scripts\run.ps1 -Action serve
-```
-
-`init` 会输出管理员用户名和一次性随机密码，请保存。浏览器打开 [本机控制台](http://127.0.0.1:3939)，使用该密码登录。已有账号时再次 `init` 会拒绝覆盖。当前尚无密码重置命令，请不要丢失初始化密码。
-
-退出服务使用 `Ctrl+C`。默认数据目录是项目下的 `.data`；不同数据目录拥有独立账号和配置。
-
-修改代码后重新构建：
-
-```powershell
-.\scripts\run.ps1 -Action build
-.\scripts\run.ps1 -Action test
-.\scripts\run.ps1 -Action doctor
-```
-
-构建或替换 Windows 可执行文件前，请先停止正在运行的同一路径程序。
-
-## 在新环境从源码构建
-
-要求：
-
-- Go **1.26 或更新**（由当前依赖最低版本要求决定）。
-- Node.js 22.12+ 或 24，及 npm。
-- 单机控制台不需要 root、OpenVPN 或 TUN；运行 Linux 控制服务时拒绝 root 用户。
-- 真正的 VPN 网络功能尚未发布，安装 OpenVPN 也不会让当前开发版自动具备隧道能力。
-
-在项目根目录执行：
+在 VPS 的 **root Bash 终端**运行。脚本读取最新正式 Release，拒绝草稿和预发布版本，校验下载包 SHA256、内部清单、权限与文件路径后安装：
 
 ```bash
-npm ci --prefix web
-npm --prefix web run build
-go build -trimpath -o bin/miku-gate ./cmd/miku-gate
-./bin/miku-gate init
-./bin/miku-gate serve
+bash -c 'set -e; d=$(mktemp -d); trap '\''rm -rf -- "$d"'\'' EXIT; curl --proto "=https" --tlsv1.2 -fsSL https://github.com/vioIetMiku/miku-gate/releases/latest/download/install-online.sh -o "$d/install-online.sh"; bash "$d/install-online.sh"'
 ```
 
-前端构建结果嵌入 Go 二进制，运行时无需 Node.js。Windows 编译时将输出文件名改为 `bin/miku-gate.exe`，或使用 PowerShell 脚本。
+脚本是仓库中的 [install-online.sh](install-online.sh)，也作为 Release 附件提供。执行前可先下载审阅。不要把安装脚本交给来源不明的镜像站，也不要用关闭 TLS 校验的方式解决下载错误。
 
-不能连接 Go 官方模块代理时，可由操作者明确选择可信镜像；不要关闭 `GOSUMDB`、TLS 校验或依赖完整性检查。
+### 私有仓库安装（当前仓库适用）
 
-## 前端开发
-
-保持后端在 `127.0.0.1:3939` 运行，然后在另一个终端执行：
+如果仓库仍为私有，上面的公开链接会返回 404。准备一个有本仓库 **Contents: Read** 权限的 GitHub fine-grained personal access token，在 VPS 的 root Bash 终端运行下面整段；令牌通过隐藏输入读取，不会作为明文命令写入历史，也不会传给实际服务安装器：
 
 ```bash
-npm --prefix web run dev
+(
+  set -e
+  read -rsp 'GitHub token: ' GITHUB_TOKEN; printf '\n'
+  export GITHUB_TOKEN
+  d=$(mktemp -d)
+  trap 'rm -rf -- "$d"; unset GITHUB_TOKEN' EXIT
+  curl --proto '=https' --tlsv1.2 -fsSL \
+    -H "Authorization: Bearer $GITHUB_TOKEN" \
+    -H 'Accept: application/vnd.github.raw+json' \
+    'https://api.github.com/repos/vioIetMiku/miku-gate/contents/install-online.sh?ref=v0.2.0' \
+    -o "$d/install-online.sh"
+  bash "$d/install-online.sh"
+)
 ```
 
-Vite 把 `/api` 请求转发给本机 Go 后端。前端热更新仅用于开发；正式构建预览要在构建后重启后端并刷新页面。
+访问令牌仅用于读取当前仓库的 Release。自定义管理端口时，在执行脚本前设置 `export WEB_PORT=9900`；锁定版本使用 `export MIKU_VERSION=v0.2.0`。已经下载脚本时，也可先运行 `bash install-online.sh --download-only /root/miku-packages`，只下载并校验，不安装服务。
 
-## 测试
+### 手动安装 / 离线传包
 
-项目根目录：
+在 [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.0) 下载以下文件。私有仓库需要先登录 GitHub：
+
+| 文件 | 用途 |
+| --- | --- |
+| `miku-gate-vps-v0.2.0.tar.gz` | VPS 通用安装包，包含两种架构的主程序、旧版导出程序与维护工具 |
+| `miku-gate-v0.2.0.zip` | 完整源码 + 两种架构安装二进制；不是 GitHub 自动生成的纯源码压缩包 |
+| `install-online.sh` | 最新正式版在线安装入口 |
+| `SHA256SUMS` | 上述三个附件的 SHA256 校验清单 |
+
+将 VPS 包和校验文件放到同一目录后运行：
+
+```bash
+grep '  miku-gate-vps-v0.2.0.tar.gz$' SHA256SUMS | sha256sum -c -
+sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.0.tar.gz
+sudo bash miku-fanout/install.sh
+```
+
+内部目录 `miku-fanout/` 是兼容现有安装器的名称，不影响项目名 Miku Gate。完整 ZIP 包解压后也是这个目录；直接运行其中的 `install.sh` 即可。手动解包时请使用 root 所有、不可被其他用户写入的文件，不要跳过校验。
+
+## 第一次使用
+
+1. 安装完成后记下打印的 **管理地址和访问口令**；也可以运行 `miku info` 再查看。
+2. 浏览器打开 `http://VPS_IP:端口/随机路径/`。建议尽快使用 `miku domain` 绑定域名并启用 HTTPS；随机路径不能代替 TLS。
+3. 在界面前部确认入口：检测已有面板，或使用自建 Xray。没有模板时可选 **自动创建 VLESS REALITY 入口**。
+4. 点击 **添加出口**，选择国家、数量与入口模板。程序获取 OpenVPN 配置、创建隧道、分配端口并绑定出口。
+5. 连通后复制节点或认证 SOCKS5 / HTTP 地址，或打开订阅弹窗选择客户端格式。
+6. 需要换线时使用切换 / 重连；VPN 已通但入口失败时查看原因并使用 **修复入口**。
+
+自建核心可在设置中切换 Xray / sing-box，切换前会校验配置。**XHTTP 使用 Xray**；不要假定所有客户端和订阅格式支持全部传输协议。本机链接识别会校验发布地址、端口、凭据和传输参数，不支持把任意外部代理作为入口导入。
+
+### 域名与证书
+
+- 在 DNS 设置域名 A 记录指向 VPS，然后执行 `miku domain`，或在网页右上角管理域名与证书。
+- 自动签发需要公网可访问 TCP 80；也可复用已登记的 Certbot 证书。
+- 可更换域名，输入 `none` 解绑。REALITY 使用自己的握手目标，不需要管理域名证书。
+- 改密码、核心、域名或维护服务可能重启入口与 VPN，客户端需要重新连接。
+
+### 客户端格式限制
+
+- **Clash / Mihomo**：使用支持 VLESS / REALITY 的 Mihomo 内核。
+- **V2Ray / v2rayN**：REALITY 使用 Xray 内核；VMess 使用标准 Base64 JSON 分享格式。
+- **XHTTP**：当前请使用通用 / V2Ray 格式；不支持的订阅格式会返回明确错误，而不是丢掉传输参数。
+- **sing-box JSON**：包含本地 `127.0.0.1:7890` 混合代理入口与节点选择器。使用整张证书 SHA256 固定指纹时需要 sing-box 1.15+ 客户端，不会通过禁用证书校验伪装兼容。
+
+## 维护、备份与更新
+
+```bash
+miku                 # 快捷菜单
+miku info            # 管理地址与当前口令
+miku status          # 服务状态
+miku password        # 本机 root 重置口令，无需旧口令
+miku domain          # 绑定 / 更换 / 解绑域名
+miku repair          # 补齐依赖与核心，重启服务
+miku port            # 修改管理端口
+miku start
+miku stop
+miku restart
+miku logs
+miku backup          # 停机一致性备份；完成后恢复原运行状态
+miku update /root/miku-gate-vps-v0.2.0.tar.gz
+miku rollback        # 仅用于已登记的旧架构迁移，恢复切换前配套快照
+miku uninstall       # 停止并取消自启，保留程序、数据与备份
+```
+
+- 数据：`/var/lib/miku`；程序与维护脚本：`/usr/local/lib/miku`；服务名：`miku`；快捷菜单：`/usr/local/bin/miku`。
+- 更新前先运行 `miku backup`；下载校验后的新 VPS 包，再执行 `miku update /绝对路径/安装包.tar.gz`。也可重新运行一键脚本，由已有安装识别流程执行更新。
+- 备份含登录口令、节点身份、订阅凭据和证书私钥，权限为 `600`；不要提交到 Git，也不要把管理地址 / 订阅地址发到公开渠道。
+- `miku rollback` **不是任意版本回滚器**，只适用于从已识别旧 Miku 架构切换时创建的配套快照。
+
+### 从旧 Miku 升级
+
+安装器识别已有登记信息，先停旧服务并快照数据库、密钥、证书、程序与菜单，再用原普通账号导出兼容数据。自建入口、普通 OpenVPN 出口和代理凭据可迁移，入口端口、UUID / 密码与 REALITY 密钥尽量保留；外部面板通过重新检测继续管理。
+
+空出口、带前置代理的出口和旧高级记录不会自动转换为新配置，留在旧版快照中。切换失败会尝试恢复配套旧服务；成功后仍可 `miku rollback`。回滚后新版数据保留，请勿混跑两套服务。
+
+## 常见问题
+
+| 情况 | 处理建议 |
+| --- | --- |
+| GitHub 返回 404 | 检查仓库是否私有、令牌是否有本仓库 Contents 读取权限、标签与附件是否存在 |
+| SHA256 / 清单校验失败 | 停止安装，重新从原 Release 下载；不要手动改清单绕过检查 |
+| 没有 TUN / 无法创建 netns | 检查 VPS 内核、虚拟化权限与容器限制；安装器不能凭空提供宿主机权限 |
+| 管理页面无法打开 | 运行 `miku info` / `miku status` / `miku logs`，核对实际端口、随机路径、防火墙和安全组 |
+| 有节点但 OpenVPN 不通 | 公开清单及 TCP 预检不等于 OpenVPN 可用；换候选、查 VPS 出站限制与日志 |
+| IP 类型与预期不同 | 类型由查询来源和规则推断，可能过期或误判；查看来源 / 置信度，不保证住宅 IP |
+| 总延迟与客户端测速不同 | 面板显示浏览器到 VPS 的 HTTP RTT + VPS 到当前 VPN Gate 的测量 / 参考值，不是完整客户端链路测速 |
+
+## 从源码构建
+
+构建环境使用 Linux、Go **1.26+**、Python **3.9+**。安装包本身不要求 VPS 上有 Go；主程序依赖 Linux 网络能力，不是 Windows 桌面客户端。
 
 ```bash
 go test ./...
 go vet ./...
-npm --prefix web test
-npm --prefix web run format:check
-node scripts/smoke.mjs
+(cd scripts && python3 -m unittest -v test_maintenance test_bootstrap)
+python3 scripts/build-release.py --version 0.2.0 --label v0.2.0 --output dist
 ```
 
-`smoke.mjs` 必须在构建后执行。它启动真实 Go HTTP 服务，使用隔离临时数据库，检查登录、CSRF、出口 CRUD、凭据、网络计划与 CLI 一致性、显式执行闸门、拒绝假启动、审计与退出；结束时关闭自己启动的服务。不访问公共 VPN 节点，不修改网络设置。
+构建脚本从源码重新编译两种架构的主程序和兼容导出程序，生成 VPS 包、完整 ZIP、在线安装脚本、`BUILD.json` 与 `SHA256SUMS`。Git 标签 `vX.Y.Z` 触发自动检查、构建及正式发布；检查失败不会发布正式 Release。
 
-浏览器回归：
+## 许可证与来源
 
-```bash
-npm --prefix web run test:e2e
-```
-
-- 本地默认使用已安装的 Chrome。Windows 可通过 `MIKU_BROWSER_CHANNEL=msedge` 选择 Edge。
-- CI 使用 Playwright 自带 Chromium，先安装对应浏览器及依赖。
-- 浏览器测试使用独立数据库和 `127.0.0.1:3940`；要求该端口空闲。
-- 测试截图位于 `artifacts`，测试身份和数据库位于 `.cache`，均不纳入 Git。
-- 截图中的节点配置是测试数据，不是真实连接或真实性能结果。
-
-当前验证结果及未完成项目见 [开发进度](docs/PROGRESS.md)。交叉编译成功不代表 Linux 运行、TUN 或防泄漏验证成功。
-
-## 受控 OpenVPN 实验
-
-dev.5 新增规范化配置、接口绑定DNS/TCP拨号器和全隔离的真OpenVPN测试拓扑，尚未接入Web启动或公网代理监听。见 [受控实验手册](docs/CONTROLLED_OPENVPN.md)。真实mTLS、DNS/TCP和断线阻断已通过 [受控Linux验收](docs/validation/2026-10-09-controlled-openvpn.md)；随后在用户授权VPS以单核/384MiB限额完成 [三组受控复核](docs/validation/2026-10-09-vps-lab.md)，并修复`/run` noexec兼容问题。两者都不是生产公网代理验收，操作配方见 [VPS实测手册](docs/VPS_LAB.md)。
-
-## 可选的本机隔离 IPC
-
-dev.4 新增固定实例、指定非 root UID 的 Unix socket 助手。需管理员显式授权，并给普通用户控制台添加 --sandbox-ipc；默认不开启。界面区分计划与实际隔离，变更需二次确认，原有 VPN 启动闸门不解除。
-
-完整命令、身份边界和故障处理见 [隔离 IPC 手册](docs/EXECUTOR_IPC.md)；[真实跨UID验收记录](docs/validation/2026-10-09-executor-ipc.md)已完成。已经发布的 dev.2 压缩包不包含这部分新功能。
-
-## Linux 隔离实验
-
-新功能仅创建无外部链路的全阻断 namespace，不建立隧道或代理。先在出口详情查看计划；普通 go test 不会运行特权内核实验。使用条件、手动命令、清理边界与可选的 IPv4/IPv6 实验见 [Linux 沙箱手册](docs/LINUX_SANDBOX.md)。
-
-## 默认安全边界
-
-- 服务只绑定回环 IP；当前版本不接受公网绑定。需要远程查看时使用受保护的 SSH 转发，不要自行公开该开发服务。
-- 默认 HTTP 仅用于本机。没有宣称已具备生产 HTTPS、反向代理信任配置或多租户隔离。
-- 管理密码、代理密码用 Argon2id 摘要保存；随机会话 token 在数据库中仅保存摘要。CSRF token 与会话分离。
-- 代理密码只在创建／重置时返回一次。日志和普通读取接口不返回密码摘要或 VPN 配置正文。
-- `.data`、`.cache` 和备份应视为敏感本机文件；数据库没有全盘加密，包含会话信息、节点配置及可能的内嵌 VPN 客户端证书/密钥。
-- Unix 创建目录/文件时使用限制权限；Windows 用户需要依赖自己的账户和目录 ACL，不能把 Unix 权限位当成 Windows 访问控制保证。
-- HTTP/SOCKS5 协议库要求显式注入拨号器和认证器，不包含隐式系统直连后备。未来接入执行器时仍需验证目标策略、DNS、namespace 和实际路由。
-- 不记录访问 URL、请求正文或浏览内容。本开发版根本不承载业务代理流量。
-
-## 项目结构
-
-```text
-cmd/miku-gate/       CLI 与 HTTP 服务入口
-internal/domain/    出口、节点、事件及输入约束
-internal/store/     SQLite、账号、会话、配置、缓存与事件
-internal/security/  随机 token、摘要与密码哈希
-internal/httpapi/   认证、CSRF、API、嵌入式前端服务
-internal/vpngate/   官方列表获取、CSV 与配置校验
-internal/egress/    IPv4 公网目标策略的纯函数
-internal/proxy/     独立、未接线的 HTTP / SOCKS5 TCP 核心
-internal/netexec/   隔离计划、Linux 全阻断沙箱、归属与故障实验
-internal/executoripc/ 指定 UID 的本机 IPC、端点归属和跨权限测试
-internal/tunnel/     受控OpenVPN配置、worker拨号器和隔离真隧道实验
-internal/diagnostics/ 只读环境检查
-web/                React / TypeScript 界面与前端测试
-scripts/            构建、真实 HTTP smoke 与浏览器测试辅助
-```
-
-## 下一步
-
-隔离、受限IPC及受控OpenVPN/DNS/TCP实验已通过临时Linux环境验收。下一步完成生产权限分离、隧道生命周期协调与worker连接交接；补充更多故障测试后，接通真实代理入口与管理API。
-
-- [阶段任务与验收清单 · Issue #1](https://github.com/vioIetMiku/miku-gate/issues/1)
-- [完整产品规划](docs/PRODUCT_PLAN.md)
-- [当前 API](docs/API.md)
-- [验证与开发状态](docs/PROGRESS.md)
-- [依赖与来源说明](docs/DEPENDENCIES.md)
-
-当前实现为独立编写，没有把三个参考仓库的源码直接拼接进来。分发许可证尚未选定，不应将此开发快照当成已经完成许可审查的对外发行版。
-
-完整终态要求与验收矩阵见 [DELIVERY_PLAN.md](docs/DELIVERY_PLAN.md)。正在开发的代理上游与密钥边界见 [UPSTREAM_PROXY.md](docs/UPSTREAM_PROXY.md)。
-
-VPN Gate官方配置的显式旧数据通道支持与静态节点检查见 [VPNGATE_COMPATIBILITY.md](docs/VPNGATE_COMPATIBILITY.md)；main/dev.7开发中，不等于公共节点已连通。
-
-独立OpenVPN执行器、三个UID及节点快照使用说明见 [OPENVPN_RUNTIME.md](docs/OPENVPN_RUNTIME.md)；dev.8开发中，完整运行验收尚未结束。
-
-想先核对最终产品方向，请看 [最终功能对齐稿](docs/FINAL_FEATURES.md)。它区分目标功能、默认行为与当前已完成实现，不用预览版替代完整交付。
-
-节点绑定默认提供[官方域名TLS验证与精确证书指纹](docs/VPN_SERVER_IDENTITY.md)，不再默认让用户猜证书CN；静态/标准TLS/实际VPN连通仍分开显示。
+- 基于 [byJoey/fanout](https://github.com/byJoey/fanout)，原始 MIT 许可证与 `Joey (byJoey)` 署名保留。
+- Xray、sing-box 在安装时从各自官方发布下载，版本和 SHA256 固定于 [CORE_ASSETS.json](CORE_ASSETS.json)，分别适用其自身许可证。
+- 视觉素材说明：[ARTWORK.md](ARTWORK.md)；界面设计说明：[UI_DESIGN.md](UI_DESIGN.md)。插画为生成素材，不代表与角色权利人存在授权、合作或背书。
+- 完整来源与迭代说明：[PROVENANCE.md](PROVENANCE.md)、[开发历史](docs/DEV_HISTORY.md)、[更新记录](CHANGELOG.md)。

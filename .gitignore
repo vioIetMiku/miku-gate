@@ -1,14 +1,8 @@
-.tools/
-.data/
-.cache/
-go-downloads.json
-web/node_modules/
-web/dist/*
-!web/dist/.gitkeep
-web/test-results/
-artifacts/
-bin/
+fanout
+*.tar.gz
 *.log
-.env
-# Editor / local generated files
-web/tsconfig.tsbuildinfo
+bin/
+dist/
+*.zip
+__pycache__/
+*.pyc

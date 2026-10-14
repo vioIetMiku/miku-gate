@@ -4,7 +4,7 @@
 
 [VPN Gate](https://www.vpngate.net/) 是日本筑波大学开展的学术实验项目，汇集世界各地志愿者提供的公共 VPN 中继。你可以从它的[服务器列表](https://www.vpngate.net/en/)获取公开连接配置；Miku Gate 使用其中的 **OpenVPN** 节点，为自己的 Linux VPS 配置和管理多个出口。
 
-VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的数量、国家、在线时间和连通性随时变化，**不能保证住宅 IP、固定出口或持续可用，也不是无日志服务**。请先阅读[项目介绍](https://www.vpngate.net/en/about_overview.aspx)、[日志政策](https://www.vpngate.net/en/about_abuse.aspx)和[使用条款](https://www.vpngate.net/en/about_agreement.aspx)，遵守当地法律与服务商规则，不用于滥用行为或需要严格保密的通信。
+VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的数量、国家、在线时间和连通性随时变化，**不能保证住宅 IP、固定出口或持续可用，也不是无日志服务**。请先阅读[项目介绍](https://www.vpngate.net/en/about_overview.aspx)与[日志及反滥用政策](https://www.vpngate.net/en/about_abuse.aspx)，遵守当地法律与服务商规则，不用于滥用行为或需要严格保密的通信。
 
 ## 致谢 fanout
 
@@ -181,9 +181,11 @@ miku uninstall       # 停止并取消自启，保留程序、数据与备份
 构建环境使用 Linux、Go **1.26+**、Python **3.9+**。安装包本身不要求 VPS 上有 Go；主程序依赖 Linux 网络能力，不是 Windows 桌面客户端。
 
 ```bash
-go test ./...
+go test -race -c -o /tmp/miku-gate-tests .
+sudo /tmp/miku-gate-tests -test.count=1 -test.timeout=5m
 go vet ./...
-(cd scripts && python3 -m unittest -v test_maintenance test_bootstrap)
+(cd compat/miku-export && go test ./... && go vet ./...)
+(cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap)
 python3 scripts/build-release.py --version 0.2.0 --label v0.2.0 --output dist
 ```
 

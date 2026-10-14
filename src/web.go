@@ -204,7 +204,7 @@ button,input,select,textarea{border-radius:8px}button{padding:7px 12px}h2,.bar h
 .ip-summary{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:8px 14px 12px;border-top:1px solid rgba(40,64,71,.4);color:var(--dim);font-size:12px}.ip-summary strong{color:var(--accent)}.ip-summary button{margin-left:auto;font-size:11px;padding:3px 8px}.ipbadge{background:rgba(57,197,187,.08);border:1px solid rgba(57,197,187,.18);padding:2px 8px;border-radius:6px}
 .exit-number{font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}.exit-location{font-weight:600;font-size:12px;color:var(--text);max-width:260px;overflow-wrap:anywhere}.exit-proxies{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 14px 12px}.exit-proxies button,.exit-proxies a{font-size:11px;padding:5px 9px}.exit-proxies a{color:var(--accent);text-decoration:none;margin-left:auto}.ip-summary .ip-label{color:var(--dim)}#setSources{min-height:88px;height:100px;max-height:220px;resize:vertical}.f input[type=password]{width:100%;background:#0e1116;color:var(--text);border:1px solid var(--line);padding:10px;font:inherit}.ip-details-link{display:inline-block;color:var(--accent);margin-top:12px}
 .source-list{font-size:11px;margin:12px 0}.source-list>div{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}.source-list span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.source-list b{font-weight:400;color:var(--dim);white-space:nowrap}.source-list button{flex:none;width:30px;padding:3px 5px}#nimport{min-height:90px;max-height:240px;resize:vertical}summary{cursor:pointer;color:var(--dim)}
-.domain-result{border:1px solid var(--accent);border-radius:12px;padding:16px;margin:12px 0;background:rgba(57,197,187,.08)}.domain-login-link{display:grid;gap:9px;margin-top:10px}.domain-login-link a{color:var(--accent);overflow-wrap:anywhere;line-height:1.6}.domain-login-link button{justify-self:start}.chip .entry-stack{display:block;font-weight:700;white-space:normal;line-height:1.45}.chip small{display:block;font-size:11px;opacity:.78;margin-top:4px}.chips .chip{max-width:240px;text-align:left;display:grid;gap:2px;padding:7px 10px}.orow>.chip{max-width:100%;text-align:left;display:grid;gap:2px;padding:7px 10px}.node-card-protocol{white-space:normal;overflow-wrap:anywhere}
+.domain-result{border:1px solid var(--accent);border-radius:12px;padding:16px;margin:12px 0;background:rgba(57,197,187,.08)}.domain-login-link{display:grid;gap:9px;margin-top:10px}.domain-login-link a{color:var(--accent);overflow-wrap:anywhere;line-height:1.6}.domain-login-link button{justify-self:start}.entry-chip .entry-stack{display:block;font-size:10px;font-weight:650;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.entry-chip small{display:block;font-size:9px;line-height:1.2;opacity:.78;margin:0}.chips .entry-chip,.orow>.entry-chip{display:inline-grid;gap:1px;min-height:32px;min-width:0;max-width:188px;padding:3px 6px;text-align:left;border-radius:5px}.orphan{padding:12px}.orow{padding:4px 0}.node-card-protocol{white-space:normal;overflow-wrap:anywhere}
 .domain-card{border:1px solid var(--line);border-radius:10px;padding:13px;margin:10px 0}.domain-card strong{color:var(--accent)}.domain-card small{display:block;color:var(--dim);margin:4px 0}.domain-card .domain-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.domain-current{padding:12px;background:rgba(57,197,187,.07);border-radius:10px;overflow-wrap:anywhere}.kv dd{overflow-wrap:anywhere}
 @media(max-width:760px){header{padding:9px 12px;gap:8px;flex-wrap:wrap}header #panel{display:none}header .links{display:none}.brand-name h1{font-size:16px}.brand-avatar{width:36px;height:40px}.miku-welcome{padding:20px;min-height:125px}.miku-welcome h2{font-size:19px}.miku-welcome img{right:-50px;height:260px;opacity:.45}.miku-welcome>div{max-width:90%}main{padding:12px}.bar{flex-wrap:wrap}.sheet{max-height:92vh}.ip-summary{font-size:11px}}
 ` + showcaseCSS + workspaceCSS + appearanceCSS + `
@@ -223,6 +223,7 @@ button,input,select,textarea{border-radius:8px}button{padding:7px 12px}h2,.bar h
 </header>
 
 <main>
+  <div id="managementMoved" class="domain-result" role="status" aria-live="polite" hidden></div>
   <div class="miku-welcome"><div><span class="eyebrow">连接工作台</span><h2>世界，等你连接。</h2><p id="mikuGreeting">准备好了吗？和我一起，把下一站点亮吧！</p></div><img src="assets/miku-hero-v1.png" alt="" aria-hidden="true"></div><div class="jobs" id="jobs"></div>
 
   <section class="bar" id="entranceBar"><h2>入口节点</h2><span class="count">自动检测面板；同页管理入口与落地</span><span class="spacer"></span><button onclick="document.querySelector('#newnode').click()">新建入口</button><button onclick="document.querySelector('#settingsBtn').click()">核心 / 面板 / 域名</button></section>
@@ -536,7 +537,7 @@ button,input,select,textarea{border-radius:8px}button{padding:7px 12px}h2,.bar h
 </div>
 
 
-<div class="modal" id="domainbox"><div class="sheet"><div class="head"><h2>域名与证书</h2><span class="spacer"></span><button class="icon" data-close="domainbox">关闭</button></div><div class="body"><div class="domain-current" id="domainCurrent"></div><div class="domain-result" id="domainResult" role="status" aria-live="polite" hidden></div><div id="domainList"></div><label class="f"><span>绑定域名</span><input id="domainName" placeholder="node.example.com" autocomplete="off"></label><label class="f"><span>绑定方式 / 已有证书</span><select id="domainCert"><option value="">申请新的证书</option></select></label><label class="f" id="domainEmailWrap"><span>联系邮箱（签发证书时使用）</span><input id="domainEmail" type="email" placeholder="you@example.com"></label><label class="f" id="domainWebrootWrap"><span>现有网站根目录（可选）</span><input id="domainWebroot" placeholder="/var/www/html"><small class="hint">80 端口被网站使用时，通过该目录验证；需允许访问 /.well-known/acme-challenge/。</small></label><label class="chk"><input id="domainManagement" type="checkbox" checked> 同时更新管理登录地址</label><div class="hint">优先复用匹配的有效证书。申请 HTTPS 证书需先解析到 VPS 并放行 80 端口；仅绑定 HTTP 域名无需签发证书。取消勾选时，仅保存供 TLS 入口使用。</div><div class="hint" id="domainHint"></div></div><div class="foot"><button id="domainUnbind">管理地址解绑回IP</button><button id="domainRefresh">重新扫描证书</button><span class="spacer"></span><button class="primary" id="domainSubmit">绑定域名</button></div></div></div>
+<div class="modal" id="domainbox"><div class="sheet"><div class="head"><h2>域名与证书</h2><span class="spacer"></span><button class="icon" data-close="domainbox">关闭</button></div><div class="body"><div class="domain-current" id="domainCurrent"></div><div class="domain-result" id="domainResult" role="status" aria-live="polite" hidden></div><div id="domainList"></div><label class="f"><span>绑定域名</span><input id="domainName" placeholder="node.example.com" autocomplete="off"></label><label class="f"><span>绑定方式 / 已有证书</span><select id="domainCert"><option value="">申请新的证书</option></select></label><label class="chk"><input id="domainManagement" type="checkbox" checked> 同时更新管理登录地址</label><div class="hint">填写域名即可自动复用或申请证书，无需邮箱。申请 HTTPS 证书前请解析到 VPS 并放行 80 端口；取消勾选时仅供 TLS 入口使用。</div><div class="hint" id="domainHint"></div></div><div class="foot"><button id="domainUnbind">管理地址解绑回IP</button><button id="domainRefresh">重新扫描证书</button><span class="spacer"></span><button class="primary" id="domainSubmit">绑定域名</button></div></div></div>
 <div class="modal" id="ipbox"><div class="sheet"><div class="head"><h2>IP / ASN 信息</h2><span class="spacer"></span><button class="icon" data-close="ipbox">关闭</button></div><div class="body"><div class="setrow"><label class="f"><span>公网IP</span><input id="ipAddress" placeholder="IPv4 / IPv6 地址"></label><button class="primary" id="ipLookup">查询</button></div><div id="ipDetails" class="domain-card">输入IP，或点击出口上的“查看IP”。</div><div class="hint">显示来源、时间、网络类型、判断依据与置信程度。结合机房 / 移动标记和运营商信息分类；检测失败会自动重试。</div></div></div></div>
 <div class="toast" id="toast"></div>
 
@@ -560,8 +561,14 @@ const ICON = {
 // 界面挂在随机前缀下，请求一律走相对路径
 async function api(path, opts){
   const r = await fetch(path.replace(/^\//, ''), opts);
-  const d = await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(d.error || ('HTTP '+r.status));
+  const d = await r.json().catch(()=>null);
+  if(!r.ok){
+    if(d && d.code==='management_moved' && d.url) managementMoved(d.url);
+    const fallback=({400:'请求未被正确处理，请刷新当前登录地址后重试。',503:'管理服务暂时不可用，请稍后重试；若刚切换域名，请打开新的登录地址。'})[r.status];
+    const err=new Error(d && d.error || fallback || ('请求失败（HTTP '+r.status+'）'));
+    err.status=r.status;err.code=d && d.code;throw err;
+  }
+  if(!d) throw new Error('管理服务返回了无效响应，请稍后重试。');
   return d;
 }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
@@ -638,7 +645,7 @@ function renderExits(){
   list.innerHTML = view.exits.map(e => {
     const label = e.exit_ip || (e.status === 'starting' ? '连接中…' : '—');
     const chips = enabledEntrances(e).length
-      ? enabledEntrances(e).map(i => '<button class="chip" data-detail="' + i.id + '" title="'
+      ? enabledEntrances(e).map(i => '<button class="chip entry-chip" data-detail="' + i.id + '" title="'
           + esc((i.remark || '入口 #'+i.id) + ' · ' + entranceLabel(i) + ' :' + i.port) + '">'
           + entranceChip(i) + '</button>').join('')
       : (e.needs_node ? '<button class="chip none" data-repair="'+e.slot+'" title="补建或修复此出口入口">'+(e.entry_error ? '修复入口' : '入口准备中')+'</button>' : '<button class="chip" data-cred="'+e.slot+'">SOCKS5 / HTTP</button>');
@@ -686,7 +693,7 @@ function renderOrphans(){
     + '</div>'
     + list.map(i =>
         '<div class="orow">'
-        + '<button class="chip" data-detail="' + i.id + '" title="'
+        + '<button class="chip entry-chip" data-detail="' + i.id + '" title="'
         +   esc((i.remark || '入口 #'+i.id) + ' · ' + entranceLabel(i) + ' :' + i.port) + '">'
         +   entranceChip(i) + '</button>'
         + '<span class="spacer"></span>'
@@ -721,6 +728,7 @@ function renderJobs(jobs){
 }
 
 async function poll(){
+  if(managementMovedURL) return;
   try{
     view = await api('/api/exits');
     $('#panel').textContent = view.panel
@@ -734,6 +742,7 @@ async function poll(){
     renderImported();
     renderOrphans();
   }catch(e){}
+  if(managementMovedURL) return;
   try{ renderJobs(await api('/api/jobs') || []); }catch(e){}
 }
 
@@ -1536,7 +1545,21 @@ if($('#setIPKey').value.trim()) body.ip_info_key = $('#setIPKey').value.trim();
   e.target.disabled = false;
 };
 
-let domainData = {certificates:[], registered:[]}, domainPending = null;
+let domainData = {certificates:[], registered:[]}, domainPending = null, managementMovedURL='';
+function managementMoved(url){
+  let address;try{address=new URL(url,location.href);}catch(e){return;}
+  if(!['http:','https:'].includes(address.protocol)) return;
+  managementMovedURL=address.href;
+  domainPending=null;
+  const box=$('#managementMoved');box.hidden=false;
+  box.innerHTML=domainLink(address.href,'管理地址已更新')+'<p class="hint">请打开新地址登录。当前页面已暂停自动刷新。</p>';
+  showDomainResult(address.href,'新的管理登录地址','请打开新地址后继续操作。');
+  $('#domainHint').textContent='管理地址已更新，请打开新地址登录。';
+  $('#domainSubmit').disabled=true;$('#domainUnbind').disabled=true;
+}
+function managementChanged(url){
+  try{if(new URL(url,location.href).origin!==location.origin) managementMoved(url);}catch(e){}
+}
 function domainLink(url,label){
   if(!/^https?:\/\//.test(url || '')) return '';
   return '<div class="domain-login-link"><strong>'+esc(label)+'</strong><a target="_blank" rel="noopener noreferrer" href="'+esc(url)+'">'+esc(url)+'</a><button type="button" data-copy-domain="'+esc(url)+'">复制登录地址</button></div>';
@@ -1548,7 +1571,7 @@ function syncDomainJob(jobs){
   if(!domainPending) return;
   const job=jobs.find(j=>j.id===domainPending.id);
   if(!job) return;
-  if(job.result_url){showDomainResult(job.result_url,'新的管理登录地址','绑定已完成，请打开新地址登录。');domainPending=null;}
+  if(job.result_url){showDomainResult(job.result_url,'新的管理登录地址','绑定已完成，请打开新地址登录。');managementChanged(job.result_url);domainPending=null;}
   else if(job.status==='failed'){const fail=job.steps.find(s=>s.status==='failed');$('#domainResult').hidden=true;$('#domainHint').textContent='绑定未完成：'+(fail ? fail.detail : '请检查签发任务');domainPending=null;}
 }
 document.addEventListener('click',async event=>{const button=event.target.closest('[data-copy-domain]');if(button){try{await copy(button.dataset.copyDomain);}catch(err){toast(err.message,true);}}});
@@ -1582,10 +1605,10 @@ function syncCertificateSelection(){
   if(selection[0] === 'self_signed' && !$('#nsni').value) $('#nsni').value = domainData.current || location.hostname;
   syncNodeForm();
 }
-async function openDomains(){
+async function openDomains(refresh=false){
   openModal('domainbox');$('#domainHint').textContent = '读取域名与证书…';
   try{
-    domainData = await api('/api/domains');
+    domainData = await api('/api/domains'+(refresh===true?'?refresh=1':''));
     $('#domainCurrent').innerHTML = '<strong>当前管理地址</strong><div>' + esc(domainData.management_url || location.href) + '</div>';
     const previous = $('#domainCert').value;
     $('#domainCert').innerHTML = certificateOptions(domainData.certificates,false);
@@ -1599,31 +1622,32 @@ async function openDomains(){
   }catch(err){ $('#domainHint').textContent = err.message; }
 }
 $('#domainBtn').onclick = openDomains;
-$('#domainRefresh').onclick = openDomains;
+$('#domainRefresh').onclick = () => openDomains(true);
 function syncDomainMethod(){
   const selection=$('#domainCert').value.split('|'),http=selection[0]==='__http__';
-  $('#domainEmailWrap').hidden=!!selection[0];$('#domainWebrootWrap').hidden=!!selection[0];
   $('#domainManagement').disabled=http;if(http) $('#domainManagement').checked=true;
   if(selection.length>1 && !selection[1].includes('*')) $('#domainName').value=selection[1];
 }
 $('#domainCert').onchange=syncDomainMethod;
 async function domainAction(body){
   const result = await api('/api/domains',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(result.job){domainPending={id:result.job,url:result.next_url};$('#domainHint').textContent='证书签发进行中，可在任务区查看进度。';if(result.next_url) showDomainResult(result.next_url,'签发成功后的登录地址','此地址将在签发成功后启用。启用 HTTPS 后当前页面可能断开，请稍后打开上方地址登录。');poll();return;}
+  if(result.job){domainPending={id:result.job,url:result.next_url};$('#domainHint').textContent='证书签发进行中，可在任务区查看进度。';if(result.next_url) showDomainResult(result.next_url,'签发成功后的登录地址','此地址将在签发成功后启用。签发成功后请打开上方地址登录，当前端口保持不变。');poll();return;}
   if(result.management || body.action === 'unbind'){
     $('#domainHint').textContent='绑定已生效，请使用新地址登录。';showDomainResult(result.url,'新的管理登录地址','已包含实际管理端口和完整登录路径。');$('#domainCurrent').textContent='当前管理地址：'+result.url;
-    toast('管理地址已更新，请打开新地址');
+    managementChanged(result.url);
+    if(body.action==='unbind') $('#domainHint').textContent='管理域名已解绑，请使用新的 IP 登录地址。';
+    toast(body.action==='unbind'?'管理域名已解绑，请打开 IP 登录地址':'管理地址已更新，请打开新地址');
   }else{ toast('域名已保存');await openDomains(); }
-  loadNodeCertificates();
+  if(!managementMovedURL) loadNodeCertificates();
 }
 $('#domainSubmit').onclick = async event => {
   const selection = $('#domainCert').value.split('|');
   event.target.disabled=true;
-  try{ await domainAction({action:selection[0]==='__http__' ? 'bind-http' : selection[0] ? 'bind' : 'issue',domain:$('#domainName').value.trim(),certificate_id:selection[0]==='__http__' ? '' : selection[0],email:$('#domainEmail').value.trim(),webroot:$('#domainWebroot').value.trim(),management:$('#domainManagement').checked}); }
+  try{ await domainAction({action:selection[0]==='__http__' ? 'bind-http' : selection[0] ? 'bind' : 'issue',domain:$('#domainName').value.trim(),certificate_id:selection[0]==='__http__' ? '' : selection[0],management:$('#domainManagement').checked}); }
   catch(err){ $('#domainHint').textContent=err.message; }
-  finally{event.target.disabled=false;}
+  finally{event.target.disabled=!!managementMovedURL;}
 };
-$('#domainUnbind').onclick = async () => { try{await domainAction({action:'unbind'});}catch(err){toast(err.message,true);} };
+$('#domainUnbind').onclick = async event => {event.target.disabled=true;try{await domainAction({action:'unbind'});}catch(err){$('#domainHint').textContent=err.message;toast(err.message,true);}finally{event.target.disabled=!!managementMovedURL;}};
 document.addEventListener('click',async event => {
   const use=event.target.closest('[data-domain-use]'),choose=event.target.closest('[data-domain-select]'),remove=event.target.closest('[data-domain-remove]');
   if(use){try{await domainAction({action:'bind',domain:use.dataset.domainUse,certificate_id:use.dataset.certificate,management:true});}catch(err){toast(err.message,true);}}

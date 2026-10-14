@@ -28,17 +28,20 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
   <a href="CHANGELOG.md">更新记录</a>
 </p>
 
-**当前正式版：`v0.2.1`**，基于 `dev35`。支持 Linux **amd64 / arm64**，管理界面支持白天 / 夜间主题、移动端布局和展示 / 管理模式。安装包已经编译，**VPS 不需要 Go**。
+**当前正式版：`v0.2.2`**，基于 `dev36`。支持 Linux **amd64 / arm64**，管理界面支持白天 / 夜间主题、移动端布局和展示 / 管理模式。安装包已经编译，**VPS 不需要 Go**。
 
-> 升级提醒：`v0.2.1` 使用基于 fanout 的单页架构。旧版任务、远程 Agent、多账号和高级记录不会完整迁移；安装器仅迁移已识别旧安装的可用入口、普通 OpenVPN 出口及相关凭据，升级前请备份。不要将“正式 Release”理解为对所有 VPS、面板与 VPN Gate 节点均已完成实机验证。
+> 升级提醒：`v0.2.2` 使用基于 fanout 的单页架构。旧版任务、远程 Agent、多账号和高级记录不会完整迁移；安装器仅迁移已识别旧安装的可用入口、普通 OpenVPN 出口及相关凭据，升级前请备份。不要将“正式 Release”理解为对所有 VPS、面板与 VPN Gate 节点均已完成实机验证。
 
-## v0.2.1 更新重点
+## v0.2.2 更新重点
 
-- Go 源码、测试和内嵌插画统一迁至 `src/`，项目与发布包统一使用 **Miku Gate / miku-gate**。
-- 入口显示真实协议栈，包括传输方式、TLS / REALITY 和 VISION，避免只显示基础协议造成混淆。
-- 改进证书复用、Webroot 签发、域名绑定后的完整登录地址与外部证书续期来源记录。
-- 安装、修复和端口选择兼顾 IPv4 / IPv6，并避让已有面板及入口；就绪检查验证 Miku Gate 响应标识，避免误判其他面板。
-- 增加有确认步骤的完整卸载菜单，保留原来的“停止并保留数据”行为。
+- Go 源码、测试和内嵌插画继续位于 `src/`，项目与发布包统一使用 **Miku Gate / miku-gate**。
+- 管理域名切换时保持旧页面地址的交接流程，避免同端口 HTTPS / HTTP 监听被错误关闭；旧随机路径继续保护管理端。
+- 仅对本机 loopback 反向代理的转发头识别 HTTPS 来源，正确设置登录 Cookie 的 Secure 属性和跨站请求校验。
+- 域名证书目录探测增加短缓存与手动刷新，复用 3x-ui 证书时不会频繁调用面板命令。
+- 网页签证书支持 Certbot 无邮箱签发参数，仍校验用户提供邮箱的格式；域名末尾点规范化，Webroot / 旧 API 可选参数保持兼容。
+- 增加管理监听器协议探测与临时 Accept 错误恢复，避免空闲客户端或瞬时监听异常导致管理端口退出。
+- 协议标签缩小并保留完整配置提示；页面切换管理地址时暂停延迟测量，避免在旧地址上继续发送请求。
+- 保留 v0.2.1 的完整卸载、一键安装、SHA256 / BUILD 清单校验、双架构构建和旧安装兼容。
 
 ## 主要功能
 
@@ -87,30 +90,30 @@ bash -c 'set -e; d=$(mktemp -d); trap '\''rm -rf -- "$d"'\'' EXIT; curl --proto 
   curl --proto '=https' --tlsv1.2 -fsSL \
     -H "Authorization: Bearer $GITHUB_TOKEN" \
     -H 'Accept: application/vnd.github.raw+json' \
-    'https://api.github.com/repos/vioIetMiku/miku-gate/contents/install-online.sh?ref=v0.2.1' \
+    'https://api.github.com/repos/vioIetMiku/miku-gate/contents/install-online.sh?ref=v0.2.2' \
     -o "$d/install-online.sh"
   bash "$d/install-online.sh"
 )
 ```
 
-访问令牌仅用于读取当前仓库的 Release。自定义管理端口时，在执行脚本前设置 `export WEB_PORT=9900`；锁定版本使用 `export MIKU_VERSION=v0.2.1`。已经下载脚本时，也可先运行 `bash install-online.sh --download-only /root/miku-packages`，只下载并校验，不安装服务。
+访问令牌仅用于读取当前仓库的 Release。自定义管理端口时，在执行脚本前设置 `export WEB_PORT=9900`；锁定版本使用 `export MIKU_VERSION=v0.2.2`。已经下载脚本时，也可先运行 `bash install-online.sh --download-only /root/miku-packages`，只下载并校验，不安装服务。
 
 ### 手动安装 / 离线传包
 
-在 [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.1) 下载以下文件。私有仓库需要先登录 GitHub：
+在 [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.2) 下载以下文件。私有仓库需要先登录 GitHub：
 
 | 文件 | 用途 |
 | --- | --- |
-| `miku-gate-vps-v0.2.1.tar.gz` | VPS 通用安装包，包含两种架构的主程序、旧版导出程序与维护工具 |
-| `miku-gate-v0.2.1.zip` | 完整源码 + 两种架构安装二进制；不是 GitHub 自动生成的纯源码压缩包 |
+| `miku-gate-vps-v0.2.2.tar.gz` | VPS 通用安装包，包含两种架构的主程序、旧版导出程序与维护工具 |
+| `miku-gate-v0.2.2.zip` | 完整源码 + 两种架构安装二进制；不是 GitHub 自动生成的纯源码压缩包 |
 | `install-online.sh` | 最新正式版在线安装入口 |
 | `SHA256SUMS` | 上述三个附件的 SHA256 校验清单 |
 
 将 VPS 包和校验文件放到同一目录后运行：
 
 ```bash
-grep '  miku-gate-vps-v0.2.1.tar.gz$' SHA256SUMS | sha256sum -c -
-sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.1.tar.gz
+grep '  miku-gate-vps-v0.2.2.tar.gz$' SHA256SUMS | sha256sum -c -
+sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.2.tar.gz
 sudo bash miku-gate/install.sh
 ```
 
@@ -132,7 +135,8 @@ sudo bash miku-gate/install.sh
 - 在 DNS 设置域名 A 记录指向 VPS，然后执行 `miku domain`，或在网页右上角管理域名与证书。
 - 优先复用匹配域名且有效的已登记 / 面板 / Certbot 证书，校验私钥权限、证书匹配与剩余有效期。没有证书时可自动签发，需要公网可访问 TCP 80。
 - TCP 80 被已有网站占用时，可使用该站点 Webroot 的 `/.well-known/acme-challenge/` 验证；也可选择只绑定 HTTP 域名，不会强行停止其他网站。
-- 域名操作成功后会返回包含实际端口和随机路径的完整登录地址；外部证书保留续期来源。
+- 域名操作成功后会返回包含实际端口和随机路径的完整登录地址；外部证书保留续期来源。旧页面提示切换地址并暂停轮询，随后请用新地址重新登录。
+- 网页不再要求输入邮箱或网站目录；邮件提醒未配置时使用 Certbot 无邮箱注册。命令行域名流程及旧 API 仍兼容可选邮箱 / Webroot 参数。
 - 可更换域名，输入 `none` 解绑。REALITY 使用自己的握手目标，不需要管理域名证书。
 - 改密码、核心、域名或维护服务可能重启入口与 VPN，客户端需要重新连接。
 
@@ -158,7 +162,7 @@ miku stop
 miku restart
 miku logs
 miku backup          # 停机一致性备份；完成后恢复原运行状态
-miku update /root/miku-gate-vps-v0.2.1.tar.gz
+miku update /root/miku-gate-vps-v0.2.2.tar.gz
 miku rollback        # 仅用于已登记的旧架构迁移，恢复切换前配套快照
 miku uninstall       # 停止并取消自启，保留程序、数据与备份
 # 以下为破坏性操作，先将备份复制到 /var/lib/miku 之外：
@@ -198,7 +202,7 @@ sudo /tmp/miku-gate-tests -test.count=1 -test.timeout=5m
 go vet ./...
 (cd compat/miku-export && go test ./... && go vet ./...)
 (cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap)
-python3 scripts/build-release.py --version 0.2.0 --label v0.2.1 --output dist
+python3 scripts/build-release.py --version 0.2.0 --label v0.2.2 --output dist
 ```
 
 构建脚本从源码重新编译两种架构的主程序和兼容导出程序，生成 VPS 包、完整 ZIP、在线安装脚本、`BUILD.json` 与 `SHA256SUMS`。Git 标签 `vX.Y.Z` 触发自动检查、构建及正式发布；检查失败不会发布正式 Release。

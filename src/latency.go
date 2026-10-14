@@ -296,7 +296,7 @@ function latencyOf(exit){
 }
 async function measureBrowserPing(){
   const now=Date.now();
-  if(browserPingBusy || document.hidden || (browserPingAttempted && now-browserPingAttempted<BROWSER_LATENCY_INTERVAL)) return;
+  if(managementMovedURL || browserPingBusy || document.hidden || (browserPingAttempted && now-browserPingAttempted<BROWSER_LATENCY_INTERVAL)) return;
   browserPingAttempted=now;
   saveBrowserLatency();
   browserPingBusy=true;

@@ -17,12 +17,16 @@ import (
 type webServer struct {
 	handler http.Handler
 
-	mu          sync.Mutex
-	ln          net.Listener
-	srv         *http.Server
-	addr        string
-	secure      bool
-	certificate *tls.Certificate
+	mu                  sync.Mutex
+	ln                  net.Listener
+	srv                 *http.Server
+	addr                string
+	secure              bool
+	certificate         *tls.Certificate
+	previousCertificate *tls.Certificate
+	previousUntil       time.Time
+	settings            WebSettings
+	applyMu             sync.Mutex
 }
 
 func newWebServer(h http.Handler) *webServer {
@@ -55,45 +59,19 @@ func (s *webServer) reload(cfg WebSettings) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.ln != nil && addr == s.addr && secure == s.secure {
-		s.certificate = pair
+	if s.ln != nil && addr == s.addr {
+		s.updateProtocol(cfg, pair)
 		return nil
 	}
-	oldSrv, oldLn, oldAddr, oldSecure, oldPair := s.srv, s.ln, s.addr, s.secure, s.certificate
-	if oldLn != nil && oldAddr == addr {
-		_ = oldLn.Close()
-	}
+	oldSrv, oldLn := s.srv, s.ln
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		if oldLn != nil && oldAddr == addr {
-			if restored, restoreErr := net.Listen("tcp", oldAddr); restoreErr == nil {
-				s.certificate = oldPair
-				if oldSecure {
-					restored = tls.NewListener(restored, &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-						s.mu.Lock()
-						defer s.mu.Unlock()
-						return s.certificate, nil
-					}})
-				}
-				server := &http.Server{Handler: s.handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second}
-				s.srv, s.ln = server, restored
-				go server.Serve(restored)
-			}
-		}
 		return fmt.Errorf("无法监听 %s", addr)
 	}
-	s.certificate = pair
-	s.secure = secure
-	var tlsConfig *tls.Config
-	if secure {
-		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			return s.certificate, nil
-		}}
-		ln = tls.NewListener(ln, tlsConfig)
-	}
-	server := &http.Server{Handler: s.handler, TLSConfig: tlsConfig, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 64 << 10}
+	s.updateProtocol(cfg, pair)
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: s.getCertificate}
+	ln = newWebProtocolListener(ln, tlsConfig)
+	server := &http.Server{Handler: http.HandlerFunc(s.handleWebRequest), TLSConfig: tlsConfig, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 64 << 10}
 	s.srv, s.ln, s.addr = server, ln, addr
 	go func() {
 		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed && !strings.Contains(err.Error(), "closed network connection") {
@@ -112,8 +90,94 @@ func (s *webServer) reload(cfg WebSettings) error {
 	return nil
 }
 
+// Caller holds s.mu. Retain the prior certificate briefly so a page open on
+// HTTPS can receive the new address after unbinding instead of a TLS failure.
+func (s *webServer) updateProtocol(cfg WebSettings, pair *tls.Certificate) {
+	if s.certificate != nil {
+		s.previousCertificate = s.certificate
+		s.previousUntil = time.Now().Add(10 * time.Minute)
+	}
+	s.certificate = pair
+	s.secure = pair != nil
+	s.settings = cfg
+}
+
+func (s *webServer) getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.certificate != nil {
+		if hello.ServerName != "" && hello.SupportsCertificate(s.certificate) != nil && s.previousCertificate != nil && time.Now().Before(s.previousUntil) && hello.SupportsCertificate(s.previousCertificate) == nil {
+			return s.previousCertificate, nil
+		}
+		return s.certificate, nil
+	}
+	if s.previousCertificate != nil && time.Now().Before(s.previousUntil) {
+		return s.previousCertificate, nil
+	}
+	return nil, fmt.Errorf("管理地址当前未启用HTTPS")
+}
+
+func (s *webServer) handleWebRequest(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	cfg, secure := s.settings, s.secure
+	s.mu.Unlock()
+	requestHost, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		requestHost = r.Host
+	}
+	hostChanged := validDomain(cfg.PublicHost) && !strings.EqualFold(strings.TrimSuffix(requestHost, "."), strings.TrimSuffix(cfg.PublicHost, "."))
+	// An HTTPS-offloading proxy may use plaintext to the backend even when
+	// application TLS is disabled. Actual old TLS connections still hand off.
+	protocolChanged := secure && !requestHTTPS(r) || !secure && r.TLS != nil
+	if protocolChanged || hostChanged {
+		base := currentBasePath()
+		if base != "" && r.URL.Path != base && !strings.HasPrefix(r.URL.Path, base+"/") {
+			http.NotFound(w, r)
+			return
+		}
+		host := cfg.PublicIP
+		if host == "" {
+			host, _, _ = net.SplitHostPort(r.Host)
+			if host == "" {
+				host = r.Host
+			}
+		}
+		url := cfg.origin(host) + base + "/"
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Miku-Management-URL", url)
+		path := r.URL.Path
+		if base != "" {
+			path = strings.TrimPrefix(path, base)
+		}
+		if strings.HasPrefix(path, "/api/") || r.Method != http.MethodGet && r.Method != http.MethodHead {
+			writeJSON(w, http.StatusConflict, map[string]string{"code": "management_moved", "error": "管理地址已更新，请打开新的登录地址继续操作", "url": url})
+			return
+		}
+		http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+		return
+	}
+	s.handler.ServeHTTP(w, r)
+}
+
+// Forwarded protocol is honored only for a proxy on this VPS's loopback.
+// Remote clients cannot use a header to bypass HTTPS or Origin checks.
+func requestHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return r.Header.Get("X-Forwarded-Proto") == "https"
+		}
+	}
+	return false
+}
+
 // applyWebSettings 校验、落盘并切换监听。任一步失败都不改动线上监听。
 func (s *webServer) applyWebSettings(next WebSettings) error {
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
 	if err := validatePort(next.Port); err != nil {
 		return err
 	}

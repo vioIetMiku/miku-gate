@@ -42,13 +42,16 @@ type RegisteredDomain struct {
 	Added      time.Time `json:"added"`
 }
 type DomainRegistry struct {
-	mu        sync.Mutex
-	operation sync.Mutex
-	issuing   bool
-	dir       string
-	server    *webServer
-	manager   *Manager
-	values    []RegisteredDomain
+	mu         sync.Mutex
+	operation  sync.Mutex
+	issuing    bool
+	dir        string
+	server     *webServer
+	manager    *Manager
+	values     []RegisteredDomain
+	xuiChecked time.Time
+	xuiCert    string
+	xuiKey     string
 }
 
 func newDomainRegistry(dir string, server *webServer, m *Manager) *DomainRegistry {
@@ -183,8 +186,15 @@ func (d *DomainRegistry) catalogLocked() []CertificateChoice {
 	}
 	// Reuse the panel's configured certificate without changing its files,
 	// listener or renewal configuration.
-	if cert, key := xuiCertificatePaths(); cert != "" && key != "" {
-		add(cert, key, "3x-ui 管理证书")
+	if d.xuiChecked.IsZero() || time.Since(d.xuiChecked) >= 30*time.Second {
+		cert, key := xuiCertificatePaths()
+		if cert != "" && key != "" {
+			d.xuiCert, d.xuiKey = cert, key
+		}
+		d.xuiChecked = time.Now()
+	}
+	if d.xuiCert != "" && d.xuiKey != "" {
+		add(d.xuiCert, d.xuiKey, "3x-ui 管理证书")
 	}
 	sort.Slice(choices, func(i, j int) bool { return choices[i].Source < choices[j].Source })
 	return choices
@@ -348,7 +358,7 @@ func xuiCertificatePaths() (string, string) {
 	if _, err := os.Stat(binary); err != nil {
 		return "", ""
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	raw, err := exec.CommandContext(ctx, binary, "setting", "-getCert").Output()
 	if err != nil {
@@ -378,12 +388,26 @@ func certificateCommandArgs(input domainRequest) ([]string, error) {
 		mode = []string{"--webroot", "-w", root}
 	}
 	args := append([]string{"certonly"}, mode...)
-	return append(args, "--preferred-challenges", "http", "--non-interactive", "--agree-tos", "--email", input.Email, "--cert-name", input.Domain, "-d", input.Domain), nil
+	args = append(args, "--preferred-challenges", "http", "--non-interactive", "--agree-tos")
+	if input.Email == "" {
+		args = append(args, "--register-unsafely-without-email")
+	} else {
+		if !strings.Contains(input.Email, "@") || strings.ContainsAny(input.Email, "\r\n\x00") || len(input.Email) > 254 {
+			return nil, fmt.Errorf("联系邮箱格式无效")
+		}
+		args = append(args, "--email", input.Email)
+	}
+	return append(args, "--cert-name", input.Domain, "-d", input.Domain), nil
 }
 
 func (d *DomainRegistry) Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
+			if r.URL.Query().Get("refresh") == "1" {
+				d.mu.Lock()
+				d.xuiChecked = time.Time{}
+				d.mu.Unlock()
+			}
 			choices := d.Catalog()
 			d.mu.Lock()
 			registered := []map[string]any{}
@@ -416,7 +440,7 @@ func (d *DomainRegistry) Handler() http.HandlerFunc {
 			writeJSON(w, 400, map[string]string{"error": "请求格式错误"})
 			return
 		}
-		input.Domain = strings.ToLower(strings.TrimSpace(input.Domain))
+		input.Domain = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(input.Domain)), ".")
 		if input.Action != "unbind" && !validDomain(input.Domain) {
 			writeJSON(w, 400, map[string]string{"error": "请填写有效域名，不带协议、端口或路径"})
 			return
@@ -431,7 +455,7 @@ func (d *DomainRegistry) Handler() http.HandlerFunc {
 			next.TLSKey = ""
 			next.CertificateDomain = ""
 			if err := d.server.applyWebSettings(next); err != nil {
-				writeJSON(w, 400, map[string]string{"error": err.Error()})
+				writeJSON(w, 500, map[string]string{"error": "管理地址更新失败，原配置已保留：" + err.Error()})
 				return
 			}
 			writeJSON(w, 200, map[string]any{"url": next.origin(next.PublicHost) + currentBasePath() + "/", "management": true})
@@ -469,10 +493,6 @@ func (d *DomainRegistry) Handler() http.HandlerFunc {
 			}
 		}
 		if input.Action == "issue" {
-			if !strings.Contains(input.Email, "@") || strings.ContainsAny(input.Email, "\r\n\x00") || len(input.Email) > 254 {
-				writeJSON(w, 400, map[string]string{"error": "申请证书需要有效联系邮箱"})
-				return
-			}
 			args, err := certificateCommandArgs(input)
 			if err != nil {
 				writeJSON(w, 400, map[string]string{"error": err.Error()})
@@ -492,7 +512,7 @@ func (d *DomainRegistry) Handler() http.HandlerFunc {
 				d.mu.Lock()
 				d.issuing = false
 				d.mu.Unlock()
-				writeJSON(w, 400, map[string]string{"error": "80端口正由其他服务使用。可选择已有证书，填写现有网站根目录验证，或选择仅绑定HTTP管理域名；无需停止其他面板。"})
+				writeJSON(w, 409, map[string]string{"error": "80端口正由其他服务使用，暂不能申请新证书。请选择已有证书，或选择仅绑定HTTP管理域名；已有证书会优先自动复用。"})
 				return
 			}
 			job := d.manager.jobs.New("绑定域名 "+input.Domain, []string{"申请证书", "保存域名", "启用管理域名"})

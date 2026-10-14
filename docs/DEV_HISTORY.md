@@ -1,17 +1,17 @@
 # Miku Gate
 
-单页节点与出口管理工具。版本：0.2.0-dev.35。
+单页节点与出口管理工具。版本：0.2.0-dev.36。
 
 ## 安装
 
-把 `miku-fanout-vps-dev35.tar.gz` 上传到 VPS，然后运行：
+把 `miku-fanout-vps-dev36.tar.gz` 上传到 VPS，然后运行：
 
 ```bash
-sudo tar --no-same-owner -xzf miku-fanout-vps-dev35.tar.gz
+sudo tar --no-same-owner -xzf miku-fanout-vps-dev36.tar.gz
 sudo bash miku-fanout/install.sh
 ```
 
-如果下载的是 `miku-fanout-dev35.zip`，解压后进入其中的 `miku-fanout` 目录，运行 `sudo bash install.sh` 即可，已包含两种架构的程序。
+如果下载的是 `miku-fanout-dev36.zip`，解压后进入其中的 `miku-fanout` 目录，运行 `sudo bash install.sh` 即可，已包含两种架构的程序。
 
 支持 amd64 / arm64 的 Linux VPS，支持 systemd / OpenRC；VPS 必须提供 TUN。
 安装器先检测并补齐 Python、OpenVPN、curl、OpenSSL、iptables、iproute 和 CA。
@@ -29,9 +29,11 @@ sudo bash miku-fanout/install.sh
 - 新安装自动选取空闲管理端口，同时检查 IPv4 / IPv6，避开 8899 和已识别面板端口。更新时修复被占用的原端口；安装完成显示实际地址。
 - 安装和快捷菜单显示 Miku Gate 动态字样，非交互终端显示静态版本。
 - `miku purge` 完整删除本服务程序、配置、节点、凭据与备份；不会删除 3x-ui 或共享证书。重新安装也可运行 `sudo bash install.sh --reinstall`。清除前请将需要的备份复制到本服务目录之外。
-- 域名绑定自动复用匹配的有效证书，包括 3x-ui 的已配置证书。80 端口被网站占用时可填写网站根目录，通过 Webroot 验证；也可明确选择只绑定 HTTP 管理域名。独立签发仍需可用的 80 端口。
+- 网页域名表单移除邮箱与网站目录，只需填写域名并选择绑定方式。自动复用匹配证书，缺少证书时可免邮箱签发；80 端口被占用时可选择已有证书或仅绑定 HTTP 管理域名。
+- 网页绑定或解绑管理域名时复用同一监听端口，不重启入口或 VPN 隧道。旧页面会提示新的完整登录地址并暂停轮询、测速，避免继续向旧协议发请求。
+- 证书扫描缓存 3x-ui 的路径查询，避免一次绑定反复执行面板命令；“重新扫描证书”可立即刷新。
 - 绑定后持续显示可复制、可打开的完整登录地址。异步签发会先显示待启用地址，任务失败时不会标记成功。
-- 入口显示实际协议、传输、安全层与已启用的 Vision；混合客户端标注 Vision 可选。
+- 入口显示实际协议、传输、安全层与已启用的 Vision；混合客户端标注 Vision 可选。协议标签缩小为紧凑样式，完整配置在悬停提示和详情中保留。
 - Go 源码、测试与内嵌图片统一收纳到 `src/`，编译入口为 `go build ./src`，测试为 `go test ./...`。
 - 保留日间 / 夜间主题、双列展示、30 秒延迟采样和近 10 分钟超过 3 次自动重连的温和提醒。
 
@@ -68,7 +70,7 @@ miku uninstall       # 停止、取消自启，保留程序和数据
 miku purge           # 完整卸载并清除本服务数据（等同 miku uninstall --purge）
 ```
 
-改密码、核心、域名等操作可能重启入口与 VPN；客户端会重新连接。
+改密码、核心或通过快捷命令修改域名可能重启服务，客户端会重新连接。网页绑定 / 解绑管理域名不会重启入口或 VPN。
 数据在 `/var/lib/miku`，程序在 `/usr/local/lib/miku`，服务名 `miku`。
 备份包含访问口令、节点身份和证书私钥，文件权限为 600。
 
@@ -94,15 +96,15 @@ python3 scripts/build-release.py
 
 来源、变更与第三方说明见 PROVENANCE.md；原项目说明见 README.fanout.md；MIT 许可和 byJoey 作者署名保留在 LICENSE。
 
-## 当前功能（dev35）
+## 当前功能（dev36）
 
 - 登录页和工作台加入 Miku 插画、青绿色主题与移动布局，移除交流群、油管和博客入口；原 MIT 许可与项目署名保留。
 - 默认包括全部 VPN Gate 节点。合并官方 API、Worker CSV 镜像、HTTPS CSV 快照、自定义 CSV，以及七天滚动池；移除无效的无 www API 地址，不再把网页镜像误当成 CSV API。滚动池固定提交并验证目录、配置文件和解码配置的 SHA256。镜像记录或 TCP 检查不能证明 VPN 在本机可用。
 - 默认不设 20 条的软件总数上限，增加按钮可超过 20。可选 `-max` 仅供管理员自行限制；实际容量取决于 VPS 资源、端口与网络地址空间。旧网段保留，新槽位不会把 IPv4 八位字段扩大到 255 以上。
 - 出口连接后异步查询 ASN、ASN 组织、ISP、IP 归属商、地理位置与 IP 属性。结果含来源、时间、分类依据与置信程度，成功缓存 24 小时；检测失败一分钟后自动重试。移动和机房明确标记优先；普通运营商网络结合类型字段与归属信息按住宅规则推断，不再要求完整双类型才能展示。代理 / VPN 标记不等于机房。IP-API 免费属性接口使用 HTTP，服务器只传查询的公网 IP；HTTPS 的 ipwho.is 提供 ASN/ISP 备用。可选 ipapi.is Key 通过服务端 HTTPS POST 使用，私有保存、不返回网页。遵守来源限流与429退避。
-- 网页“域名 / 证书”支持多个域名，复用已有证书或安装 certbot 后申请新证书，选择是否设为 HTTPS 管理域名，也可解绑回 HTTP+IP。签发任务有进度，失败不会假装已绑定。
+- 网页“域名 / 证书”支持多个域名，复用已有证书或安装 certbot 后申请新证书，选择是否设为 HTTPS 管理域名，也可解绑回 HTTP+IP。签发任务有进度，失败不会假装已绑定。网页无需填写邮箱或网站目录，默认免邮箱签发；保留原端口与访问路径。
 - TLS 新建表单自动列出管理、已有入口、Certbot、acme.sh 的有效证书；多域名可选择，自动填 SNI，节点链接使用选定域名。私钥不会返回网页；不匹配或过期证书不能被使用。无证书时可明确选择自签或手动证书。
-- 注册的域名证书支持定时更新；OpenRC 使用 `miku certificate-refresh` 定期刷新。新域名须先解析到 VPS，ACME 独立签发需要80端口开放且空闲。已有入口使用的证书不会因移出域名列表而被删除。
+- 注册的域名证书支持定时更新；OpenRC 使用 `miku certificate-refresh` 定期刷新。新域名须先解析到 VPS，ACME 独立签发需要80端口开放且空闲。已有入口使用的证书不会因移出域名列表而被删除。独立签发不能绕过 80 端口占用；使用已有证书不需要占用该端口。
 - 出口卡片按“编号、IP位置、IP地址”展示，下面只列出 ASN 归属。凭据弹窗提供明确的“复制 SOCKS5”和“复制 HTTP”，主列表只保留编号、IP位置、地址、ASN和详情入口；使用母机发布地址，不把落地 IP 当成代理连接地址。
 - 通过对应 OpenVPN 隧道、绑定 tun0 调用 Ping0 官方免费 `/geo`，读取实际出口位置、ASN 和归属商；失败时回退 HTTPS 出口 IP 探测。IP 属性仍由现有服务补齐并分别标注来源，IP详情可以直接打开 Ping0 网页检测。没有调用 Ping0 付费 API，也没有从免费定位结果猜测住宅、风控或原生属性。
 - 新建、换线、连接失败、健康重连和重启恢复都严格保持最初选择的国家。原节点失败后自动尝试同国家其他节点，整轮失败会退避、刷新来源并继续尝试，不会换成邻国；近期失败节点冷却3分钟。Ping0返回可识别的国家时，实际出口国家不符的候选也会被拒绝。
@@ -143,7 +145,7 @@ python3 scripts/build-release.py
 
 类型判断思路参考 [AimiliVPN vpn_utils.py](https://github.com/OpenMili/aimili-vpngate/blob/main/vpn_utils.py)，字段依照 [IP-API 文档](https://ip-api.com/docs/api:json)和 [ipapi.is 文档](https://ipapi.is/developers.html)实现。住宅分类是本项目的展示规则，不代表来源对家庭宽带属性的认证。
 
-升级时用新版安装包运行 `sudo bash miku-fanout/install.sh`，或执行 `sudo miku update /绝对路径/miku-fanout-vps-dev35.tar.gz`。安装器沿用现有配置。已有重复自动入口在出口恢复、重连或“修复入口”时对账停用，保留选中入口的端口及凭据。
+升级时用新版安装包运行 `sudo bash miku-fanout/install.sh`，或执行 `sudo miku update /绝对路径/miku-fanout-vps-dev36.tar.gz`。安装器沿用现有配置。已有重复自动入口在出口恢复、重连或“修复入口”时对账停用，保留选中入口的端口及凭据。
 
 VPS 新安装及升级时自动补齐 `ping` 依赖（Debian / Ubuntu 为 `iputils-ping`，其他支持系统为 `iputils`）。服务端不响应 ICMP 时自动尝试备用测量；全部方式暂不可用会显示“暂未测得”，稍后重试。
 
@@ -175,7 +177,7 @@ VPS 新安装及升级时自动补齐 `ping` 依赖（Debian / Ubuntu 为 `iputi
 
 验证覆盖第 3 / 4 次阈值、十分钟窗口边界、历史恢复、重复健康结果、手动重连排除、每出口独立统计、前后台 / 刷新限频，以及提示在两种展示模式中的位置与过期处理。
 
-## dev35 白天 / 夜间模式
+## dev36 白天 / 夜间模式
 
 - 工作台右上角和登录页提供太阳 / 月亮切换按钮。点击“白天模式”使用浅灰底、白色卡片、深色文字和青绿色主色；按钮显示“夜间模式”时可切回原深色主题。
 - 选择在当前浏览器中记忆，刷新、重新登录后自动恢复，同源标签页同步。首次访问默认夜间；浏览器禁止本地存储时仍可在当前页面切换。主题在页面绘制前初始化，减少主题闪烁。

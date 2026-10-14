@@ -18,7 +18,7 @@ ROOT=Path(__file__).resolve().parents[1]
 UPSTREAM='d7ce5224caf3469b19876982abdf8d1be16c4a8b'
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.1');parser.add_argument('--label',default='v0.2.1');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.2');parser.add_argument('--label',default='v0.2.2');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',args.version) or not re.fullmatch(r'[A-Za-z0-9_.-]+',args.label):raise ValueError('invalid version/label')
     args.output=args.output.resolve()
     args.output.mkdir(parents=True,exist_ok=True)

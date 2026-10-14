@@ -156,7 +156,7 @@ func (a *Auth) Wrap(next http.Handler) http.Handler {
 			}
 			if r.Method == http.MethodPost && r.Header.Get("Origin") != "" {
 				scheme := "http"
-				if r.TLS != nil {
+				if requestHTTPS(r) {
 					scheme = "https"
 				}
 				if r.Header.Get("Origin") != scheme+"://"+r.Host {
@@ -266,7 +266,7 @@ func (a *Auth) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		Secure:   r.TLS != nil,
+		Secure:   requestHTTPS(r),
 		MaxAge:   int(sessionTTL.Seconds()),
 	})
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "已登录"})

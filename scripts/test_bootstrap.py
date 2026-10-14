@@ -18,7 +18,7 @@ exec(compile(source, 'install-online.sh:python', 'exec'), b.__dict__)
 REQUIRED = ['install.sh', 'scripts/install.py', 'scripts/common.py', 'scripts/maintain.py', 'scripts/miku.sh', 'bin/miku-linux-amd64', 'bin/miku-linux-arm64', 'bin/miku-export-linux-amd64', 'bin/miku-export-linux-arm64', 'CORE_ASSETS.json']
 
 class BootstrapTests(unittest.TestCase):
-    def package(self, root, extra=None, corrupt=False, version='0.2.1', bundle_root='miku-gate'):
+    def package(self, root, extra=None, corrupt=False, version='0.2.2', bundle_root='miku-gate'):
         path = root / 'package.tar.gz'
         files = {name: ('fixture:' + name).encode() for name in REQUIRED}
         meta = {'product': 'miku-fanout', 'format': 1, 'version': version, 'files': {name: hashlib.sha256(raw).hexdigest() for name, raw in files.items()}}
@@ -38,7 +38,7 @@ class BootstrapTests(unittest.TestCase):
     def test_unpack_valid_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            result = b.unpack(self.package(root), root / 'verified', 'v0.2.1')
+            result = b.unpack(self.package(root), root / 'verified', 'v0.2.2')
             self.assertEqual((result / 'install.sh').read_bytes(), b'fixture:install.sh')
 
     def test_pinned_previous_release_root_remains_supported(self):
@@ -49,11 +49,11 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual((result / 'install.sh').read_bytes(), b'fixture:install.sh')
 
     def test_corrupt_file_and_wrong_version_rejected(self):
-        for options in ({'corrupt': True}, {'version': '0.2.1-dev.34'}):
+        for options in ({'corrupt': True}, {'version': '0.2.0-dev.36'}):
             with self.subTest(options=options), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 with self.assertRaises(RuntimeError):
-                    b.unpack(self.package(root, **options), root / 'verified', 'v0.2.1')
+                    b.unpack(self.package(root, **options), root / 'verified', 'v0.2.2')
 
     def test_traversal_symlink_duplicate_and_unsafe_permissions(self):
         for name, kind, mode in [('miku-gate/../../outside', tarfile.REGTYPE, 0o644), ('miku-gate/link', tarfile.SYMTYPE, 0o644), ('miku-gate/install.sh', tarfile.REGTYPE, 0o644), ('miku-gate/unsafe', tarfile.REGTYPE, 0o666)]:
@@ -63,18 +63,18 @@ class BootstrapTests(unittest.TestCase):
                 entry.type, entry.mode, entry.size = kind, mode, 1 if kind == tarfile.REGTYPE else 0
                 entry.linkname = '/etc/passwd' if kind == tarfile.SYMTYPE else ''
                 with self.assertRaises(RuntimeError):
-                    b.unpack(self.package(root, extra=entry), root / 'verified', 'v0.2.1')
+                    b.unpack(self.package(root, extra=entry), root / 'verified', 'v0.2.2')
                 self.assertFalse((root / 'outside').exists())
 
     def test_release_selection_rejects_drafts_prereleases_and_invalid_tags(self):
-        for value in ({'tag_name': 'v0.2.1', 'draft': True}, {'tag_name': 'v0.2.1', 'prerelease': True}, {'tag_name': 'v0.2.1-dev.34'}):
+        for value in ({'tag_name': 'v0.2.2', 'draft': True}, {'tag_name': 'v0.2.2', 'prerelease': True}, {'tag_name': 'v0.2.0-dev.36'}):
             with patch.object(b, 'fetch', return_value=json.dumps(value).encode()), self.assertRaises(RuntimeError):
                 b.stable_release('latest')
         with patch.object(b, 'fetch') as fetch, self.assertRaises(RuntimeError):
             b.stable_release('../unexpected')
         fetch.assert_not_called()
-        with patch.object(b, 'fetch', return_value=b'{"tag_name":"v0.2.1"}'):
-            self.assertEqual(b.stable_release('v0.2.1')['tag_name'], 'v0.2.1')
+        with patch.object(b, 'fetch', return_value=b'{"tag_name":"v0.2.2"}'):
+            self.assertEqual(b.stable_release('v0.2.2')['tag_name'], 'v0.2.2')
 
     def test_checksum_requires_unique_exact_asset(self):
         digest = 'a' * 64

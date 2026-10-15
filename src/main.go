@@ -98,12 +98,14 @@ func main() {
 	mgr := NewManager(*maxSlots, *workDir)
 	mgr.inspector = newIPInspector(*workDir)
 	mgr.latencies = newLatencyInspector()
-	log.Printf("正在拉取节点列表...")
-	if n, err := mgr.RefreshNodes(); err != nil {
-		log.Printf("拉取失败（可在 Web 界面重试）: %v", err)
-	} else {
-		log.Printf("已获取 %d 个节点", n)
-	}
+	// Bring the panel and saved tunnels online without waiting for the network.
+	go func() {
+		if n, err := mgr.RefreshNodes(); err != nil {
+			log.Printf("后台节点刷新暂不可用（可在 Web 界面重试）: %v", err)
+		} else {
+			log.Printf("已获取 %d 个节点", n)
+		}
+	}()
 
 	if n, err := mgr.restoreState(); err != nil {
 		log.Printf("恢复上次状态失败: %v", err)
@@ -166,6 +168,7 @@ func main() {
 	mux.HandleFunc("/api/panel/client/bind", apiClientLanding(mgr))
 	mux.HandleFunc("/api/panel/mode", apiPanelMode(*workDir, mgr))
 	mux.HandleFunc("/api/sub", apiSub)
+	mux.HandleFunc("/api/sub/links", apiSubscriptionLinks(mgr))
 	mux.HandleFunc("/api/nodes/import", apiImportedLinks(mgr))
 	mux.HandleFunc("/api/entry/repair", apiEntryRepair(mgr))
 	mux.HandleFunc("/api/sub/reset", apiSubReset)
@@ -192,6 +195,8 @@ func main() {
 	domains := newDomainRegistry(*workDir, srv, mgr)
 	mux.HandleFunc("/api/domains", domains.Handler())
 	certificateRegistry = domains
+	mux.HandleFunc("/api/quick-setup", apiQuickSetup(mgr, domains))
+	mux.HandleFunc("/api/quick-setup/stop", apiQuickSetupStop(mgr))
 	// 设置面板：改密码 / 改路径 / 改端口 / 改本地监听。
 	mux.HandleFunc("/api/settings", apiSettings(auth, srv))
 	mux.HandleFunc("/api/sources/add", apiSourceAdd(mgr))
@@ -240,7 +245,7 @@ func apiNodes(m *Manager) http.HandlerFunc {
 
 func apiTunnels(m *Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, m.Tunnels())
+		writeJSON(w, http.StatusOK, m.visibleTunnels())
 	}
 }
 
@@ -568,6 +573,10 @@ func apiXUIStatus(w http.ResponseWriter, r *http.Request) {
 func apiPanelMode(workDir string, managers ...*Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
+			if len(managers) > 0 && managers[0].quickSetupRunning() {
+				writeJSON(w, 409, map[string]string{"error": "一键配置还在准备中，请稍后再切换核心。"})
+				return
+			}
 			var in struct {
 				Mode string `json:"mode"`
 			}

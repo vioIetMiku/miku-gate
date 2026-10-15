@@ -83,7 +83,8 @@ func TestRestoreStateReadsPrevHost(t *testing.T) {
 	}
 
 	m := NewManager(20, dir)
-	// 使用不启动隧道的恢复回调，只验证持久化状态。
+	// 不让它真去拉隧道：restoreTunnel 会调 bringUpPersist，
+	// 这里只关心状态读没读对，所以读完立刻看字段。
 	n, err := m.restoreStateWith(func(*Tunnel) {})
 	if err != nil {
 		t.Fatal(err)

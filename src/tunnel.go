@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -38,6 +40,12 @@ type Tunnel struct {
 	EntryReady       bool            `json:"entry_ready"`
 	EntryError       string          `json:"entry_error,omitempty"`
 
+	quickCandidate atomic.Bool
+	halted         atomic.Bool // Lifecycle cancellation must not race on display Status.
+	quickContext   context.Context
+	quickCancel    context.CancelFunc
+	quickRetiring  bool // guarded by Manager.mu
+
 	ns       string
 	listener net.Listener
 	ovpn     *exec.Cmd
@@ -57,6 +65,29 @@ type Tunnel struct {
 	repairPending   bool
 	lastProbeSample *GateLatency
 	autoReconnects  []time.Time
+}
+
+func (t *Tunnel) connectionContext() context.Context {
+	if t.quickCandidate.Load() && t.quickContext != nil {
+		return t.quickContext
+	}
+	return context.Background()
+}
+
+// Interrupt immediately, but keep the slot reserved until the connection
+// worker has returned. Cleanup must never tear down a reused namespace.
+func (t *Tunnel) interruptQuickCandidate() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.quickCandidate.Load() {
+		return
+	}
+	if t.ovpn != nil && t.ovpn.Process != nil {
+		_ = t.ovpn.Process.Kill()
+	}
+	if t.listener != nil {
+		_ = t.listener.Close()
+	}
 }
 
 // Recent failures expire, allowing a recovered server to become eligible again.
@@ -270,6 +301,10 @@ func (t *Tunnel) teardownNetns() {
 
 // startOpenVPN 在 netns 内拉起 openvpn，并等待 tun0 拿到地址。
 func (t *Tunnel) startOpenVPN(dir string) error {
+	ctx := t.connectionContext()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := validateVPNProfile(t.Node.Config); err != nil {
 		return err
 	}
@@ -278,13 +313,15 @@ func (t *Tunnel) startOpenVPN(dir string) error {
 	if err := os.WriteFile(cfgPath, []byte(t.Node.Config), 0600); err != nil {
 		return fmt.Errorf("写配置失败: %w", err)
 	}
-	authPath := filepath.Join(dir, "auth.txt")
+	// Each candidate owns its credentials file; parallel truncation of a shared
+	// auth.txt could make OpenVPN read an empty username/password.
+	authPath := filepath.Join(dir, ns+".auth")
 	if err := os.WriteFile(authPath, []byte("vpn\nvpn\n"), 0600); err != nil {
 		return fmt.Errorf("写凭据失败: %w", err)
 	}
 
 	logPath := filepath.Join(dir, ns+".log")
-	cmd := exec.Command("ip", "netns", "exec", ns, "openvpn",
+	args := []string{"netns", "exec", ns, "openvpn",
 		"--config", cfgPath,
 		"--auth-user-pass", authPath,
 		"--auth-nocache",
@@ -294,27 +331,51 @@ func (t *Tunnel) startOpenVPN(dir string) error {
 		"--data-ciphers", "AES-128-CBC:AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305",
 		"--verb", "3",
 		"--log", logPath,
-	)
+	}
+	wait := 40 * time.Second
+	if t.quickCandidate.Load() {
+		args = append(args, "--connect-retry-max", "1", "--connect-timeout", "8", "--connect-retry", "1", "1", "--hand-window", "22")
+		wait = 28 * time.Second
+	}
+	cmd := exec.Command("ip", args...)
+	t.mu.Lock()
+	if err := ctx.Err(); err != nil {
+		t.mu.Unlock()
+		return err
+	}
 	if err := cmdStart(cmd); err != nil {
+		t.mu.Unlock()
 		return fmt.Errorf("启动 openvpn 失败: %w", err)
 	}
 	t.ovpn = cmd
-	go cmd.Wait() // 回收子进程，避免僵尸
+	t.mu.Unlock()
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }() // Reap without racing on ProcessState.
 
 	// openvpn 建好 tun0 前 SOCKS5 无法正常出网，这里等它就绪
-	deadline := time.Now().Add(40 * time.Second)
-	for time.Now().Before(deadline) {
+	deadline := time.NewTimer(wait)
+	defer deadline.Stop()
+	poll := time.NewTicker(250 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if out, err := cmdOutput(exec.Command("ip", "netns", "exec", ns, "ip", "-4", "addr", "show", "tun0")); err == nil {
 			if strings.Contains(string(out), "inet ") {
 				return nil
 			}
 		}
-		if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
+		select {
+		case <-exited:
 			return fmt.Errorf("openvpn 提前退出，详见 %s", logPath)
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return fmt.Errorf("等待 tun0 就绪超时，详见 %s", logPath)
+		case <-poll.C:
 		}
-		time.Sleep(time.Second)
 	}
-	return fmt.Errorf("等待 tun0 就绪超时，详见 %s", logPath)
 }
 
 // serve 在母机上监听 SOCKS5 端口，出站连接则在 netns 内建立。
@@ -326,6 +387,9 @@ func (t *Tunnel) serve() error {
 	var ln net.Listener
 	var err error
 	for i := 0; i < 6; i++ {
+		if err := t.connectionContext().Err(); err != nil {
+			return err
+		}
 		ln, err = net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", t.Port))
 		if err == nil {
 			break
@@ -384,6 +448,7 @@ func (t *Tunnel) probeExitIP() (string, error) {
 
 // stop 停止这条隧道并清理它占用的所有资源。
 func (t *Tunnel) stop() {
+	t.halted.Store(true)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.listener != nil {

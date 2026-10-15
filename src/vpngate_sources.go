@@ -74,9 +74,22 @@ func configuredSources() []string {
 }
 
 func fetchNodeSources(timeout time.Duration) ([]Node, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	return fetchNodeSourcesContext(context.Background(), timeout)
+}
+
+func fetchNodeSourcesContext(parent context.Context, timeout time.Duration) ([]Node, error) {
+	return fetchNodeSourcesProgress(parent, timeout, nil)
+}
+
+// Publish validated snapshots as soon as each source arrives. The final merge
+// still honors configured source priority, independently of arrival order.
+func fetchNodeSourcesProgress(parent context.Context, timeout time.Duration, publish func([]Node)) ([]Node, error) {
+	return fetchNodeSourceList(parent, timeout, configuredSources(), publish)
+}
+
+func fetchNodeSourceList(parent context.Context, timeout time.Duration, sources []string, publish func([]Node)) ([]Node, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
-	sources := configuredSources()
 	communityCtx, stopCommunity := context.WithTimeout(ctx, 32*time.Second)
 	defer stopCommunity()
 	type result struct {
@@ -100,7 +113,7 @@ func fetchNodeSources(timeout time.Duration) ([]Node, error) {
 			if source == mirrorURL() {
 				key = mirrorAccessKey()
 			}
-			nodes, err := fetchNodesFrom(source, key, 12*time.Second)
+			nodes, err := fetchNodesFromContext(communityCtx, source, key, 12*time.Second)
 			for i := range nodes {
 				nodes[i].Priority = 3
 			}
@@ -151,6 +164,9 @@ func fetchNodeSources(timeout time.Duration) ([]Node, error) {
 		value.report.Priority = rank
 		reports = append(reports, value.report)
 		merge(value.nodes)
+		if len(value.nodes) > 0 && publish != nil {
+			publish(append([]Node(nil), all...))
+		}
 	}
 	for pending > 0 {
 		select {
@@ -163,7 +179,7 @@ func fetchNodeSources(timeout time.Duration) ([]Node, error) {
 	}
 	stopCommunity()
 	if ctx.Err() == nil {
-		nodes, err := fetchNodesFrom(vpngateAPI, "", 12*time.Second)
+		nodes, err := fetchNodesFromContext(ctx, vpngateAPI, "", 12*time.Second)
 		for i := range nodes {
 			nodes[i].Priority = 9
 		}
@@ -172,6 +188,9 @@ func fetchNodeSources(timeout time.Duration) ([]Node, error) {
 			report.Error = "官方来源暂不可用"
 		}
 		accept(result{nodes, report})
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	sort.SliceStable(reports, func(i, j int) bool { return reports[i].Priority < reports[j].Priority })
 	sourceReports.Lock()

@@ -57,17 +57,41 @@ func verifiedPoolFile(ctx context.Context, commit string, descriptor PoolDescrip
 	if !regexp.MustCompile(`^pool/(?:servers\.json|countries\.json|configs/[a-f0-9]{64}\.json)$`).MatchString(descriptor.Path) {
 		return nil, fmt.Errorf("滚动池路径无效")
 	}
-	for _, prefix := range []string{"https://cdn.jsdelivr.net/gh/GeorgeXie2333/vpngate-list-mirror@" + commit + "/", "https://raw.githubusercontent.com/GeorgeXie2333/vpngate-list-mirror/" + commit + "/"} {
-		raw, err := publicJSON(ctx, prefix+descriptor.Path, descriptor.Bytes)
-		if err != nil {
-			continue
-		}
-		sum := sha256.Sum256(raw)
-		if len(raw) == descriptor.Bytes && hex.EncodeToString(sum[:]) == descriptor.SHA256 {
-			return raw, nil
+	return verifiedPublicMirrors(ctx, []string{"https://cdn.jsdelivr.net/gh/GeorgeXie2333/vpngate-list-mirror@" + commit + "/" + descriptor.Path, "https://raw.githubusercontent.com/GeorgeXie2333/vpngate-list-mirror/" + commit + "/" + descriptor.Path}, descriptor.Bytes, descriptor.SHA256)
+}
+
+// Race immutable mirrors, accepting only the exact pinned bytes. A fast
+// corrupt response must never beat a slower verified copy.
+func verifiedPublicMirrors(parent context.Context, addresses []string, size int, hash string) ([]byte, error) {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+	results := make(chan []byte, len(addresses))
+	for _, address := range addresses {
+		go func() {
+			raw, err := publicJSON(ctx, address, size)
+			if err != nil || len(raw) != size {
+				results <- nil
+				return
+			}
+			sum := sha256.Sum256(raw)
+			if hex.EncodeToString(sum[:]) != hash {
+				results <- nil
+				return
+			}
+			results <- raw
+		}()
+	}
+	for range addresses {
+		select {
+		case raw := <-results:
+			if raw != nil {
+				return raw, nil
+			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 	}
-	return nil, fmt.Errorf("滚动池文件SHA256校验失败或不可达")
+	return nil, fmt.Errorf("镜像文件SHA256校验失败或不可达")
 }
 
 func fetchGatePool(ctx context.Context) ([]Node, error) {
@@ -137,6 +161,10 @@ func fetchGatePool(ctx context.Context) ([]Node, error) {
 }
 
 func resolveNodeProfile(node Node, dir string) (Node, error) {
+	return resolveNodeProfileContext(context.Background(), node, dir)
+}
+
+func resolveNodeProfileContext(parent context.Context, node Node, dir string) (Node, error) {
 	if node.Config != "" {
 		return node, validateVPNProfile(node.Config)
 	}
@@ -160,7 +188,7 @@ func resolveNodeProfile(node Node, dir string) (Node, error) {
 		node.Config = string(raw)
 		return node, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 25*time.Second)
 	defer cancel()
 	raw, err := verifiedPoolFile(ctx, ref.Commit, ref.File)
 	if err != nil {

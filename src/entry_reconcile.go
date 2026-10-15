@@ -14,7 +14,7 @@ func sameNodeEndpoint(a, b Node) bool {
 func (m *Manager) claimCandidate(t *Tunnel, node Node) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.tunnels[t.Slot] != t || t.Status == "stopped" {
+	if m.tunnels[t.Slot] != t || t.quickRetiring || t.Status == "stopped" {
 		return false
 	}
 	if region := t.preferredRegion(); region != "" && normalizeRegion(node.CountryCode) != region {
@@ -35,11 +35,11 @@ func (m *Manager) claimCandidate(t *Tunnel, node Node) bool {
 func (m *Manager) acceptExitIP(t *Tunnel) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.tunnels[t.Slot] != t || t.Status == "stopped" {
+	if m.tunnels[t.Slot] != t || t.quickRetiring || t.Status == "stopped" {
 		return false
 	}
 	for _, other := range m.tunnels {
-		if other != t && other.Status == "up" && other.ExitIP != "" && other.ExitIP == t.ExitIP {
+		if other != t && !other.quickRetiring && other.Status == "up" && other.ExitIP != "" && other.ExitIP == t.ExitIP {
 			return false
 		}
 	}
@@ -89,8 +89,12 @@ func (m *Manager) ensureTunnelEntry(t *Tunnel) error {
 			t.TemplateID = ib.ID
 		}
 	}
+	tunnels := m.Tunnels()
+	if t.quickCandidate.Load() {
+		tunnels = append(tunnels, t)
+	}
 	if n, ok := p.(*Native); ok {
-		err = n.ensureExitInbound(t.TemplateID, t, m.Tunnels())
+		err = n.ensureExitInbound(t.TemplateID, t, tunnels)
 	} else {
 		// Existing panel entries are adopted rather than cloned on every retry.
 		list, listErr := p.Inbounds(nil)
@@ -105,7 +109,7 @@ func (m *Manager) ensureTunnelEntry(t *Tunnel) error {
 			}
 		}
 		if !found {
-			_, err = p.CloneToTunnels(t.TemplateID, []string{t.Node.HostName}, m.Tunnels())
+			_, err = p.CloneToTunnels(t.TemplateID, []string{t.Node.HostName}, tunnels)
 		}
 	}
 	if err != nil {

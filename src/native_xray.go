@@ -307,13 +307,15 @@ func (p *xrayProc) restart(cfgPath string) error {
 		return fmt.Errorf("启动 Xray 失败: %w", err)
 	}
 	p.cmd, p.logf = cmd, f
-	go cmd.Wait() // 回收子进程，避免僵尸
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
 	p.writePID(cmd.Process.Pid)
 
 	// 起得来但立刻退出的情况要能被发现，否则界面会显示成功而实际不通
-	time.Sleep(400 * time.Millisecond)
-	if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
+	select {
+	case <-exited:
 		return fmt.Errorf("Xray 启动后立刻退出，详见 %s", logPath)
+	case <-time.After(400 * time.Millisecond):
 	}
 	return nil
 }

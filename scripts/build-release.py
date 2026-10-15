@@ -18,7 +18,7 @@ ROOT=Path(__file__).resolve().parents[1]
 UPSTREAM='d7ce5224caf3469b19876982abdf8d1be16c4a8b'
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.2');parser.add_argument('--label',default='v0.2.2');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.3');parser.add_argument('--label',default='v0.2.3');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',args.version) or not re.fullmatch(r'[A-Za-z0-9_.-]+',args.label):raise ValueError('invalid version/label')
     args.output=args.output.resolve()
     args.output.mkdir(parents=True,exist_ok=True)
@@ -35,14 +35,15 @@ def main():
         source='archive-sha256:'+digest.hexdigest()
     with tempfile.TemporaryDirectory(prefix='miku-release-',dir=args.output) as temporary:
         stage=Path(temporary)/'miku-gate';(stage/'bin').mkdir(parents=True);(stage/'scripts').mkdir()
-        for name in ('install.sh','install-online.sh','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','CORE_ASSETS.json'):
+        for name in ('install.sh','install-online.sh','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','FLAG_ICONS_LICENSE','CORE_ASSETS.json'):
             shutil.copy2(ROOT/name,stage/name)
-        for name in ('common.py','install.py','maintain.py','miku.sh'):
+        for name in ('common.py','install.py','maintain.py','quick.py','miku.sh'):
             shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
         (stage/'docs').mkdir()
         shutil.copyfile(ROOT/'docs/DEV_HISTORY.md',stage/'docs/DEV_HISTORY.md')
         (stage/'src/assets').mkdir(parents=True)
         shutil.copyfile(ROOT/'src/assets/miku-hero-v1.png',stage/'src/assets/miku-hero-v1.png')
+        shutil.copyfile(ROOT/'src/assets/miku-mark.svg',stage/'src/assets/miku-mark.svg')
         def build(architecture,helper):
             environment={**os.environ,'GOOS':'linux','GOARCH':architecture,'CGO_ENABLED':'0','GOTELEMETRY':'off'}
             name=('miku-export' if helper else 'miku')+'-linux-'+architecture
@@ -90,6 +91,29 @@ def main():
             if actual!=expected:raise RuntimeError('archive contents incomplete')
         # Publish a fresh, verified inode instead of overwriting an archive.
         os.replace(compressed,target)
+        standalone=args.output/'miku'
+        payload_sha256=hashlib.sha256(target.read_bytes()).hexdigest()
+        bootstrap='''#!/usr/bin/env bash
+set -euo pipefail
+if [[ $EUID -ne 0 && "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--verify" ]]; then exec sudo -- bash "$0" "$@"; fi
+if [[ "${1:-}" == "--verify" ]]; then
+  line=$(awk '/^__MIKU_ARCHIVE_BELOW__$/ {print NR + 1; exit}' "$0")
+  MIKU_ACTUAL=$(tail -n +"$line" "$0" | sha256sum)
+  [[ "${MIKU_ACTUAL%% *}" == '__SHA256__' ]] || { echo 'Miku Gate 安装包校验失败'; exit 1; }
+  echo 'Miku Gate 安装包 SHA256 校验通过'
+  exit 0
+fi
+MIKU_TEMP=$(mktemp -d "${TMPDIR:-/tmp}/miku.XXXXXXXX")
+trap 'rm -rf -- "$MIKU_TEMP"' EXIT
+line=$(awk '/^__MIKU_ARCHIVE_BELOW__$/ {print NR + 1; exit}' "$0")
+tail -n +"$line" "$0" > "$MIKU_TEMP/bundle.tar.gz"
+printf '%s  %s\\n' '__SHA256__' "$MIKU_TEMP/bundle.tar.gz" | sha256sum -c - >/dev/null
+tar --no-same-owner -xzf "$MIKU_TEMP/bundle.tar.gz" -C "$MIKU_TEMP"
+bash "$MIKU_TEMP/miku-gate/install.sh" "$@"
+exit 0
+__MIKU_ARCHIVE_BELOW__
+'''.replace('__SHA256__',payload_sha256)
+        standalone.write_bytes(bootstrap.encode()+target.read_bytes());standalone.chmod(0o755)
         sources=args.output/('miku-gate-'+args.label+'.zip')
         source_stage=Path(temporary)/'source'/'miku-gate'
         source_stage.mkdir(parents=True)
@@ -119,7 +143,7 @@ def main():
         bootstrap=args.output/'install-online.sh'
         shutil.copyfile(ROOT/'install-online.sh',bootstrap)
         checksums=args.output/'SHA256SUMS'
-        checksums.write_text(''.join(hashlib.sha256(path.read_bytes()).hexdigest()+'  '+path.name+'\n' for path in (target,sources,bootstrap)))
+        checksums.write_text(''.join(hashlib.sha256(path.read_bytes()).hexdigest()+'  '+path.name+'\n' for path in (standalone,target,sources,bootstrap)))
         print(target);print(sources)
 
 if __name__=='__main__':main()

@@ -144,12 +144,13 @@ def _install(directory,update=False,reinstall=False):
             preferred=os.environ.get('WEB_PORT')
             value={'port':c.choose_port(int(preferred) if preferred else None),'listen_addr':'','public_ip':c.public_ip(),'residential_only':False}
             c.write_json(c.DATA/'settings.json',value)
+            c.atomic(c.DATA/'panel_mode',b'native\n')
         value=c.settings();old_port=value['port']
         value['port']=c.choose_port(old_port)
         if value['port']!=old_port:
             c.write_json(c.DATA/'settings.json',value)
             print('原管理端口不可用或与现有面板预留端口重合，已改用空闲端口 '+str(value['port'])+'。')
-        for source,name,mode in [('bin/miku-linux-'+architecture,'miku',0o755),('scripts/common.py','common.py',0o644),('scripts/maintain.py','maintain.py',0o644),('scripts/install.py','install.py',0o644),('CORE_ASSETS.json','CORE_ASSETS.json',0o600),('LICENSE','LICENSE',0o644)]:
+        for source,name,mode in [('bin/miku-linux-'+architecture,'miku',0o755),('scripts/common.py','common.py',0o644),('scripts/maintain.py','maintain.py',0o644),('scripts/quick.py','quick.py',0o644),('scripts/install.py','install.py',0o644),('CORE_ASSETS.json','CORE_ASSETS.json',0o600),('LICENSE','LICENSE',0o644),('FLAG_ICONS_LICENSE','FLAG_ICONS_LICENSE',0o644)]:
             c.atomic(c.LIB/name,c.trusted(directory/source),mode)
         c.atomic(c.MENU,c.trusted(directory/'scripts/miku.sh'),0o755)
         installed_files=True
@@ -175,15 +176,22 @@ def _install(directory,update=False,reinstall=False):
             if receipt:restore_old(old_module,receipt);print('切换失败，旧版配套数据和服务已恢复。',file=sys.stderr)
         raise
     print('\n安装完成：Miku Gate '+meta['version']);c.info()
-    print('完整卸载并清除本服务数据：miku purge')
-    if not previous and not old and os.isatty(0):
-        if input('\n有自己的域名吗？[y/N]（以后也可 miku domain）：').strip().lower() in ('y','yes'):
-            os.execv(sys.executable,[sys.executable,'-B',str(c.LIB/'maintain.py'),'domain'])
+    print('面板增删节点、切换出口、修改域名；终端一键搭建：miku quick；查看全部订阅：miku sub。')
 
 def main():
-    parser=argparse.ArgumentParser(description='Miku Gate VPS安装');parser.add_argument('--directory',type=Path,default=Path(__file__).resolve().parents[1]);parser.add_argument('--update',action='store_true');parser.add_argument('--reinstall',action='store_true',help='卸载此 Miku Gate 并清除数据，然后重新安装');args=parser.parse_args()
+    parser=argparse.ArgumentParser(description='Miku Gate VPS安装');parser.add_argument('--directory',type=Path,default=Path(__file__).resolve().parents[1]);parser.add_argument('--update',action='store_true');parser.add_argument('--reinstall',action='store_true',help='卸载此 Miku Gate 并清除数据，然后重新安装')
+    mode=parser.add_mutually_exclusive_group();mode.add_argument('--quick',action='store_true',help='安装后直接配置默认节点');mode.add_argument('--panel',action='store_true',help='安装后使用网页面板')
+    domain=parser.add_mutually_exclusive_group();domain.add_argument('--domain');domain.add_argument('--no-domain',action='store_true');parser.add_argument('--background',action='store_true');args=parser.parse_args()
     c.require(not (args.update and args.reinstall),'--update 与 --reinstall 不能同时使用')
-    install(args.directory,args.update,args.reinstall)
+    if install(args.directory,args.update,args.reinstall) is False:return
+    use_quick=args.quick or args.domain is not None or args.no_domain
+    if not args.panel and not use_quick and not args.update and os.isatty(0):
+        print('\n1 使用面板管理（增删节点、切换、域名管理）\n2 终端一键搭建，直接输出订阅（默认）')
+        answer=input('使用方式 [2]：').strip() or '2';c.require(answer in ('1','2'),'请选择 1 或 2');use_quick=answer=='2'
+    if use_quick:
+        sys.path.insert(0,str(c.LIB))
+        from quick import quick
+        quick('' if args.no_domain else args.domain,args.background)
 
 def install(directory,update=False,reinstall=False):
     c.root()
@@ -195,12 +203,13 @@ def install(directory,update=False,reinstall=False):
             print('检测到已有 Miku Gate 或安装残留。\n1 保留配置和节点，更新安装（默认）\n2 清除本服务数据后重新安装\n0 取消')
             choice=input('选择 [1]：').strip() or '1'
             c.require(choice in ('0','1','2'),'请选择 0、1 或 2')
-            if choice=='0':return
+            if choice=='0':return False
             reinstall=choice=='2'
         if reinstall:c.purge_current()
         elif existing and not (c.DATA/'install.json').exists() and c.DATA.exists() and any(p.name!='.maintenance.lock' for p in c.DATA.iterdir()):
             raise RuntimeError('发现未登记的旧数据；确认不再需要后，运行 bash install.sh --reinstall 清除并重新安装')
         _install(directory,update,reinstall)
+    return True
 
 if __name__=='__main__':
     try:main()

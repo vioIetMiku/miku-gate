@@ -12,7 +12,7 @@ import (
 // through the selected tunnel, bound to tun0, never through the host route.
 func (t *Tunnel) probeExitDetails() (string, *IPInfo, error) {
 	request := func(address string, seconds string) ([]byte, error) {
-		out, err := cmdOutput(exec.Command("ip", "netns", "exec", t.nsName(), "curl",
+		out, err := cmdOutput(exec.CommandContext(t.connectionContext(), "ip", "netns", "exec", t.nsName(), "curl",
 			"-4", "--interface", "tun0", "--fail", "--silent", "--show-error",
 			"--noproxy", "*", "--proto", "=https",
 			"--max-time", seconds, "--max-filesize", "16384", "--write-out", "\nMIKU_CONNECT:%{time_connect}:%{time_namelookup}\n", address))

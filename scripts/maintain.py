@@ -258,17 +258,30 @@ def menu_purge():
 
 def menu():
     c.banner()
-    print('Miku Gate '+c.installed()['version']+'\n1 管理地址 / 查看口令\n2 修改口令\n3 域名：绑定 / 更换 / 解绑\n4 修复依赖与端口（含OpenVPN）\n5 启动\n6 停止\n7 重启\n8 日志\n9 修改管理端口 / 自动选择\n10 备份\n11 恢复切换前旧版\n12 停止并取消自启（保留数据）\n13 完整卸载并清除数据\n0 退出')
+    print('Miku Gate '+c.installed()['version']+'\n1 管理地址 / 查看口令\n2 修改口令\n3 域名：绑定 / 更换 / 解绑\n4 修复依赖与端口（含OpenVPN）\n5 启动\n6 停止\n7 重启\n8 日志\n9 修改管理端口 / 自动选择\n10 备份\n11 恢复切换前旧版\n12 停止并取消自启（保留数据）\n13 完整卸载并清除数据\n14 一键配置节点（日本5 / 韩国3 / 美国3）\n15 直接输出全部订阅 / 节点链接\n0 退出')
     choice=input('选择：').strip()
     commands={'1':c.info,'2':password,'3':domain,'4':repair,'5':lambda:(c.service('start'),c.wait_ready(),c.info()),'6':lambda:c.service('stop'),'7':restart,'8':logs,'9':port,'10':backup,'11':rollback,'12':uninstall,'13':menu_purge}
+    if choice=='14':
+        from quick import quick
+        return quick()
+    if choice=='15':
+        from quick import subscriptions
+        return subscriptions()
     if choice in commands:commands[choice]()
 
 def main():
     c.root();args=sys.argv[1:];command=args[0] if args else 'menu'
+    if command in ('quick','node','nodes'):
+        from quick import command as quick_command
+        return quick_command(args[1:])
+    if command in ('sub','links'):
+        c.require(len(args)==1,'用法：miku sub')
+        from quick import subscriptions
+        return subscriptions()
     commands={'menu':menu,'info':c.info,'status':lambda:print('运行中' if c.active() else '已停止'),'password':password,'passwd':password,'domain':domain,'port':port,'repair':repair,'backup':backup,'rollback':rollback,'logs':logs,'certificate-refresh':certificate_refresh,'certificate-prepare':certificate_prepare,'certificate-automation':certificate_timer,'start':lambda:(c.service('start'),c.wait_ready(),c.info()),'stop':lambda:c.service('stop'),'restart':restart,'uninstall':uninstall,'purge':purge}
     if args==['uninstall','--purge']:return purge()
     if command=='update':c.require(len(args)==2,'用法：miku update /绝对路径/新版安装包.tar.gz');return update(args[1])
-    c.require(command in commands and len(args)<=1,'可用命令：miku [info|password|domain|repair|start|stop|restart|logs|port|backup|rollback|update 安装包|uninstall|purge]');commands[command]()
+    c.require(command in commands and len(args)<=1,'可用命令：miku [quick|sub|info|password|domain|repair|start|stop|restart|logs|port|backup|rollback|update 安装包|uninstall|purge]');commands[command]()
 
 if __name__=='__main__':
     try:main()

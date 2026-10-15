@@ -28,21 +28,33 @@ type Manager struct {
 	entryMu        sync.Mutex
 	stateMu        sync.Mutex
 	refreshMu      sync.Mutex
+	quickMu        sync.Mutex
+	quickJob       *Job
+	quickCancel    context.CancelFunc
+	nodesChanged   chan struct{}
 }
 
 func NewManager(maxSlots int, workDir string) *Manager {
 	return &Manager{
-		tunnels:    map[int]*Tunnel{},
-		workDir:    workDir,
-		maxSlots:   maxSlots,
-		probeSlots: make(chan struct{}, 12),
+		tunnels:      map[int]*Tunnel{},
+		workDir:      workDir,
+		maxSlots:     maxSlots,
+		probeSlots:   make(chan struct{}, 12),
+		nodesChanged: make(chan struct{}, 1),
 	}
 }
 
 // RefreshNodes 重新拉取节点列表。
 func (m *Manager) RefreshNodes() (int, error) {
+	return m.refreshNodesContext(context.Background())
+}
+
+func (m *Manager) refreshNodesContext(ctx context.Context) (int, error) {
 	m.refreshMu.Lock()
 	defer m.refreshMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	m.mu.RLock()
 	recent := time.Since(m.fetched) < 5*time.Second
 	count := len(m.nodes)
@@ -50,7 +62,19 @@ func (m *Manager) RefreshNodes() (int, error) {
 	if recent && count > 0 {
 		return count, nil
 	}
-	nodes, err := fetchNodes(60 * time.Second)
+	nodes, err := fetchNodeSourcesProgress(ctx, 60*time.Second, func(partial []Node) {
+		m.mu.Lock()
+		// Keep the previous pool usable while slower sources are still loading.
+		m.nodes = mergeSourceNodes(append([]Node(nil), partial...), m.nodes)
+		sort.SliceStable(m.nodes, func(i, j int) bool {
+			if a, b := nodePriority(m.nodes[i]), nodePriority(m.nodes[j]); a != b {
+				return a < b
+			}
+			return m.nodes[i].SpeedMbps > m.nodes[j].SpeedMbps
+		})
+		m.mu.Unlock()
+		m.signalNodesChanged()
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -58,7 +82,15 @@ func (m *Manager) RefreshNodes() (int, error) {
 	m.nodes = nodes
 	m.fetched = time.Now()
 	m.mu.Unlock()
+	m.signalNodesChanged()
 	return len(nodes), nil
+}
+
+func (m *Manager) signalNodesChanged() {
+	select {
+	case m.nodesChanged <- struct{}{}:
+	default:
+	}
 }
 
 func (m *Manager) Nodes() ([]Node, time.Time) {
@@ -70,11 +102,21 @@ func (m *Manager) Nodes() ([]Node, time.Time) {
 }
 
 func (m *Manager) Tunnels() []*Tunnel {
+	return m.tunnelList(false)
+}
+
+func (m *Manager) allTunnels() []*Tunnel {
+	return m.tunnelList(true)
+}
+
+func (m *Manager) tunnelList(includeCandidates bool) []*Tunnel {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	out := make([]*Tunnel, 0, len(m.tunnels))
 	for _, t := range m.tunnels {
-		out = append(out, t)
+		if includeCandidates || !t.quickCandidate.Load() {
+			out = append(out, t)
+		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i].Order, out[j].Order
@@ -90,6 +132,12 @@ func (m *Manager) Tunnels() []*Tunnel {
 		return a < b
 	})
 	return out
+}
+
+// Speculative quick-setup connections reserve endpoints and slots, but only
+// selected exits belong in the UI, subscriptions and restart state.
+func (m *Manager) visibleTunnels() []*Tunnel {
+	return m.Tunnels()
 }
 
 // freeSlot 找一个未占用的槽位。槽位同时决定端口与网段。
@@ -136,6 +184,10 @@ func (m *Manager) startOrdered(node Node, order uint64) (*Tunnel, error) {
 }
 
 func (m *Manager) prepareTunnel(node Node, order uint64, templateID int, launch bool) (*Tunnel, error) {
+	return m.prepareTunnelMode(node, order, templateID, launch, nil)
+}
+
+func (m *Manager) prepareTunnelMode(node Node, order uint64, templateID int, launch bool, quickContext context.Context) (*Tunnel, error) {
 	m.mu.Lock()
 	for _, other := range m.tunnels {
 		if sameNodeEndpoint(node, other.Node) {
@@ -176,6 +228,10 @@ func (m *Manager) prepareTunnel(node Node, order uint64, templateID int, launch 
 		m.nextOrder++
 		order = m.nextOrder
 	}
+	var quickCancel context.CancelFunc
+	if quickContext != nil {
+		quickContext, quickCancel = context.WithCancel(quickContext)
+	}
 	t := &Tunnel{
 		Slot:            slot,
 		Port:            port,
@@ -187,7 +243,10 @@ func (m *Manager) prepareTunnel(node Node, order uint64, templateID int, launch 
 		Order:           order,
 		TemplateID:      templateID,
 		EntryReady:      templateID == 0,
+		quickContext:    quickContext,
+		quickCancel:     quickCancel,
 	}
+	t.quickCandidate.Store(quickContext != nil)
 	m.tunnels[slot] = t
 	m.mu.Unlock()
 
@@ -329,7 +388,7 @@ func (m *Manager) tryCandidates(t *Tunnel, notify bool) bool {
 // 用指针比对：Stop 会从 map 里删除并把 Status 置 stopped，
 // 重连循环据此退出，避免对着一条已经不存在的隧道空转。
 func (m *Manager) tunnelActive(t *Tunnel) bool {
-	if t.Status == "stopped" {
+	if t.halted.Load() || t.connectionContext().Err() != nil {
 		return false
 	}
 	m.mu.RLock()
@@ -340,24 +399,47 @@ func (m *Manager) tunnelActive(t *Tunnel) bool {
 
 // tryNode 尝试用当前节点把隧道拉起来。
 func (m *Manager) tryNode(t *Tunnel) error {
+	ctx := t.connectionContext()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	t.mu.Lock()
 	t.lastProbeSample = nil
 	t.mu.Unlock()
-	node, err := resolveNodeProfile(t.Node, m.workDir)
+	node, err := resolveNodeProfileContext(ctx, t.Node, m.workDir)
 	if err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	m.mu.Lock()
 	t.Node = node
+	m.mu.Unlock()
+	if t.quickCandidate.Load() {
+		if err := m.quickEndpointPreflight(ctx, node); err != nil {
+			return err
+		}
+	}
 	if err := t.setupNetns(); err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := t.startOpenVPN(m.workDir); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if t.listener == nil {
 		if err := t.serve(); err != nil {
 			return err
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	ip, geo, err := t.probeExitDetails()
 	if err != nil {
@@ -398,12 +480,20 @@ func (m *Manager) Stop(slot int) error {
 	invalidateInbounds()
 	m.mu.Lock()
 	t, ok := m.tunnels[slot]
-	if ok {
+	candidate := ok && t.quickCandidate.Load()
+	if candidate {
+		t.quickCancel()
+	}
+	if ok && !candidate {
 		delete(m.tunnels, slot)
 	}
 	m.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("槽位 %d 没有运行中的隧道", slot)
+	}
+	if candidate {
+		t.interruptQuickCandidate()
+		return nil
 	}
 	t.stop()
 	if err := m.disconnectExitNodes(t); err != nil {
@@ -471,7 +561,8 @@ func (m *Manager) pickSwapTarget(t *Tunnel) (Node, error) {
 
 // StopAll 停掉所有隧道并清空状态文件。
 func (m *Manager) StopAll() {
-	for _, t := range m.Tunnels() {
+	m.cancelQuickSetup()
+	for _, t := range m.allTunnels() {
 		_ = m.Stop(t.Slot)
 	}
 }
@@ -560,7 +651,11 @@ func (m *Manager) syncCred(t *Tunnel) {
 
 // Shutdown 停掉运行态但保留状态文件，让下次启动能恢复同样的隧道。
 func (m *Manager) Shutdown() {
-	for _, t := range m.Tunnels() {
+	m.cancelQuickSetup()
+	for _, t := range m.allTunnels() {
+		if t.quickCandidate.Load() {
+			t.quickCancel()
+		}
 		t.stop()
 	}
 }

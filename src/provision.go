@@ -66,21 +66,31 @@ func (m *Manager) runProvision(job *Job, picks []Node, templateID int) {
 
 func (m *Manager) runProvisionOrdered(job *Job, picks []Node, templateID int, firstOrder uint64) {
 	defer job.Finish()
+	steps := make([]int, len(picks))
+	for i := range steps {
+		steps[i] = i
+	}
+	m.runProvisionPlan(job, picks, templateID, firstOrder, steps, len(picks))
+}
+
+// A shared runner keeps normal provisioning and quick setup on the same
+// tunnel/entry reconciliation path. Quick setup supplies its own step indices.
+func (m *Manager) runProvisionPlan(job *Job, picks []Node, templateID int, firstOrder uint64, steps []int, summaryStep int) {
 	if templateID < 0 {
 		panel, err := openPanel()
 		if err != nil {
 			for i := range picks {
-				job.Set(i, "failed", firstLine(err.Error()))
+				job.Set(steps[i], "failed", firstLine(err.Error()))
 			}
-			job.Set(len(picks), "failed", firstLine(err.Error()))
+			job.Set(summaryStep, "failed", firstLine(err.Error()))
 			return
 		}
 		created, err := panel.CreateInbound(NewInboundSpec{Protocol: "vless", Network: "tcp", Security: "reality", Vision: true, Remark: "入口模板"}, m.Tunnels())
 		if err != nil {
 			for i := range picks {
-				job.Set(i, "failed", firstLine(err.Error()))
+				job.Set(steps[i], "failed", firstLine(err.Error()))
 			}
-			job.Set(len(picks), "failed", firstLine(err.Error()))
+			job.Set(summaryStep, "failed", firstLine(err.Error()))
 			return
 		}
 		templateID = created.ID
@@ -90,11 +100,11 @@ func (m *Manager) runProvisionOrdered(job *Job, picks []Node, templateID int, fi
 	for i, node := range picks {
 		t, err := m.prepareTunnel(node, firstOrder+uint64(i), templateID, false)
 		if err != nil {
-			job.Set(i, "failed", err.Error())
+			job.Set(steps[i], "failed", err.Error())
 			continue
 		}
 		started[i] = t
-		job.Set(i, "running", "正在连接 "+node.HostName)
+		job.Set(steps[i], "running", "正在连接 "+node.HostName)
 	}
 	_ = m.saveState()
 	var wg sync.WaitGroup
@@ -108,18 +118,18 @@ func (m *Manager) runProvisionOrdered(job *Job, picks []Node, templateID int, fi
 			defer wg.Done()
 			m.waitUp(t)
 			if t.Status == "up" && (templateID == 0 || t.EntryReady) {
-				job.Set(i, "ok", t.ExitIP)
+				job.Set(steps[i], "ok", t.ExitIP)
 				return
 			}
 			if t.Status == "stopped" {
-				job.Set(i, "failed", "已断开")
+				job.Set(steps[i], "failed", "已断开")
 				return
 			}
 			if t.EntryError != "" {
-				job.Set(i, "failed", firstLine(t.EntryError))
+				job.Set(steps[i], "failed", firstLine(t.EntryError))
 				return
 			}
-			job.Set(i, "failed", "仍在自动重试同国家节点，可随时停止")
+			job.Set(steps[i], "failed", "仍在自动重试同国家节点，可随时停止")
 		}(i, t)
 	}
 	wg.Wait()
@@ -137,14 +147,14 @@ func (m *Manager) runProvisionOrdered(job *Job, picks []Node, templateID int, fi
 		}
 	}
 	if ready == 0 {
-		job.Set(len(picks), "failed", "连接成功后会自动补建入口")
+		job.Set(summaryStep, "failed", "连接成功后会自动补建入口")
 		return
 	}
 	message := fmt.Sprintf("已就绪 %d 个入口", ready)
 	if pending > 0 {
 		message += fmt.Sprintf("，%d 个将继续自动重试", pending)
 	}
-	job.Set(len(picks), "ok", message)
+	job.Set(summaryStep, "ok", message)
 }
 
 // waitUp 等一条隧道跑完 bringUp。bringUp 最多试 6 个候选节点，

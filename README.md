@@ -28,20 +28,19 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
   <a href="CHANGELOG.md">更新记录</a>
 </p>
 
-**当前正式版：`v0.2.2`**，基于 `dev36`。支持 Linux **amd64 / arm64**，管理界面支持白天 / 夜间主题、移动端布局和展示 / 管理模式。安装包已经编译，**VPS 不需要 Go**。
+**当前正式版：`v0.2.3`**，基于 `dev41`。支持 Linux **amd64 / arm64**，管理界面支持白天 / 夜间主题、移动端布局和展示 / 管理模式，新增终端一键配置。安装包已经编译，**VPS 不需要 Go**。
 
-> 升级提醒：`v0.2.2` 使用基于 fanout 的单页架构。旧版任务、远程 Agent、多账号和高级记录不会完整迁移；安装器仅迁移已识别旧安装的可用入口、普通 OpenVPN 出口及相关凭据，升级前请备份。不要将“正式 Release”理解为对所有 VPS、面板与 VPN Gate 节点均已完成实机验证。
+> 升级提醒：`v0.2.3` 使用基于 fanout 的单页架构。旧版任务、远程 Agent、多账号和高级记录不会完整迁移；安装器仅迁移已识别旧安装的可用入口、普通 OpenVPN 出口及相关凭据，升级前请备份。不要将“正式 Release”理解为对所有 VPS、面板与 VPN Gate 节点均已完成实机验证。
 
-## v0.2.2 更新重点
+## v0.2.3 更新重点
 
-- Go 源码、测试和内嵌插画继续位于 `src/`，项目与发布包统一使用 **Miku Gate / miku-gate**。
-- 管理域名切换时保持旧页面地址的交接流程，避免同端口 HTTPS / HTTP 监听被错误关闭；旧随机路径继续保护管理端。
-- 仅对本机 loopback 反向代理的转发头识别 HTTPS 来源，正确设置登录 Cookie 的 Secure 属性和跨站请求校验。
-- 域名证书目录探测增加短缓存与手动刷新，复用 3x-ui 证书时不会频繁调用面板命令。
-- 网页签证书支持 Certbot 无邮箱签发参数，仍校验用户提供邮箱的格式；域名末尾点规范化，Webroot / 旧 API 可选参数保持兼容。
-- 增加管理监听器协议探测与临时 Accept 错误恢复，避免空闲客户端或瞬时监听异常导致管理端口退出。
-- 协议标签缩小并保留完整配置提示；页面切换管理地址时暂停延迟测量，避免在旧地址上继续发送请求。
-- 保留 v0.2.1 的完整卸载、一键安装、SHA256 / BUILD 清单校验、双架构构建和旧安装兼容。
+- 新增自解压安装文件 **`miku`**，上传 VPS 后运行 `sudo bash miku`；包含两种架构，无需先安装 Go。原在线安装脚本继续保留。
+- 终端 `miku quick` 和网页一键配置共用后台任务，目标为日本 **5**、韩国 **3**、美国 **3** 个就绪出口；默认计划最多同时竞争 **33** 个候选，遵守实际槽位上限，失败自动轮换、刷新来源并补齐。
+- 节点来源、核心与证书并行准备；管理页面和旧隧道恢复不再等待慢来源。候选未就绪前不进入订阅、展示卡片或重启恢复。
+- `miku sub` 输出通用 Base64、V2Ray/v2rayN、Clash/Mihomo、sing-box 和明文链接五种订阅与可用节点。终端默认静默等待，Ctrl+C 输出当前结果但不取消后台补齐。
+- 页面重做欢迎区、真实连接统计、白天 / 夜间主题、节点卡片与 IP 详情；桌面双列，**620px 以下单列**。点击 IP 查询，主要操作为复制节点与切换，其他操作收进「代理与管理」。
+- 内置 SVG 国旗，默认按有效的近期 VPS 实测延迟排序，支持切回创建顺序；已完成任务默认折叠并记住展开状态。
+- 一键节点域名切换或改回 REALITY 时保留原有自动入口的端口与凭据；管理域名仍单独通过 `miku domain` 管理。
 
 ## 主要功能
 
@@ -55,6 +54,7 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
 | 节点与订阅 | 通用 Base64、V2Ray/v2rayN、Clash/Mihomo YAML、sing-box JSON；仅导出有效的本机节点 |
 | 出口信息 | 国家、地区、ASN、归属商、IP 类型与来源说明；住宅属性是规则推断，不是认证 |
 | 连通与延迟 | 有界并发健康检查、同国家换线与地域 / ASN 偏好；30 秒刷新限频和断线稳定性提示 |
+| 一键配置与 CLI | `miku quick` 后台持续补齐日本 5 / 韩国 3 / 美国 3；`miku sub` 输出五种订阅与明文节点 |
 | 日常运维 | 随机管理路径、登录口令、域名 / 证书管理、备份、更新、修复与旧版回滚 |
 
 ## VPS 一键安装
@@ -65,6 +65,26 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
 - root 权限，可用的 `/dev/net/tun`，以及创建网络命名空间和修改 iptables 的权限。权限不足的容器不适用。
 - 可连接 GitHub、官方核心下载源和 VPN Gate。准备 Bash、curl、CA 证书；缺少 Python、OpenVPN 等运行依赖时安装器会通过包管理器补齐。
 - 在服务商安全组和防火墙放行管理端口及实际创建的入口 / 代理端口。优先从 `8899` 附近选择管理端口；会避让已有面板、已登记入口和 IPv4 / IPv6 监听，具体以安装结束打印的地址为准。
+
+### 独立文件安装（推荐）
+
+从 [正式 Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.3) 下载 **`miku`** 和 `SHA256SUMS`，上传到 VPS 同一目录：
+
+```bash
+grep '  miku$' SHA256SUMS | sha256sum -c -
+bash miku --verify
+sudo bash miku
+```
+
+安装后默认引导选择终端一键搭建或网页面板；已有安装默认保留配置更新，不需要清除重装。可显式选择：
+
+```bash
+sudo bash miku --panel
+sudo bash miku --quick --no-domain --background
+sudo bash miku --quick --domain node.example.com
+```
+
+`--domain` 是**节点域名**，需要解析到 VPS；`--no-domain` 使用 REALITY。自动申请证书需要公网 TCP 80，失败不会用自签证书冒充成功。已有安装请先 `miku backup`。`--reinstall` 会清除本服务数据，除非明确需要，请不要使用。
 
 ### 公开仓库的一行安装
 
@@ -90,30 +110,31 @@ bash -c 'set -e; d=$(mktemp -d); trap '\''rm -rf -- "$d"'\'' EXIT; curl --proto 
   curl --proto '=https' --tlsv1.2 -fsSL \
     -H "Authorization: Bearer $GITHUB_TOKEN" \
     -H 'Accept: application/vnd.github.raw+json' \
-    'https://api.github.com/repos/vioIetMiku/miku-gate/contents/install-online.sh?ref=v0.2.2' \
+    'https://api.github.com/repos/vioIetMiku/miku-gate/contents/install-online.sh?ref=v0.2.3' \
     -o "$d/install-online.sh"
   bash "$d/install-online.sh"
 )
 ```
 
-访问令牌仅用于读取当前仓库的 Release。自定义管理端口时，在执行脚本前设置 `export WEB_PORT=9900`；锁定版本使用 `export MIKU_VERSION=v0.2.2`。已经下载脚本时，也可先运行 `bash install-online.sh --download-only /root/miku-packages`，只下载并校验，不安装服务。
+访问令牌仅用于读取当前仓库的 Release。自定义管理端口时，在执行脚本前设置 `export WEB_PORT=9900`；锁定版本使用 `export MIKU_VERSION=v0.2.3`。已经下载脚本时，也可先运行 `bash install-online.sh --download-only /root/miku-packages`，只下载并校验，不安装服务。
 
 ### 手动安装 / 离线传包
 
-在 [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.2) 下载以下文件。私有仓库需要先登录 GitHub：
+在 [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.3) 下载以下文件。私有仓库需要先登录 GitHub：
 
 | 文件 | 用途 |
 | --- | --- |
-| `miku-gate-vps-v0.2.2.tar.gz` | VPS 通用安装包，包含两种架构的主程序、旧版导出程序与维护工具 |
-| `miku-gate-v0.2.2.zip` | 完整源码 + 两种架构安装二进制；不是 GitHub 自动生成的纯源码压缩包 |
+| `miku` | 自解压安装文件，含双架构程序；`sudo bash miku` 即可安装，`bash miku --verify` 只校验 |
+| `miku-gate-vps-v0.2.3.tar.gz` | VPS 通用安装包，包含两种架构的主程序、旧版导出程序与维护工具 |
+| `miku-gate-v0.2.3.zip` | 完整源码 + 两种架构安装二进制；不是 GitHub 自动生成的纯源码压缩包 |
 | `install-online.sh` | 最新正式版在线安装入口 |
-| `SHA256SUMS` | 上述三个附件的 SHA256 校验清单 |
+| `SHA256SUMS` | 上述四个附件的 SHA256 校验清单 |
 
 将 VPS 包和校验文件放到同一目录后运行：
 
 ```bash
-grep '  miku-gate-vps-v0.2.2.tar.gz$' SHA256SUMS | sha256sum -c -
-sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.2.tar.gz
+grep '  miku-gate-vps-v0.2.3.tar.gz$' SHA256SUMS | sha256sum -c -
+sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.3.tar.gz
 sudo bash miku-gate/install.sh
 ```
 
@@ -129,6 +150,20 @@ sudo bash miku-gate/install.sh
 6. 需要换线时使用切换 / 重连；VPN 已通但入口失败时查看原因并使用 **修复入口**。
 
 自建核心可在设置中切换 Xray / sing-box，切换前会校验配置。**XHTTP 使用 Xray**；不要假定所有客户端和订阅格式支持全部传输协议。本机链接识别会校验发布地址、端口、凭据和传输参数，不支持把任意外部代理作为入口导入。
+
+### 终端一键配置与订阅
+
+```bash
+miku quick                         # 询问节点域名；回车跳过使用 REALITY
+miku quick --no-domain --background # 立即输出当前结果，服务端继续补齐
+miku quick --domain node.example.com
+miku quick --stop                  # 停止补齐，保留已成功出口
+miku sub                           # 输出所有订阅及当前可用节点
+```
+
+一键配置使用 Xray；提供域名时创建 VLESS + TCP + TLS + VISION，跳过时创建 VLESS + TCP + REALITY + VISION。重复执行补齐同配置的缺口并复用凭据，不是固定创建 33 个出口：**33 是候选并发上限，5 / 3 / 3 是成功目标**。节点不足时持续重试，不会用其他国家冒充目标。
+
+Ctrl+C 只退出终端等待并输出当前结果，不取消服务器后台任务。网页刷新或关闭也不会停止补齐；服务重启后恢复已保存出口，但未完成的瞬时任务需重新执行 `miku quick`。更多或其他国家节点可从网页添加。
 
 ### 域名与证书
 
@@ -151,6 +186,8 @@ sudo bash miku-gate/install.sh
 
 ```bash
 miku                 # 快捷菜单
+miku quick           # 一键配置节点
+miku sub             # 输出全部订阅 / 当前节点
 miku info            # 管理地址与当前口令
 miku status          # 服务状态
 miku password        # 本机 root 重置口令，无需旧口令
@@ -162,7 +199,7 @@ miku stop
 miku restart
 miku logs
 miku backup          # 停机一致性备份；完成后恢复原运行状态
-miku update /root/miku-gate-vps-v0.2.2.tar.gz
+miku update /root/miku-gate-vps-v0.2.3.tar.gz
 miku rollback        # 仅用于已登记的旧架构迁移，恢复切换前配套快照
 miku uninstall       # 停止并取消自启，保留程序、数据与备份
 # 以下为破坏性操作，先将备份复制到 /var/lib/miku 之外：
@@ -201,15 +238,16 @@ go test -race -c -o /tmp/miku-gate-tests ./src
 sudo /tmp/miku-gate-tests -test.count=1 -test.timeout=5m
 go vet ./...
 (cd compat/miku-export && go test ./... && go vet ./...)
-(cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap)
-python3 scripts/build-release.py --version 0.2.0 --label v0.2.2 --output dist
+(cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap test_quick)
+python3 scripts/build-release.py --version 0.2.0 --label v0.2.3 --output dist
 ```
 
-构建脚本从源码重新编译两种架构的主程序和兼容导出程序，生成 VPS 包、完整 ZIP、在线安装脚本、`BUILD.json` 与 `SHA256SUMS`。Git 标签 `vX.Y.Z` 触发自动检查、构建及正式发布；检查失败不会发布正式 Release。
+构建脚本从源码重新编译两种架构的主程序和兼容导出程序，生成 VPS 包、完整 ZIP、在线安装脚本、`BUILD.json`、自解压 `miku` 与 `SHA256SUMS`。Git 标签 `vX.Y.Z` 触发自动检查、构建及正式发布；检查失败不会发布正式 Release。
 
 ## 许可证与来源
 
 - 基于 [byJoey/fanout](https://github.com/byJoey/fanout)，原始 MIT 许可证与 `Joey (byJoey)` 署名保留。
 - Xray、sing-box 在安装时从各自官方发布下载，版本和 SHA256 固定于 [CORE_ASSETS.json](CORE_ASSETS.json)，分别适用其自身许可证。
+- 国旗 SVG 来自 lipis/flag-icons 7.2.3，内置于源码与程序，适用 [FLAG_ICONS_LICENSE](FLAG_ICONS_LICENSE) 中的 MIT 许可证，不依赖外部图片 CDN。
 - 视觉素材说明：[ARTWORK.md](ARTWORK.md)；界面设计说明：[UI_DESIGN.md](UI_DESIGN.md)。插画为生成素材，不代表与角色权利人存在授权、合作或背书。
 - 完整来源与迭代说明：[PROVENANCE.md](PROVENANCE.md)、[开发历史](docs/DEV_HISTORY.md)、[更新记录](CHANGELOG.md)。

@@ -47,7 +47,7 @@ func (m *Manager) saveState() error {
 	m.mu.RLock()
 	st.NextOrder = m.nextOrder
 	m.mu.RUnlock()
-	for _, t := range m.Tunnels() {
+	for _, t := range m.visibleTunnels() {
 		// 只跳过用户主动停掉的。starting/failed 的隧道也要存：
 		// 它们正在重连或等着重试，漏存会让重启后凭空少几个出口。
 		if t.Status == "stopped" {
@@ -90,7 +90,7 @@ func (m *Manager) restoreState() (int, error) {
 }
 
 // restoreStateWith separates persisted-state decoding from starting real tunnels.
-// Tests can verify old formats without creating privileged background workers.
+// Tests verify old formats without creating privileged background workers.
 func (m *Manager) restoreStateWith(start func(*Tunnel)) (int, error) {
 	blob, err := os.ReadFile(statePath(m.workDir))
 	if os.IsNotExist(err) {
@@ -110,7 +110,8 @@ func (m *Manager) restoreStateWith(start func(*Tunnel)) (int, error) {
 
 	// 从当前节点列表补回地区、延迟等元数据；节点已下线时退回存盘的最小信息
 	known := map[string]Node{}
-	for _, n := range m.nodes {
+	nodes, _ := m.Nodes()
+	for _, n := range nodes {
 		known[n.HostName] = n
 	}
 

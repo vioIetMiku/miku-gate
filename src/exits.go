@@ -95,7 +95,7 @@ func invalidateInbounds() {
 
 // ExitsOf 把隧道和入站 join 成界面直接可用的形态。
 func (m *Manager) ExitsOf() ExitsView {
-	tunnels := m.Tunnels()
+	tunnels := m.visibleTunnels()
 	view := ExitsView{Exits: make([]Exit, 0, len(tunnels)), PublicIP: publishingHost()}
 	view.Imported = m.verifiedImportedLinks()
 

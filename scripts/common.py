@@ -138,14 +138,17 @@ def core_download(core,architecture):
 
 def ensure_cores(old=None):
     private_dir(DATA/'bin');architecture=arch()
-    for core in ('xray','sing-box'):
+    def prepare(core):
         path=DATA/'bin'/core
-        if path.exists():trusted(path,0o755);continue
+        if path.exists():trusted(path,0o755);return
         previous=Path('/usr/local/lib/miku-gate')/core
         records={r['core']:r for r in (old or {}).get('core_sources',[])}
         if core in records and previous.exists():
             raw=trusted(previous,0o755);require(hashlib.sha256(raw).hexdigest()==records[core]['binary_sha256'],'旧核心程序已变化');atomic(path,raw,0o755)
         else:print('准备官方 '+core,flush=True);core_download(core,architecture)
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        list(workers.map(prepare,('xray','sing-box')))
 
 def port_available(port):
     if not 1<=port<=65535:return False
@@ -236,7 +239,7 @@ def origin(value=None):
 
 def info():
     value=settings();path=trusted(DATA/'basepath',0o600,1024).decode().strip();password=trusted(DATA/'password',0o600,1024).decode().strip()
-    print('管理地址：'+origin(value)+'/'+path.strip('/')+'/\n访问口令：'+password+'\n快捷菜单：miku\n修改口令：miku password\n域名设置：miku domain\n卸载并清除数据：miku purge')
+    print('管理地址：'+origin(value)+'/'+path.strip('/')+'/\n访问口令：'+password+'\n快捷菜单：miku\n一键节点：miku quick\n全部订阅：miku sub\n修改口令：miku password\n域名设置：miku domain\n卸载并清除数据：miku purge')
 
 def public_ip():
     for url in ('https://api.ipify.org','https://ipv4.icanhazip.com'):
@@ -291,7 +294,7 @@ def snapshot(label):
         for child in DATA.iterdir():
             if child.name in ('backups','bin','.maintenance.lock') or child.is_symlink():continue
             archive.add(child,arcname='data/'+child.name,recursive=True)
-        for name in ('miku','maintain.py','common.py','install.py','CORE_ASSETS.json'):
+        for name in ('miku','maintain.py','common.py','quick.py','install.py','CORE_ASSETS.json','FLAG_ICONS_LICENSE'):
             file=LIB/name
             if file.exists():archive.add(file,arcname='lib/'+name)
         if MENU.exists():archive.add(MENU,arcname='menu/miku')

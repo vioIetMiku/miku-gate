@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/csv"
 	"fmt"
@@ -109,8 +110,12 @@ func fetchNodesWith(direct string, timeout time.Duration) ([]Node, error) {
 }
 
 func fetchNodesFrom(url, key string, timeout time.Duration) ([]Node, error) {
+	return fetchNodesFromContext(context.Background(), url, key, timeout)
+}
+
+func fetchNodesFromContext(ctx context.Context, url, key string, timeout time.Duration) ([]Node, error) {
 	client := &http.Client{Timeout: timeout}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("拉取节点列表失败: %w", err)
 	}

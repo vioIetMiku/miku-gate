@@ -16,29 +16,56 @@ type JobStep struct {
 
 // Job 是一次批量开出口的作业。
 type Job struct {
-	mu        sync.Mutex
-	id        string
-	summary   string
-	status    string
-	steps     []*JobStep
-	started   time.Time
-	ended     time.Time
-	resultURL string
+	mu          sync.Mutex
+	id          string
+	summary     string
+	status      string
+	steps       []*JobStep
+	started     time.Time
+	ended       time.Time
+	resultURL   string
+	kind        string
+	quickResult *QuickSetupResult
 }
 
 // JobView 是 Job 的只读快照，用于返回给界面。
 type JobView struct {
-	ResultURL string    `json:"result_url,omitempty"`
-	ID        string    `json:"id"`
-	Summary   string    `json:"summary"`
-	Status    string    `json:"status"` // running | done | failed
-	Steps     []JobStep `json:"steps"`
-	Started   time.Time `json:"started"`
-	Done      int       `json:"done"`
-	Total     int       `json:"total"`
+	QuickResult *QuickSetupResult `json:"quick_result,omitempty"`
+	Kind        string            `json:"kind,omitempty"`
+	ResultURL   string            `json:"result_url,omitempty"`
+	ID          string            `json:"id"`
+	Summary     string            `json:"summary"`
+	Status      string            `json:"status"` // running | done | failed
+	Steps       []JobStep         `json:"steps"`
+	Started     time.Time         `json:"started"`
+	Done        int               `json:"done"`
+	Total       int               `json:"total"`
+}
+
+func (j *Job) SetQuickResult(result QuickSetupResult) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	result.Regions = append([]QuickRegionResult(nil), result.Regions...)
+	j.quickResult = &result
 }
 
 func (j *Job) ID() string { return j.id }
+
+func (j *Job) SetKind(kind string) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.kind = kind
+}
+
+func (j *Job) failUnfinished(detail string) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	for _, step := range j.steps {
+		if step.Status == "pending" || step.Status == "running" {
+			step.Status, step.Detail = "failed", detail
+		}
+	}
+}
 
 func (j *Job) SetResultURL(url string) {
 	j.mu.Lock()
@@ -75,10 +102,16 @@ func (j *Job) View() JobView {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	v := JobView{
+		Kind:      j.kind,
 		ResultURL: j.resultURL,
 		ID:        j.id, Summary: j.summary, Status: j.status,
 		Started: j.started, Total: len(j.steps),
 		Steps: make([]JobStep, 0, len(j.steps)),
+	}
+	if j.quickResult != nil {
+		result := *j.quickResult
+		result.Regions = append([]QuickRegionResult(nil), result.Regions...)
+		v.QuickResult = &result
 	}
 	for _, s := range j.steps {
 		v.Steps = append(v.Steps, *s)
@@ -138,7 +171,7 @@ func (s *JobStore) Dismiss(id string) {
 	defer s.mu.Unlock()
 	kept := s.jobs[:0]
 	for _, j := range s.jobs {
-		if j.id != id {
+		if j.id != id || j.View().Status == "running" {
 			kept = append(kept, j)
 		}
 	}

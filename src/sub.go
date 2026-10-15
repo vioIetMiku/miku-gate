@@ -125,7 +125,7 @@ func subLinks(m *Manager, host string, boundOnly bool) ([]string, error) {
 	}
 	if native, ok := p.(*Native); ok {
 		live := map[string]bool{}
-		for _, t := range m.Tunnels() {
+		for _, t := range m.visibleTunnels() {
 			if t.Status == "up" {
 				live[sanitizeTag(t.Node.HostName)] = true
 			}
@@ -185,6 +185,27 @@ func subLinks(m *Manager, host string, boundOnly bool) ([]string, error) {
 	}
 	links, err := p.InboundLinks(uniqueIDs, host)
 	return uniqueSubLinks(append(links, extra...)), err
+}
+
+// Use the subscription's authoritative set, including verified imports, so a
+// completion popup never depends on a stale frontend polling snapshot.
+func apiSubscriptionLinks(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			writeJSON(w, 405, map[string]string{"error": "请使用 GET 读取节点链接。"})
+			return
+		}
+		links, err := subLinks(m, publishingHost(), true)
+		if err != nil {
+			writeJSON(w, 502, map[string]string{"error": "节点链接暂未读取成功，请稍后重试：" + firstLine(err.Error())})
+			return
+		}
+		if links == nil {
+			links = []string{}
+		}
+		writeJSON(w, 200, map[string]any{"links": links})
+	}
 }
 
 // handleSub 是订阅本体。走的是免登录路径，所以第一件事是验口令。

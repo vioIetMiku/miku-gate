@@ -105,7 +105,7 @@ class MaintenanceTests(unittest.TestCase):
     def test_update_repairs_old_directory_and_conflicted_port(self):
         bundle=self.root/'bundle';(bundle/'bin').mkdir(parents=True);(bundle/'scripts').mkdir()
         architecture=c.arch();binary='bin/miku-linux-'+architecture
-        files={binary:b'new fixture binary','bin/miku-export-linux-'+architecture:b'fixture export helper','scripts/common.py':b'# fixture common','scripts/maintain.py':b'# fixture maintenance','scripts/install.py':b'# fixture install','scripts/miku.sh':b'#!/bin/sh\n','CORE_ASSETS.json':b'{}','LICENSE':b'fixture license'}
+        files={binary:b'new fixture binary','bin/miku-export-linux-'+architecture:b'fixture export helper','scripts/common.py':b'# fixture common','scripts/maintain.py':b'# fixture maintenance','scripts/quick.py':b'# fixture quick','scripts/install.py':b'# fixture install','scripts/miku.sh':b'#!/bin/sh\n','CORE_ASSETS.json':b'{}','LICENSE':b'fixture license','FLAG_ICONS_LICENSE':b'fixture flags license'}
         for name,raw in files.items():c.atomic(bundle/name,raw,0o755 if name.startswith('bin/') or name.endswith('.sh') else 0o644)
         c.atomic(c.LIB/'miku',b'old fixture binary',0o755);os.chmod(c.LIB,0o755)
         c.write_json(c.DATA/'install.json',{'product':'miku-fanout','version':'0.2.0-dev.34','binary_sha256':hashlib.sha256(b'old fixture binary').hexdigest()})
@@ -121,6 +121,21 @@ class MaintenanceTests(unittest.TestCase):
     def test_existing_certificate_is_reused_even_if_port_80_is_busy(self):
         with patch.object(maintain,'certificate_sources',return_value=[(Path('/fixture/cert'),Path('/fixture/key'))]),patch.object(maintain,'checked_certificate',return_value=(b'cert',b'key')),patch.object(c,'port_available',return_value=False),patch.object(c,'packages') as packages:
             pair=maintain.certificate_pair('node.example.com');self.assertEqual(pair[:2],(b'cert',b'key'));self.assertEqual(pair[2:],('/fixture/cert','/fixture/key'));packages.assert_not_called()
+
+    def test_core_downloads_can_progress_in_parallel(self):
+        import threading
+        barrier=threading.Barrier(2);seen=[]
+        def download(core,architecture):
+            seen.append(core);barrier.wait(timeout=2)
+        with patch.object(c,'arch',return_value='amd64'),patch.object(c,'core_download',side_effect=download),contextlib.redirect_stdout(io.StringIO()):
+            c.ensure_cores()
+        self.assertEqual(set(seen),{'xray','sing-box'})
+
+    def test_backup_contains_quick_command_for_version_rollback(self):
+        import tarfile
+        c.atomic(c.LIB/'quick.py',b'# fixture quick command',0o644)
+        target=c.snapshot('fixture')
+        with tarfile.open(target) as archive:self.assertIn('lib/quick.py',archive.getnames())
 
     def test_http_domain_option_prints_full_new_login_url(self):
         out=io.StringIO()

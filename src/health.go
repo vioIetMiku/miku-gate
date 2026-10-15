@@ -27,7 +27,7 @@ func (m *Manager) WatchHealth() {
 	ticker := time.NewTicker(healthInterval)
 	defer ticker.Stop()
 	schedule := func() {
-		for _, t := range m.Tunnels() {
+		for _, t := range m.visibleTunnels() {
 			if pending[t] {
 				continue
 			}

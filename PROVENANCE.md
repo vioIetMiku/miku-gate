@@ -56,3 +56,15 @@ dev34 独立实现白天 / 夜间主题、浏览器偏好保存与跨标签页�
 ## v0.2.2 / dev36
 
 dev36 修复管理域名切换时同端口监听的交接、反向代理 HTTPS 来源识别、证书探测缓存、Certbot 无邮箱签发、域名规范化和管理监听器的临时错误恢复；新增 `web_listener.go` 及对应回归测试。发布时保留 v0.2.1 的 Miku Gate 包装、构建校验、在线安装器和竞态安全状态恢复测试，不直接采用 dev36 中会重新启动后台恢复任务的测试夹具。
+
+## v0.2.3 / dev41
+
+dev39 独立实现按地区成功配额持续补齐、候选失败滚动替换、来源耗尽后退避刷新、单候选超时与用户取消。延续已有节点验证、入口配置和订阅隔离机制，无新增运行时依赖或外部服务。
+
+dev40 独立实现自解压 `miku` 安装入口、终端一键配置和订阅导出、33 路后台候选竞速、来源增量发布、固定提交镜像并行下载校验、候选 TCP 快速预检、实测延迟排序、部分结果即时使用，以及一键节点域名更换时保留端口与凭据。服务端仍使用原核心和网络查询来源。国旗来自 lipis/flag-icons 7.2.3（https://github.com/lipis/flag-icons/tree/v7.2.3），使用 npm 发布包中的 270 个 4:3 SVG，完整内置于 src/assets/flags/；MIT 许可证保存在 FLAG_ICONS_LICENSE。无新增客户端运行时依赖，国旗不需要第三方 CDN。
+
+
+dev41 独立实现简洁终端结果输出、共用居中内容框架、Miku 欢迎区与真实连接统计、紧凑节点卡片与 IP 信息面板、Ping0 顶部入口、未知网络标记区分及后返回查询隔离。设计参考 MotionSites（https://motionsites.org/）、Taste 的 Redesign 指导（https://github.com/Leonxlnx/taste-skill/blob/main/skills/redesign-skill/SKILL.md）及 Impeccable（https://github.com/pbakaus/impeccable）的公开原则；未复制或打包第三方技能、付费模板或运行脚本。新增 miku-mark.svg 为原生 SVG 字标；原插画与国旗素材沿用原许可。无新增服务端或客户端运行时依赖。
+
+
+正式发布保留 Miku Gate 品牌、miku-gate 包目录、已有安装路径、双架构源码重建与 SHA256 回验。新增独立自解压 miku 附件，保留 install-online.sh。状态恢复保留 dev41 的同步读取与候选隔离，并继续使用无后台副作用的持久化测试回调。国旗 MIT 许可证随源码和 VPS 包分发。

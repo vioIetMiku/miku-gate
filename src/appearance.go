@@ -8,7 +8,7 @@ window.MikuTheme=(function(){
     const light=value==='light',mode=light?'light':'dark',label=light?'夜间模式':'白天模式';
     root.setAttribute('data-theme',mode);root.style.colorScheme=mode;
     const meta=document.querySelector('meta[name="theme-color"]');
-    if(meta) meta.setAttribute('content',light?'#f3f7fa':'#0a1620');
+    if(meta) meta.setAttribute('content',light?'#f4f7f5':'#101a1c');
     document.querySelectorAll('[data-theme-toggle]').forEach(button=>{
       button.setAttribute('aria-pressed',String(light));
       button.setAttribute('aria-label','切换到'+label);button.setAttribute('title','切换到'+label);
@@ -33,7 +33,7 @@ const themeControlsJS = `window.MikuTheme.bind();`
 
 const themeButtonHTML = `<button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false" aria-label="切换到白天模式" title="切换到白天模式"><svg class="theme-icon-sun" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg><svg class="theme-icon-moon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"/></svg><span data-theme-label>白天模式</span></button>`
 
-const appearanceCSS = `
+const appearanceCSS = countryFlagCSS + `
 :root{color-scheme:dark}
 button.theme-toggle{width:auto;min-height:44px;margin:0;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border:1px solid var(--line,#3a5366);border-radius:9px;background:var(--panel,#1c3040);color:var(--text,#eef6ff);font-size:13px;font-weight:600;line-height:1.5;cursor:pointer;white-space:nowrap}
 .theme-toggle svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}.theme-toggle .theme-icon-moon{display:none}
@@ -41,8 +41,8 @@ button.theme-toggle{width:auto;min-height:44px;margin:0;display:inline-flex;alig
 .login-theme{position:fixed;top:20px;right:20px;z-index:3}.login-theme button:focus-visible{outline:2px solid #67e2d8;outline-offset:3px}
 :root[data-theme=light]{
   color-scheme:light;
-  --bg:#f3f7fa;--panel:#ffffff;--card:#ffffff;--line:#c9d9e4;
-  --text:#183447;--dim:#526b7a;--accent:#087f79;--ok:#06795e;--warn:#8a5608;--bad:#b3264d;
+  --bg:#f4f7f5;--panel:#ffffff;--card:#ffffff;--surface:#edf3ef;--line:#d3dfd9;
+  --text:#203b3b;--dim:#566c68;--accent:#127f73;--ok:#06795e;--warn:#8a5608;--bad:#b3264d;
   --asn:#174f93;--asn-bg:#eaf2ff;--owner:#805412;
   --residential:#116b48;--residential-bg:#e7f6ed;
   --datacenter:#69439f;--datacenter-bg:#f0eafa;
@@ -50,7 +50,7 @@ button.theme-toggle{width:auto;min-height:44px;margin:0;display:inline-flex;alig
 }
 :root[data-theme=light] body{color:var(--text);background:var(--bg)}
 :root[data-theme=light] ::selection{color:#183447;background:#bbeee2}
-:root[data-theme=light] header{background:rgba(249,252,254,.97);border-color:var(--line);box-shadow:0 2px 14px #18344708}
+:root[data-theme=light] header{background:rgba(247,250,248,.97);border-color:var(--line);box-shadow:0 2px 14px #18344708}
 :root[data-theme=light] .brand-avatar{border-color:#91c9c1;background:#e8f6f3}
 :root[data-theme=light] .brand-name h1{color:var(--text)}:root[data-theme=light] .brand-name small{color:var(--dim)}
 :root[data-theme=light] button{color:var(--text);background:#edf4f8;border-color:#b7ccd9}
@@ -80,17 +80,19 @@ button.theme-toggle{width:auto;min-height:44px;margin:0;display:inline-flex;alig
 :root[data-theme=light] .network-type.unavailable{color:var(--bad);background:#fff0f3;border-color:#dca3b3}
 :root[data-theme=light] .node-card{box-shadow:0 6px 24px #24465c0b}:root[data-theme=light] .node-card.connected{border-color:#9ecbc4}
 :root[data-theme=light] .node-card-ip,:root[data-theme=light] .node-card-facts strong{color:var(--text)}
-:root[data-theme=light] .node-card-state{color:var(--dim);background:#edf2f6}
-:root[data-theme=light] .node-card-state.up{color:#116b48;background:#e7f6ed}
-:root[data-theme=light] .node-card-state.starting{color:var(--warn);background:#fff4d6}
-:root[data-theme=light] .node-card-state.failed{color:var(--bad);background:#fff0f3}
+:root[data-theme=light] button.node-card-ip,:root[data-theme=light] button.node-card-ip:hover:not(:disabled){background:transparent}
+:root[data-theme=light] button.node-card-ip:hover:not(:disabled){color:var(--accent)}
+:root[data-theme=light] .node-card-state{color:var(--dim);background:transparent}
+:root[data-theme=light] .node-card-state.up{color:#116b48;background:transparent}
+:root[data-theme=light] .node-card-state.starting{color:var(--warn);background:transparent}
+:root[data-theme=light] .node-card-state.failed{color:var(--bad);background:transparent}
 :root[data-theme=light] .node-card-location,:root[data-theme=light] .node-card-protocol{color:var(--dim)}
 :root[data-theme=light] .node-card-facts .latency-unavailable{color:var(--warn)}:root[data-theme=light] .latency-method{color:#245e86}
 :root[data-theme=light] .node-card-actions button,:root[data-theme=light] .node-card-tools button{color:#254e68;background:#edf4f9;border-color:#bacfdf}
 :root[data-theme=light] .node-card-actions .copy-node{color:#ffffff;background:var(--accent);border-color:var(--accent)}
 :root[data-theme=light] .node-card-actions .copy-node small{color:#e4fffa}
 :root[data-theme=light] .node-card-actions .copy-node:hover:not(:disabled){background:#066a65}
-:root[data-theme=light] .node-card-actions .switch-ip{color:#593582;background:#eee8fa;border-color:#c3b3de}
+:root[data-theme=light] .node-card-actions .switch-ip{color:var(--text);background:var(--surface);border-color:var(--line)}
 :root[data-theme=light] .node-card-tools .stop-exit{color:#9b1f43;background:#fff0f3;border-color:#dca3b3}
 :root[data-theme=light] .exit-stability-notice{color:#7a4e0d;background:#fff6e6;border-color:#d2a762}
 :root[data-theme=light] .exit-stability-heading span{color:#815108}:root[data-theme=light] .exit-stability-notice p{color:#72501f}
@@ -120,6 +122,10 @@ button.theme-toggle{width:auto;min-height:44px;margin:0;display:inline-flex;alig
 :root[data-theme=light] .login-shell .help code{color:#116b61}
 :root[data-theme=light] .login-shell form button{color:#ffffff;background:var(--accent)}
 :root[data-theme=light] .login-shell .err{color:var(--bad)}:root[data-theme=light] .login-shell .signal i{background:var(--accent)}
-@media(max-width:620px){.header-actions .theme-toggle{font-size:12px;padding:6px 4px}.theme-toggle svg{width:14px;height:14px}}
+:root[data-theme=light] .header-actions button{background:transparent;border-color:transparent}
+:root[data-theme=light] .toolbar-actions #newexit{background:var(--surface);color:var(--accent);border-color:var(--line)}
+:root[data-theme=light] .toolbar-actions #stopall{background:transparent;border-color:transparent}
+.header-actions .theme-toggle{font-size:12px;min-height:44px;padding:7px 12px;background:transparent;border-color:transparent}
+@media(max-width:620px){:root[data-theme=light] .header-actions button{background:var(--panel);border-color:var(--line)}:root[data-theme=light] .toolbar-actions #stopall{border-color:var(--line)}.header-actions .theme-toggle{font-size:12px;padding:6px 4px}.theme-toggle svg{width:14px;height:14px}}
 @media(max-width:360px){.header-actions .theme-toggle{font-size:11px;gap:3px}.theme-toggle svg{width:12px;height:12px}}
 `

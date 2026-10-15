@@ -16,8 +16,10 @@ const indexHTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0a1620">
-<title>Miku 节点</title>
+<meta name="theme-color" content="#101a1c">
+<meta name="description" content="Miku Gate 连接工作台，集中管理出口、节点与订阅。">
+<link rel="icon" href="assets/miku-mark.svg" type="image/svg+xml">
+<title>Miku Gate · 连接工作台</title>
 <script>` + themeInitJS + `</script>
 <style>
 :root{
@@ -207,11 +209,13 @@ button,input,select,textarea{border-radius:8px}button{padding:7px 12px}h2,.bar h
 .domain-result{border:1px solid var(--accent);border-radius:12px;padding:16px;margin:12px 0;background:rgba(57,197,187,.08)}.domain-login-link{display:grid;gap:9px;margin-top:10px}.domain-login-link a{color:var(--accent);overflow-wrap:anywhere;line-height:1.6}.domain-login-link button{justify-self:start}.entry-chip .entry-stack{display:block;font-size:10px;font-weight:650;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.entry-chip small{display:block;font-size:9px;line-height:1.2;opacity:.78;margin:0}.chips .entry-chip,.orow>.entry-chip{display:inline-grid;gap:1px;min-height:32px;min-width:0;max-width:188px;padding:3px 6px;text-align:left;border-radius:5px}.orphan{padding:12px}.orow{padding:4px 0}.node-card-protocol{white-space:normal;overflow-wrap:anywhere}
 .domain-card{border:1px solid var(--line);border-radius:10px;padding:13px;margin:10px 0}.domain-card strong{color:var(--accent)}.domain-card small{display:block;color:var(--dim);margin:4px 0}.domain-card .domain-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.domain-current{padding:12px;background:rgba(57,197,187,.07);border-radius:10px;overflow-wrap:anywhere}.kv dd{overflow-wrap:anywhere}
 @media(max-width:760px){header{padding:9px 12px;gap:8px;flex-wrap:wrap}header #panel{display:none}header .links{display:none}.brand-name h1{font-size:16px}.brand-avatar{width:36px;height:40px}.miku-welcome{padding:20px;min-height:125px}.miku-welcome h2{font-size:19px}.miku-welcome img{right:-50px;height:260px;opacity:.45}.miku-welcome>div{max-width:90%}main{padding:12px}.bar{flex-wrap:wrap}.sheet{max-height:92vh}.ip-summary{font-size:11px}}
-` + showcaseCSS + workspaceCSS + appearanceCSS + `
+` + showcaseCSS + workspaceCSS + appearanceCSS + quickSetupCSS + `
 </style>
 </head>
 <body>
+<a class="skip-link" href="#workspace">跳到工作台</a>
 <header>
+ <div class="header-inner">
   <img class="brand-avatar" src="assets/miku-hero-v1.png" alt="Miku"><div class="brand-name"><h1>MIKU <span>GATE</span></h1><small>你的连接，你的节奏</small></div>
   <span class="count" id="panel" hidden></span>
   <span class="spacer"></span><div class="header-actions"><button id="domainBtn">域名 / 证书</button><button id="ipBtn">IP 查询</button>` + themeButtonHTML + `
@@ -220,17 +224,22 @@ button,input,select,textarea{border-radius:8px}button{padding:7px 12px}h2,.bar h
     设置
   </button>
   </div>
+ </div>
 </header>
 
-<main>
+<main id="workspace">
   <div id="managementMoved" class="domain-result" role="status" aria-live="polite" hidden></div>
-  <div class="miku-welcome"><div><span class="eyebrow">连接工作台</span><h2>世界，等你连接。</h2><p id="mikuGreeting">准备好了吗？和我一起，把下一站点亮吧！</p></div><img src="assets/miku-hero-v1.png" alt="" aria-hidden="true"></div><div class="jobs" id="jobs"></div>
+  <div class="workspace-heading"><h2>连接工作台</h2><span class="workspace-live" id="workspaceLive"><i aria-hidden="true"></i><span id="workspaceSync">正在同步</span></span></div>
+  <section class="miku-welcome" aria-labelledby="welcomeTitle"><div class="hero-copy"><span class="eyebrow">你的连接，你的节奏</span><h2 id="welcomeTitle">世界很大，即刻连接。</h2><p>选好下一站，剩下的交给 Miku。<br>出口、节点与订阅，在这里一目了然。</p><div class="hero-actions"><button class="primary" id="heroSubBtn">获取订阅<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><a class="hero-link" href="#connections">查看我的节点 ↓</a></div></div><div class="hero-art" aria-hidden="true"><img src="assets/miku-hero-v1.png" alt="" width="320" height="345" fetchpriority="high"></div></section>
+  <div class="workspace-overview" aria-label="连接概览"><div class="workspace-metric"><strong id="onlineCount">—</strong><span>在线出口</span></div><div class="workspace-metric"><strong id="regionCount">—</strong><span>覆盖地区</span></div><div class="workspace-metric"><strong id="entryCount">—</strong><span>可用入口</span></div></div>` + quickSetupStatusHTML + `<div class="jobs" id="jobs"></div>
 
   <section class="bar" id="entranceBar"><h2>入口节点</h2><span class="count">自动检测面板；同页管理入口与落地</span><span class="spacer"></span><button onclick="document.querySelector('#newnode').click()">新建入口</button><button onclick="document.querySelector('#settingsBtn').click()">核心 / 面板 / 域名</button></section>
   <div id="orphans"></div>
-  <div class="bar exit-toolbar">
+  <div class="bar exit-toolbar" id="connections">
     <div class="toolbar-title"><h2>出口与节点</h2><span class="count" id="ecount"></span></div>
     <div class="toolbar-actions">
+    <button class="primary quick-launch" id="quickSetupBtn">一键配置</button>
+    <select id="exitSort" class="exit-sort" aria-label="节点排序"><option value="fast">最快优先</option><option value="order">创建顺序</option></select>
     <button class="view-switch" id="displayModeBtn" aria-pressed="false">展示模式</button>
     <button id="subBtn" title="拿订阅地址">
       <svg viewBox="0 0 24 24"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
@@ -256,8 +265,7 @@ button,input,select,textarea{border-radius:8px}button{padding:7px 12px}h2,.bar h
   </div>
 
   <div id="list"></div>
-
-
+  <footer class="workspace-footer"><span>MIKU GATE</span><span>每一站，都有新的可能。</span></footer>
 </main>
 
 <div class="modal" id="wizard">
@@ -423,7 +431,7 @@ button,input,select,textarea{border-radius:8px}button{padding:7px 12px}h2,.bar h
           随机
         </button>
       </div>
-      <div class="hint">改完立即生效，已连上的会话不断；用旧凭据的客户端要改配置。</div>
+      <div class="hint">修改后请先保存。复制按钮使用已保存的凭据，并为你提供对应的入口节点。保存后新连接使用新凭据，已连接的会话不受影响。</div>
     </div>
     <div class="foot">
       <button id="crcopy">
@@ -537,8 +545,8 @@ button,input,select,textarea{border-radius:8px}button{padding:7px 12px}h2,.bar h
 </div>
 
 
-<div class="modal" id="domainbox"><div class="sheet"><div class="head"><h2>域名与证书</h2><span class="spacer"></span><button class="icon" data-close="domainbox">关闭</button></div><div class="body"><div class="domain-current" id="domainCurrent"></div><div class="domain-result" id="domainResult" role="status" aria-live="polite" hidden></div><div id="domainList"></div><label class="f"><span>绑定域名</span><input id="domainName" placeholder="node.example.com" autocomplete="off"></label><label class="f"><span>绑定方式 / 已有证书</span><select id="domainCert"><option value="">申请新的证书</option></select></label><label class="chk"><input id="domainManagement" type="checkbox" checked> 同时更新管理登录地址</label><div class="hint">填写域名即可自动复用或申请证书，无需邮箱。申请 HTTPS 证书前请解析到 VPS 并放行 80 端口；取消勾选时仅供 TLS 入口使用。</div><div class="hint" id="domainHint"></div></div><div class="foot"><button id="domainUnbind">管理地址解绑回IP</button><button id="domainRefresh">重新扫描证书</button><span class="spacer"></span><button class="primary" id="domainSubmit">绑定域名</button></div></div></div>
-<div class="modal" id="ipbox"><div class="sheet"><div class="head"><h2>IP / ASN 信息</h2><span class="spacer"></span><button class="icon" data-close="ipbox">关闭</button></div><div class="body"><div class="setrow"><label class="f"><span>公网IP</span><input id="ipAddress" placeholder="IPv4 / IPv6 地址"></label><button class="primary" id="ipLookup">查询</button></div><div id="ipDetails" class="domain-card">输入IP，或点击出口上的“查看IP”。</div><div class="hint">显示来源、时间、网络类型、判断依据与置信程度。结合机房 / 移动标记和运营商信息分类；检测失败会自动重试。</div></div></div></div>
+` + quickSetupModalHTML + `<div class="modal" id="domainbox"><div class="sheet"><div class="head"><h2>域名与证书</h2><span class="spacer"></span><button class="icon" data-close="domainbox">关闭</button></div><div class="body"><div class="domain-current" id="domainCurrent"></div><div class="domain-result" id="domainResult" role="status" aria-live="polite" hidden></div><div id="domainList"></div><label class="f"><span>绑定域名</span><input id="domainName" placeholder="node.example.com" autocomplete="off"></label><label class="f"><span>绑定方式 / 已有证书</span><select id="domainCert"><option value="">申请新的证书</option></select></label><label class="chk"><input id="domainManagement" type="checkbox" checked> 同时更新管理登录地址</label><div class="hint">填写域名即可自动复用或申请证书，无需邮箱。申请 HTTPS 证书前请解析到 VPS 并放行 80 端口；取消勾选时仅供 TLS 入口使用。</div><div class="hint" id="domainHint"></div></div><div class="foot"><button id="domainUnbind">管理地址解绑回IP</button><button id="domainRefresh">重新扫描证书</button><span class="spacer"></span><button class="primary" id="domainSubmit">绑定域名</button></div></div></div>
+<div class="modal" id="ipbox" role="dialog" aria-modal="true" aria-labelledby="ipTitle"><div class="sheet"><div class="head"><h2 id="ipTitle">IP 与网络信息<span>位置、归属与网络属性</span></h2><span class="spacer"></span><button class="icon" data-close="ipbox" aria-label="关闭 IP 信息">关闭</button></div><div class="body"><form class="ip-search" id="ipSearch"><label class="f"><span>查询公网 IP</span><input id="ipAddress" type="text" placeholder="输入 IPv4 或 IPv6 地址" autocomplete="off" autocapitalize="none" spellcheck="false" required></label><button class="primary" id="ipLookup" type="submit">查询</button></form><div id="ipDetails" class="ip-result"><div class="ip-result-toolbar"><a class="ip-details-link" href="https://ping0.cc/" target="_blank" rel="noopener noreferrer">在 Ping0 检测 IP <span aria-hidden="true">↗</span></a></div><div class="ip-state"><h3>了解你的出口</h3><p>输入 IP 地址，或点击节点卡片上的 IP 查看详情。</p></div></div></div></div></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -607,8 +615,7 @@ async function copy(text){
 
 let view = {exits:[], direct:[], panel:'', backend:'', public_ip:''};
 let inbounds = [];
-const greetings=['准备好了吗？和我一起，把下一站点亮吧！','让我把小小的心跳，唱到更远的地方。','不管相隔多远，今天也想听见你的声音。'];
-$('#mikuGreeting').textContent=greetings[Math.floor(Math.random()*greetings.length)];
+$('#heroSubBtn').onclick=()=>$('#subBtn').click();
 
 // 自建模式下入站由 fanout 自己管，界面要提供新建入口；
 // 接管 3x-ui 时入站归面板管，这里只读不写。
@@ -620,7 +627,7 @@ function backendName(){ return BACKEND_NAME[view.backend] || '3x-ui'; }
 
 const STATUS = {up:'已连通', starting:'连接中', failed:'失败', stopped:'已停止'};
 
-` + latencyJS + showcaseJS + `
+` + latencyJS + showcaseJS + countryFlagJS + `
 
 function entranceLabel(i){ return i.stack || String(i.protocol || "入口").toUpperCase(); }
 function entranceChip(i){ return '<span class="entry-stack">'+esc(entranceLabel(i))+'</span><small>#'+i.id+' · :'+i.port+'</small>'; }
@@ -629,6 +636,10 @@ function renderExits(){
   setShowcaseMode();
   const list = $('#list');
   const n = view.exits.length;
+  const online=view.exits.filter(e=>e.status==='up');
+  $('#onlineCount').textContent=online.length;
+  $('#regionCount').textContent=new Set(online.map(e=>e.region).filter(Boolean)).size;
+  $('#entryCount').textContent=new Set(online.flatMap(e=>enabledEntrances(e).map(i=>i.id))).size;
   $('#ecount').textContent = n ? n + ' 个' : '';
   $('#exportAll').disabled = !view.exits.some(e => e.inbounds && e.inbounds.length);
   $('#stopall').disabled = !n;
@@ -642,7 +653,7 @@ function renderExits(){
   }
 
   if(showcaseMode){renderShowcase();return;}
-  list.innerHTML = view.exits.map(e => {
+  list.innerHTML = orderedExits().map(e => {
     const label = e.exit_ip || (e.status === 'starting' ? '连接中…' : '—');
     const chips = enabledEntrances(e).length
       ? enabledEntrances(e).map(i => '<button class="chip entry-chip" data-detail="' + i.id + '" title="'
@@ -653,7 +664,7 @@ function renderExits(){
     const err = error && (e.status === 'failed' || e.entry_error)
       ? '<div class="errline" title="' + esc(error) + '">' + esc(error) + '</div>' : '';
     // country 后端已经给成"国旗 中文"，再拼国家码就重复了
-    const place = esc(e.country || e.region || '—');
+    const place = countryHTML(e.region,e.country);
     return '<div class="exit">'
       + '<div class="row">'
       +   '<span class="dot ' + e.status + '" title="' + (STATUS[e.status] || e.status) + '"></span>'
@@ -708,22 +719,31 @@ function renderOrphans(){
     + '</div>';
 }
 
+const expandedJobs=new Set();
+document.addEventListener('toggle',event=>{
+  if(!event.target.matches('[data-job-history]'))return;
+  const id=event.target.dataset.jobHistory;
+  if(event.target.open)expandedJobs.add(id);else expandedJobs.delete(id);
+},true);
 function renderJobs(jobs){
   syncDomainJob(jobs);
+  syncQuickSetup(jobs);
   const box = $('#jobs');
   box.innerHTML = jobs.map(j => {
     const steps = j.steps.map(s => {
       const ic = {ok:ICON.ok, failed:ICON.bad, running:ICON.run}[s.status] || ICON.wait;
       const t = s.detail ? s.label + ' — ' + s.detail : s.label;
       return '<span class="step ' + s.status + '" title="' + esc(t) + '">' + ic
-        + esc(s.status === 'ok' && s.detail ? s.detail : s.label) + '</span>';
+        + '<span>'+esc(s.status === 'ok' && s.detail ? s.detail : s.label)
+        + (s.status === 'failed' && s.detail ? '<small class="step-detail">'+esc(s.detail)+'</small>' : '')+'</span></span>';
     }).join('');
     const close = j.status === 'running' ? ''
       : '<button class="icon" data-job="' + esc(j.id) + '" title="关闭">' + ICON.x + '</button>';
-    return '<div class="job"><div class="top"><strong>' + esc(j.summary) + '</strong>'
+    const finished=j.status!=='running',tag=finished?'details':'div',head=finished?'summary':'div';
+    return '<'+tag+' class="job'+(finished?' job-history':'')+'"'+(finished?' data-job-history="'+esc(j.id)+'"'+(expandedJobs.has(j.id)?' open':''):'')+'><'+head+' class="top"><strong>' + esc(j.summary) + '</strong>'
       + '<span class="count">' + j.done + '/' + j.total + '</span>'
-      + '<span class="spacer"></span>' + close + '</div>'
-      + '<div class="steps">' + steps + '</div>' + (j.result_url ? domainLink(j.result_url,'新的管理登录地址') : '') + '</div>';
+      + '<span class="spacer"></span>' + close + '</'+head+'>'
+      + '<div class="steps">' + steps + '</div>' + (j.result_url ? domainLink(j.result_url,'新的管理登录地址') : '') + '</'+tag+'>';
   }).join('');
 }
 
@@ -731,6 +751,7 @@ async function poll(){
   if(managementMovedURL) return;
   try{
     view = await api('/api/exits');
+    $('#workspaceSync').textContent='实时同步';$('#workspaceLive').classList.remove('offline');
     $('#panel').textContent = view.panel
       ? (backendName() + ': ' + view.panel)
       : (view.panel_info || '');
@@ -741,7 +762,7 @@ async function poll(){
     renderExits();
     renderImported();
     renderOrphans();
-  }catch(e){}
+  }catch(e){$('#workspaceSync').textContent='同步暂不可用';$('#workspaceLive').classList.add('offline');}
   if(managementMovedURL) return;
   try{ renderJobs(await api('/api/jobs') || []); }catch(e){}
 }
@@ -749,8 +770,19 @@ async function poll(){
 // ---- 新建向导 ----
 let regions = [], region = '', regionsLoaded = false;
 
-function openModal(id){ $('#' + id).classList.add('open'); }
-function closeModal(id){ $('#' + id).classList.remove('open'); }
+const modalReturnFocus=new Map();
+function openModal(id){
+  const modal=$('#'+id);
+  if(!modal.classList.contains('open')) modalReturnFocus.set(id,document.activeElement);
+  modal.classList.add('open');
+  document.body.classList.add('modal-active');
+}
+function closeModal(id){
+  $('#'+id).classList.remove('open');
+  if(!document.querySelector('.modal.open'))document.body.classList.remove('modal-active');
+  const previous=modalReturnFocus.get(id);modalReturnFocus.delete(id);
+  if(previous && previous.isConnected && previous.focus) previous.focus();
+}
 
 document.addEventListener('click', e => {
   const c = e.target.closest('[data-close]');
@@ -758,10 +790,10 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if(e.key === 'Escape') document.querySelectorAll('.modal.open')
-    .forEach(m => m.classList.remove('open'));
+    .forEach(m => closeModal(m.id));
 });
 document.querySelectorAll('.modal').forEach(m => {
-  m.onclick = e => { if(e.target === m) m.classList.remove('open'); };
+  m.onclick = e => { if(e.target === m) closeModal(m.id); };
 });
 
 function renderRegions(){
@@ -773,7 +805,7 @@ function renderRegions(){
     '<button class="rg' + (region === '*' ? ' sel' : '')
       + '" data-rg="*"><b>每个国家</b><em>' + regions.length + ' 个国家各来几个</em></button>']
     .concat(list.map(r => '<button class="rg' + (region === r.code ? ' sel' : '')
-      + '" data-rg="' + esc(r.code) + '"><b>' + esc(r.name || r.code) + '</b>'
+      + '" data-rg="' + esc(r.code) + '"><b>' + countryHTML(r.code,r.name || r.code) + '</b>'
       + '<em>' + r.available + ' 个空闲 · ' + r.best_speed_mbps.toFixed(0) + ' Mbps</em></button>'))
     .join('');
   updateAvail();
@@ -1068,6 +1100,9 @@ document.addEventListener('click', async e => {
 $('#stopall').onclick = async e => {
   if(!confirm('停止全部 ' + view.exits.length + ' 个出口？')) return;
   e.target.disabled = true;
+  if(quickActive && quickResultJob){
+    try{ await api('/api/quick-setup/stop?id='+encodeURIComponent(quickResultJob.id),{method:'POST'}); }catch(err){toast(err.message,true);e.target.disabled=false;return;}
+  }
   for(const x of view.exits){
     try{ await api('/api/stop?slot=' + x.slot, {method:'POST'}); }catch(err){}
   }
@@ -1096,7 +1131,7 @@ async function openDetail(id){
 
 // 出口下拉：列出所有已连通的隧道，外加"直连"。绑定按 Xray 的 inboundTag 走。
 function exitOptions(currentHost){
-  const up = view.exits.filter(e => e.status === 'up');
+  const up = orderedExits().filter(e => e.status === 'up');
   return '<option value=""' + (currentHost ? '' : ' selected') + '>直连（不走隧道）</option>'
     + up.map(e => '<option value="' + esc(e.host) + '"'
         + (e.host === currentHost ? ' selected' : '') + '>'
@@ -1117,7 +1152,7 @@ function renderDetail(d){
       +   '<button class="icon" data-creset="' + esc(c.email) + '" title="换一套凭据，旧链接立即失效">' + ICON.redo + '</button>'
       +   '<button class="icon" data-cdel="' + esc(c.email) + '" title="删除这个客户端">' + ICON.trash + '</button>'
       + '</div>'
-      + (isNative() ? '<div class="orow"><span>此客户端落地</span><select class="client-landing" data-email="' + esc(c.email) + '">' + exitOptions((view.exits.find(e => e.host.replace(/[^A-Za-z0-9_-]/g,'-') === c.bound_to) || {}).host || '').replace('直连（不走隧道）','跟随入口默认落地') + '</select></div>' : '')
+      + (isNative() ? '<div class="orow"><span>此客户端落地</span>' + exitPicker((view.exits.find(e => e.host.replace(/[^A-Za-z0-9_-]/g,'-') === c.bound_to) || {}).host || '', 'class="client-landing" data-email="'+esc(c.email)+'"', '跟随入口默认落地') + '</div>' : '')
       + (link ? '<div class="share">' + esc(link) + '</div>' : '')
       + '</div>';
   }).join('');
@@ -1126,8 +1161,7 @@ function renderDetail(d){
   // xray-cf-lite 的节点归它自己管，这里只留出口选择，改端口/备注/客户端都不给
   const editable = !isXCL();
   $('#dbody').innerHTML = '<dl class="kv">'
-    + '<dt>出口</dt><dd><select id="dbind" data-tag="' + esc(d.tag) + '">'
-    +   exitOptions(owner ? owner.host : '') + '</select></dd>'
+    + '<dt>出口</dt><dd>'+exitPicker(owner ? owner.host : '', 'id="dbind" data-tag="'+esc(d.tag)+'"','直连（不走隧道）')+'</dd>'
     + '<dt>协议</dt><dd>' + esc(d.protocol) + '　' + esc(d.network || '')
     +   (d.tls && d.tls !== 'none' ? '　' + esc(d.tls) : '') + '</dd>'
     + '<dt>监听</dt><dd>' + esc(d.listen || '0.0.0.0') + '</dd>'
@@ -1152,7 +1186,7 @@ function renderDetail(d){
 document.addEventListener('change', async event => {
   const select = event.target.closest('.client-landing'); if(!select || !curDetail) return;
   select.disabled = true;
-  try { await api('/api/panel/client/bind?id=' + curDetail.id + '&email=' + encodeURIComponent(select.dataset.email) + '&host=' + encodeURIComponent(select.value), {method:'POST'}); toast('此凭据已绑定落地，共用原入口端口'); await openDetail(curDetail.id); } catch(error) { toast(error.message,true); } finally { select.disabled=false; }
+  try { await api('/api/panel/client/bind?id=' + curDetail.id + '&email=' + encodeURIComponent(select.dataset.email) + '&host=' + encodeURIComponent(select.value), {method:'POST'}); toast('此凭据已绑定落地，共用原入口端口'); await openDetail(curDetail.id); } catch(error) { restoreExitPicker(select);toast(error.message,true); } finally { select.disabled=false; }
 });
 
 // 未绑定区的出口下拉，选中即绑
@@ -1178,7 +1212,7 @@ document.addEventListener('change', async e => {
       + '&host=' + encodeURIComponent(sel.value), {method:'POST'});
     toast(sel.value ? '已绑定' : '已解绑');
     poll();
-  }catch(err){ toast(err.message, true); }
+  }catch(err){ restoreExitPicker(sel);toast(err.message, true); }
   sel.disabled = false;
 });
 
@@ -1308,8 +1342,8 @@ $('#crrand').onclick = () => {
   refreshCredURL();
 };
 
-$('#crcopy').onclick = () => { copy($('#crurl').textContent); };
-$('#crhttpcopy').onclick = () => copy($('#crhttpurl').textContent);
+$('#crcopy').onclick = () => { if(curCred) openProxyGuide(curCred.slot,'socks5'); };
+$('#crhttpcopy').onclick = () => { if(curCred) openProxyGuide(curCred.slot,'http'); };
 
 $('#crsave').onclick = async e => {
   if(!curCred) return;
@@ -1332,13 +1366,11 @@ $('#crsave').onclick = async e => {
 
 // ---- 导出 ----
 $('#exportAll').onclick = async () => {
-  const ids = view.exits.flatMap(x => (x.inbounds || []).map(i => i.id));
-  if(!ids.length){ toast('还没有节点可导出', true); return; }
   $('#exbox').value = '读取中…';
   $('#excount').textContent = '';
   openModal('export');
   try{
-    const d = await api('/api/xui/links?ids=' + ids.join(','));
+    const d = await api('/api/sub/links');
     $('#exbox').value = (d.links || []).join('\n');
     $('#excount').textContent = (d.links || []).length + ' 条';
   }catch(err){ $('#exbox').value = '导出失败: ' + err.message; }
@@ -1545,6 +1577,8 @@ if($('#setIPKey').value.trim()) body.ip_info_key = $('#setIPKey').value.trim();
   e.target.disabled = false;
 };
 
+` + quickSetupJS + `
+
 let domainData = {certificates:[], registered:[]}, domainPending = null, managementMovedURL='';
 function managementMoved(url){
   let address;try{address=new URL(url,location.href);}catch(e){return;}
@@ -1666,23 +1700,62 @@ function exitLocation(exit){
   return 'IP位置待查';
 }
 let ipLookupSequence=0;
-function boolLabel(value){return value === true ? '是' : value === false ? '否' : '来源未提供';}
+function boolLabel(value){return value === true ? '是' : value === false ? '否' : '未提供';}
+function knownIPValue(value){return value!==undefined && value!==null && !['','未知','unknown','n/a','-'].includes(String(value).trim().toLowerCase());}
+function ipToolbar(ip){
+  return '<div class="ip-result-toolbar"><a class="ip-details-link" href="https://ping0.cc/'+(ip?'ip/'+encodeURIComponent(ip):'')+'" target="_blank" rel="noopener noreferrer">在 Ping0 检测'+(ip?'此 IP':'')+' <span aria-hidden="true">↗</span></a>'+(ip?'<button data-copy-ip="'+esc(ip)+'">'+ICON.copy+'复制 IP</button>':'')+'</div>';
+}
+function renderIPState(ip,message,bad=false){
+  $('#ipDetails').innerHTML=ipToolbar(ip)+'<div class="ip-state'+(bad?' bad':'')+'" role="status"><h3>'+esc(bad?'查询暂未完成':'正在查询 '+ip)+'</h3><p>'+esc(message)+'</p></div>';
+}
+function ipCheckedTime(value){
+  if(!value || String(value).startsWith('0001-'))return '';
+  const date=new Date(value);
+  return Number.isFinite(date.getTime())?date.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+}
 function renderIPInfo(info){
-  const items=[['IP',info.ip],['IP位置',info.location || [info.country,info.city].filter(Boolean).join(' / ')],['ASN',info.asn ? 'AS'+info.asn : '未知'],['ASN归属',info.organization],['ASN类型',info.asn_type],['IP归属类型',info.company_type],['分类依据',info.type_reason],['分类置信程度',({high:'高',medium:'中（规则推断）',low:'低（待复核）'})[info.type_confidence]],['类型来源',info.type_source || info.source],['运营商 ISP',info.isp],['IP归属商',info.company],['网络',info.network],['地址类型',info.family],['IP属性',info.attribute],['机房',boolLabel(info.hosting)],['移动网络',boolLabel(info.mobile)],['代理标记',boolLabel(info.proxy)],['VPN标记',boolLabel(info.vpn)],['Tor标记',boolLabel(info.tor)],['定位来源',info.geo_source || info.source],['ASN来源',info.asn_source || info.source],['属性来源',info.source],['属性查询时间',info.checked && !info.checked.startsWith('0001-') ? new Date(info.checked).toLocaleString() : '查询中'],['定位查询时间',info.geo_checked && !info.geo_checked.startsWith('0001-') ? new Date(info.geo_checked).toLocaleString() : '']];
-  $('#ipDetails').innerHTML='<dl class="kv">'+items.map(item=>'<dt>'+esc(item[0])+'</dt><dd>'+esc(item[1] || '未知')+'</dd>').join('')+'</dl>'+(info.error ? '<p class="hint">'+esc(info.error)+'</p>' : '')+(info.ip ? '<a class="ip-details-link" href="https://ping0.cc/ip/'+encodeURIComponent(info.ip)+'" target="_blank" rel="noopener noreferrer">在Ping0检测这个IP ↗</a>' : '');
+  const ip=String(info.ip || $('#ipAddress').value.trim()),type=['residential','datacenter','mobile'].includes(info.ip_type)?info.ip_type:'unknown';
+  const typeLabel=IP_TYPE_LABEL[type] || '类型待确认',owner=info.organization || info.isp || info.company || '归属信息暂未提供';
+  const confidence=({high:'高置信',medium:'中置信 · 规则推断',low:'低置信 · 待复核'})[info.type_confidence] || '';
+  const facts=[['地理位置',info.location || [info.country,info.city].filter(knownIPValue).join(' / ') || '暂未获得定位信息','wide'],['ASN',info.asn?'AS'+info.asn+(knownIPValue(info.asn_type)?' · '+info.asn_type:''):'暂未提供','asn-value'],['归属运营商',owner,'']];
+  if(knownIPValue(info.isp) && info.isp!==owner)facts.push(['运营商 ISP',info.isp,'']);
+  if(knownIPValue(info.company) && info.company!==owner && info.company!==info.isp)facts.push(['IP 归属商',info.company+(knownIPValue(info.company_type)?' · '+info.company_type:''),'']);
+  if(knownIPValue(info.network))facts.push(['网络范围',info.network,'wide']);
+  const flags=[['机房',info.hosting],['移动',info.mobile],['代理',info.proxy],['VPN',info.vpn],['Tor',info.tor]];
+  const sourceGroups=[['定位',info.geo_source || info.source],['ASN',info.asn_source || info.source],['属性',info.type_source || info.source]];
+  const sourceMap=new Map();sourceGroups.forEach(([name,source])=>{if(knownIPValue(source))sourceMap.set(source,[...(sourceMap.get(source) || []),name]);});
+  const sources=Array.from(sourceMap,([source,names])=>names.join(' / ')+'：'+source).join(' · ');
+  const times=[['属性',ipCheckedTime(info.checked)],['定位',ipCheckedTime(info.geo_checked)]].filter(([,value])=>value).map(([name,value])=>name+' '+value).join(' · ');
+  const attributes=[info.family,knownIPValue(info.attribute) && info.attribute!==typeLabel?info.attribute:''].filter(knownIPValue).join(' · ');
+  $('#ipDetails').innerHTML=ipToolbar(ip)
+    +'<div class="ip-overview"><div><h3>'+esc(ip)+'</h3>'+(attributes?'<p>'+esc(attributes)+'</p>':'')+'</div><span class="network-type '+type+'">'+esc(typeLabel)+'</span></div>'
+    +'<dl class="ip-facts">'+facts.map(([label,value,style])=>'<div class="ip-fact'+(style==='wide'?' wide':'')+'"><dt>'+esc(label)+'</dt><dd'+(style==='asn-value'?' class="asn-value"':'')+'>'+esc(value)+'</dd></div>').join('')+'</dl>'
+    +'<div class="ip-signals" aria-label="网络标记">'+flags.map(([label,value])=>'<span class="ip-signal'+(value===true?' flagged':value===false?'':' unspecified')+'">'+esc(label)+'<b>'+boolLabel(value)+'</b></span>').join('')+'</div>'
+    +(knownIPValue(info.type_reason)?'<p class="ip-classification"><strong>分类依据'+(confidence?'（'+esc(confidence)+'）':'')+'：</strong>'+esc(info.type_reason)+'</p>':'')
+    +'<div class="ip-provenance"><p>'+esc(sources || '数据来源暂未提供')+'</p>'+(times?'<p>更新于 '+esc(times)+'</p>':'')+'<p>“未提供”表示来源缺少该标记，不代表检测为否。</p></div>'
+    +(info.error?'<p class="ip-error" role="status">'+esc(info.error)+'</p>':'');
 }
 async function lookupIP(){
   const sequence=++ipLookupSequence,ip=$('#ipAddress').value.trim();if(!ip)return;
-  $('#ipDetails').textContent='查询中…';
-  for(let i=0;i<25;i++){
-    try{const result=await api('/api/ipinfo?ip='+encodeURIComponent(ip));if(sequence!==ipLookupSequence)return;if(!result.pending){renderIPInfo(result);return;}}
-    catch(err){if(sequence===ipLookupSequence)$('#ipDetails').textContent=err.message;return;}
-    await new Promise(resolve=>setTimeout(resolve,2000));
-  }
-  $('#ipDetails').textContent='查询任务仍在排队，可以稍后再查看。';
+  renderIPState(ip,'正在读取位置与网络属性，可先在 Ping0 中查看。');
+  $('#ipDetails').setAttribute('aria-busy','true');
+  try{
+    for(let i=0;i<25;i++){
+      try{const result=await api('/api/ipinfo?ip='+encodeURIComponent(ip));if(sequence!==ipLookupSequence)return;if(!result.pending){renderIPInfo(result);return;}}
+      catch(err){if(sequence===ipLookupSequence)renderIPState(ip,err.message,true);return;}
+      await new Promise(resolve=>setTimeout(resolve,2000));
+      if(sequence!==ipLookupSequence)return;
+    }
+    renderIPState(ip,'查询仍在排队。可重新查询，或通过上方 Ping0 入口查看。',true);
+  }finally{if(sequence===ipLookupSequence)$('#ipDetails').removeAttribute('aria-busy');}
 }
-$('#ipBtn').onclick=()=>openModal('ipbox');$('#ipLookup').onclick=lookupIP;
-document.addEventListener('click',event=>{const button=event.target.closest('[data-ip]');if(button){$('#ipAddress').value=button.dataset.ip;openModal('ipbox');lookupIP();}});
+$('#ipBtn').onclick=()=>{openModal('ipbox');$('#ipAddress').focus();};
+$('#ipSearch').onsubmit=event=>{event.preventDefault();lookupIP();};
+document.addEventListener('click',event=>{
+  const button=event.target.closest('[data-ip]');
+  if(button){$('#ipAddress').value=button.dataset.ip;openModal('ipbox');$('#ipAddress').focus();lookupIP();}
+  const copyIP=event.target.closest('[data-copy-ip]');if(copyIP)copy(copyIP.dataset.copyIp);
+});
 
 poll();
 measureBrowserPing();

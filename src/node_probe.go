@@ -122,3 +122,35 @@ func tcpEndpointLatency(ctx context.Context, ep gateEndpoint) (float64, error) {
 	}
 	return ms, nil
 }
+
+// Reject a dead TCP endpoint before creating a namespace and starting
+// OpenVPN. A UDP/unknown endpoint remains eligible for a real handshake.
+func (m *Manager) quickEndpointPreflight(parent context.Context, node Node) error {
+	var endpoints []gateEndpoint
+	for _, ep := range nodeProbeEndpoints(node) {
+		if !strings.HasPrefix(ep.Proto, "tcp") {
+			return nil
+		}
+		endpoints = append(endpoints, ep)
+	}
+	if len(endpoints) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(parent, 1800*time.Millisecond)
+	defer cancel()
+	if m.probeSlots != nil {
+		select {
+		case m.probeSlots <- struct{}{}:
+			defer func() { <-m.probeSlots }()
+		case <-ctx.Done():
+			// Contention is not evidence that the endpoint is down.
+			return parent.Err()
+		}
+	}
+	for _, ep := range endpoints {
+		if _, err := tcpEndpointLatency(ctx, ep); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("候选 TCP 端点暂不可达，立即尝试下一个")
+}

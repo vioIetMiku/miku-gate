@@ -1,5 +1,10 @@
 # 更新记录
 
+## 未发布：短入口
+
+- 新增根目录 `mikugate.sh`，可使用 `bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)` 启动当前 Latest 正式安装器。
+- 不创建新版本或 Release；正式安装器继续负责 Release 选择、SHA256、BUILD 清单、权限和路径校验。
+
 ## v0.2.3 — 2026-10-15
 
 基于用户提供的 `0.2.0-dev.41`，包含 dev37—dev41 的功能更新，继续使用 Miku Gate 名称。

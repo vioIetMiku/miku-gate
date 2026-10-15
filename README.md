@@ -86,15 +86,21 @@ sudo bash miku --quick --domain node.example.com
 
 `--domain` 是**节点域名**，需要解析到 VPS；`--no-domain` 使用 REALITY。自动申请证书需要公网 TCP 80，失败不会用自签证书冒充成功。已有安装请先 `miku backup`。`--reinstall` 会清除本服务数据，除非明确需要，请不要使用。
 
-### 公开仓库的一行安装
+### 一行安装：`mikugate.sh`
 
-在 VPS 的 **root Bash 终端**运行。脚本读取最新正式 Release，拒绝草稿和预发布版本，校验下载包 SHA256、内部清单、权限与文件路径后安装：
+在 VPS 的 **root Bash 终端**运行：
 
 ```bash
-bash -c 'set -e; d=$(mktemp -d); trap '\''rm -rf -- "$d"'\'' EXIT; curl --proto "=https" --tlsv1.2 -fsSL https://github.com/vioIetMiku/miku-gate/releases/latest/download/install-online.sh -o "$d/install-online.sh"; bash "$d/install-online.sh"'
+bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)
 ```
 
-脚本是仓库中的 [install-online.sh](install-online.sh)，也作为 Release 附件提供。执行前可先下载审阅。不要把安装脚本交给来源不明的镜像站，也不要用关闭 TLS 校验的方式解决下载错误。
+短入口下载当前 Latest 正式版的 `install-online.sh`，再由正式安装器选择稳定 Release，校验安装包 SHA256、内部清单、权限和文件路径。命令长期不变，也可传入原安装器参数：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh) --quick --no-domain --background
+```
+
+可先打开 [mikugate.sh](mikugate.sh) 审阅内容；下载失败不会继续执行内部安装器。原 [install-online.sh](install-online.sh) 及正式 Release 附件保留。不要使用来源不明的镜像站或关闭 TLS 校验。
 
 ### 私有仓库安装（仅在仓库改为私有时）
 

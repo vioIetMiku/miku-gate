@@ -144,11 +144,13 @@ func main() {
 	mux.HandleFunc("/api/tunnels", apiTunnels(mgr))
 	mux.HandleFunc("/api/start", apiStart(mgr))
 	mux.HandleFunc("/api/stop", apiStop(mgr))
+	mux.HandleFunc("/api/stop-all", apiStopAll(mgr))
 	mux.HandleFunc("/api/swap", apiSwap(mgr))
 	mux.HandleFunc("/api/cred", apiCred(mgr))
 	mux.HandleFunc("/api/refresh", apiRefresh(mgr))
 	mux.HandleFunc("/api/regions", apiRegions(mgr))
 	mux.HandleFunc("/api/provision", apiProvision(mgr))
+	mux.HandleFunc("/api/provision/stop", apiProvisionStop(mgr))
 	mux.HandleFunc("/api/jobs", apiJobs(mgr))
 	mux.HandleFunc("/api/jobs/dismiss", apiJobDismiss(mgr))
 	mux.HandleFunc("/api/exits", apiExits(mgr))
@@ -284,6 +286,18 @@ func apiStop(m *Manager) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "已停止"})
+	}
+}
+
+func apiStopAll(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			writeJSON(w, 405, map[string]string{"error": "请使用 POST 停止全部出口。"})
+			return
+		}
+		m.StopAll()
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "已停止全部出口和后台补齐。"})
 	}
 }
 
@@ -573,8 +587,8 @@ func apiXUIStatus(w http.ResponseWriter, r *http.Request) {
 func apiPanelMode(workDir string, managers ...*Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			if len(managers) > 0 && managers[0].quickSetupRunning() {
-				writeJSON(w, 409, map[string]string{"error": "一键配置还在准备中，请稍后再切换核心。"})
+			if len(managers) > 0 && (managers[0].quickSetupRunning() || managers[0].provisionRunning()) {
+				writeJSON(w, 409, map[string]string{"error": "出口还在准备中，请先停止补齐再切换核心。"})
 				return
 			}
 			var in struct {

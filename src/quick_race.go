@@ -75,17 +75,21 @@ func (m *Manager) quickRaceLimits(targets []quickTarget) map[string]int {
 	room := capacity - len(m.tunnels) - len(targets)
 	m.mu.RUnlock()
 	counts, limits := map[string]int{}, map[string]int{}
+	var codes []string
 	for _, target := range targets {
+		if counts[target.code] == 0 {
+			codes = append(codes, target.code)
+		}
 		counts[target.code]++
 		limits[target.code]++
 	}
 	for room > 0 {
 		added := false
-		for _, region := range quickRegions {
-			if room == 0 || limits[region.Code] >= counts[region.Code]*quickRaceMultiplier {
+		for _, code := range codes {
+			if room == 0 || limits[code] >= counts[code]*quickRaceMultiplier {
 				continue
 			}
-			limits[region.Code]++
+			limits[code]++
 			room--
 			added = true
 		}
@@ -104,6 +108,8 @@ type quickRaceOps struct {
 	refresh    func(context.Context) error
 	timeout    time.Duration // Per candidate, not a deadline for the whole job.
 	retryDelay time.Duration
+	firstOrder uint64
+	promoted   func(*Tunnel)
 }
 
 type quickAttempt struct {
@@ -139,6 +145,13 @@ func (m *Manager) promoteQuickCandidate(t *Tunnel) bool {
 // retry until their quotas are ready or the user cancels. A completed country
 // starts no more candidates. Cleanup never releases a slot before its worker.
 func (m *Manager) runQuickRace(job *Job, targets []quickTarget, templateID int, ops quickRaceOps) <-chan struct{} {
+	ops.promoted = func(*Tunnel) { m.updateQuickResult(job, templateID) }
+	return m.runExitRace(job, targets, templateID, ops)
+}
+
+// Both creation paths share candidate limits, early publication and cleanup.
+// Country quotas come from the request, not the quick-setup country list.
+func (m *Manager) runExitRace(job *Job, targets []quickTarget, templateID int, ops quickRaceOps) <-chan struct{} {
 	if ops.ctx == nil {
 		ops.ctx = context.Background()
 	}
@@ -168,10 +181,12 @@ func (m *Manager) runQuickRace(job *Job, targets []quickTarget, templateID int, 
 		ops.retryDelay = reconnectBackoffMin
 	}
 	regions := map[string]*quickRegionRace{}
-	for _, region := range quickRegions {
-		regions[region.Code] = &quickRegionRace{name: region.Name, triedHosts: map[string]bool{}, triedIPs: map[string]bool{}}
-	}
+	var codes []string
 	for _, target := range targets {
+		if regions[target.code] == nil {
+			codes = append(codes, target.code)
+			regions[target.code] = &quickRegionRace{name: countryLabel(target.code, ""), triedHosts: map[string]bool{}, triedIPs: map[string]bool{}}
+		}
 		regions[target.code].steps = append(regions[target.code].steps, target.step)
 	}
 	limits := m.quickRaceLimits(targets)
@@ -179,7 +194,10 @@ func (m *Manager) runQuickRace(job *Job, targets []quickTarget, templateID int, 
 	for _, limit := range limits {
 		window += limit
 	}
-	firstOrder := m.reserveOrders(quickSummaryStep - quickExitStep)
+	firstOrder := ops.firstOrder
+	if firstOrder == 0 {
+		firstOrder = m.reserveOrders(len(targets))
+	}
 	arrivalOrder := 0
 	arrivals := make(chan quickArrival, window)
 	released := make(chan struct{}, 1)
@@ -232,8 +250,8 @@ func (m *Manager) runQuickRace(job *Job, targets []quickTarget, templateID int, 
 		}
 		for ctx.Err() == nil {
 			added := false
-			for _, region := range quickRegions {
-				code, plan := region.Code, regions[region.Code]
+			for _, code := range codes {
+				plan := regions[code]
 				if ctx.Err() != nil || plan.kept == len(plan.steps) || plan.active+plan.kept >= limits[code] || len(queues[code]) == 0 {
 					continue
 				}
@@ -283,14 +301,14 @@ func (m *Manager) runQuickRace(job *Job, targets []quickTarget, templateID int, 
 			}
 		}
 		exhausted := map[string]bool{}
-		for _, region := range quickRegions {
-			plan := regions[region.Code]
+		for _, code := range codes {
+			plan := regions[code]
 			if plan.kept == len(plan.steps) {
 				continue
 			}
-			detail := fmt.Sprintf("%s本次已补齐 %d / %d 个，已尝试 %d 个候选；后台继续连接…", plan.name, plan.kept, len(plan.steps), plan.attempted)
-			if plan.active == 0 && len(queues[region.Code]) == 0 {
-				exhausted[region.Code] = true
+			detail := fmt.Sprintf("%s本次已补齐 %d / %d 个，正在连接 %d 个候选，累计尝试 %d 个；后台继续连接…", plan.name, plan.kept, len(plan.steps), plan.active, plan.attempted)
+			if plan.active == 0 && len(queues[code]) == 0 {
+				exhausted[code] = true
 				detail = fmt.Sprintf("%s候选暂时不足，已尝试 %d 个；等待刷新来源后继续补齐，已连通节点可继续使用。", plan.name, plan.attempted)
 			}
 			if plan.lastError != "" {
@@ -342,7 +360,9 @@ func (m *Manager) runQuickRace(job *Job, targets []quickTarget, templateID int, 
 			plan.kept++
 			arrivalOrder++
 			job.Set(step, "ok", a.tunnel.ExitIP)
-			m.updateQuickResult(job, templateID)
+			if ops.promoted != nil {
+				ops.promoted(a.tunnel)
+			}
 			invalidateInbounds()
 			_ = m.saveState()
 			backoff = ops.retryDelay

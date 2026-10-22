@@ -1,5 +1,7 @@
 # Miku Gate
 
+**当前正式版：`v0.2.4`**，基于本地改进版 dev41 / v0.2.4。普通新建也按目标数量竞发，增加连接恢复宽限与保活策略。
+
 ## VPN Gate 是什么？
 
 [VPN Gate](https://www.vpngate.net/) 是日本筑波大学开展的学术实验项目，汇集世界各地志愿者提供的公共 VPN 中继。你可以从它的[服务器列表](https://www.vpngate.net/en/)获取公开连接配置；Miku Gate 使用其中的 **OpenVPN** 节点，为自己的 Linux VPS 配置和管理多个出口。
@@ -28,11 +30,11 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
   <a href="CHANGELOG.md">更新记录</a>
 </p>
 
-**当前正式版：`v0.2.3`**，基于 `dev41`。支持 Linux **amd64 / arm64**，管理界面支持白天 / 夜间主题、移动端布局和展示 / 管理模式，新增终端一键配置。安装包已经编译，**VPS 不需要 Go**。
+**当前正式版：`v0.2.4`**，基于 `dev41`。支持 Linux **amd64 / arm64**，管理界面支持白天 / 夜间主题、移动端布局和展示 / 管理模式，新增终端一键配置。安装包已经编译，**VPS 不需要 Go**。
 
-> 升级提醒：`v0.2.3` 使用基于 fanout 的单页架构。旧版任务、远程 Agent、多账号和高级记录不会完整迁移；安装器仅迁移已识别旧安装的可用入口、普通 OpenVPN 出口及相关凭据，升级前请备份。不要将“正式 Release”理解为对所有 VPS、面板与 VPN Gate 节点均已完成实机验证。
+> 升级提醒：`v0.2.4` 使用基于 fanout 的单页架构。旧版任务、远程 Agent、多账号和高级记录不会完整迁移；安装器仅迁移已识别旧安装的可用入口、普通 OpenVPN 出口及相关凭据，升级前请备份。不要将“正式 Release”理解为对所有 VPS、面板与 VPN Gate 节点均已完成实机验证。
 
-## v0.2.3 更新重点
+## v0.2.4 更新重点
 
 - 新增自解压安装文件 **`miku`**，上传 VPS 后运行 `sudo bash miku`；包含两种架构，无需先安装 Go。原在线安装脚本继续保留。
 - 终端 `miku quick` 和网页一键配置共用后台任务，目标为日本 **5**、韩国 **3**、美国 **3** 个就绪出口；默认计划最多同时竞争 **33** 个候选，遵守实际槽位上限，失败自动轮换、刷新来源并补齐。
@@ -57,6 +59,14 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
 | 一键配置与 CLI | `miku quick` 后台持续补齐日本 5 / 韩国 3 / 美国 3；`miku sub` 输出五种订阅与明文节点 |
 | 日常运维 | 随机管理路径、登录口令、域名 / 证书管理、备份、更新、修复与旧版回滚 |
 
+## 一行安装：`mikugate.sh`
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)
+```
+
+短入口下载当前 Latest 正式版安装器；正式安装器继续负责 Release 选择、SHA256、BUILD 清单、权限和路径校验。也可传入 `--quick`、`--panel`、`--domain`、`--no-domain` 和 `--background` 参数。
+
 ## VPS 一键安装
 
 ### 安装要求
@@ -68,7 +78,7 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
 
 ### 独立文件安装（推荐）
 
-从 [正式 Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.3) 下载 **`miku`** 和 `SHA256SUMS`，上传到 VPS 同一目录：
+从 [正式 Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.4) 下载 **`miku`** 和 `SHA256SUMS`，上传到 VPS 同一目录：
 
 ```bash
 grep '  miku$' SHA256SUMS | sha256sum -c -
@@ -86,21 +96,15 @@ sudo bash miku --quick --domain node.example.com
 
 `--domain` 是**节点域名**，需要解析到 VPS；`--no-domain` 使用 REALITY。自动申请证书需要公网 TCP 80，失败不会用自签证书冒充成功。已有安装请先 `miku backup`。`--reinstall` 会清除本服务数据，除非明确需要，请不要使用。
 
-### 一行安装：`mikugate.sh`
+### 公开仓库的一行安装
 
-在 VPS 的 **root Bash 终端**运行：
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)
-```
-
-短入口下载当前 Latest 正式版的 `install-online.sh`，再由正式安装器选择稳定 Release，校验安装包 SHA256、内部清单、权限和文件路径。命令长期不变，也可传入原安装器参数：
+在 VPS 的 **root Bash 终端**运行。脚本读取最新正式 Release，拒绝草稿和预发布版本，校验下载包 SHA256、内部清单、权限与文件路径后安装：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh) --quick --no-domain --background
+bash -c 'set -e; d=$(mktemp -d); trap '\''rm -rf -- "$d"'\'' EXIT; curl --proto "=https" --tlsv1.2 -fsSL https://github.com/vioIetMiku/miku-gate/releases/latest/download/install-online.sh -o "$d/install-online.sh"; bash "$d/install-online.sh"'
 ```
 
-可先打开 [mikugate.sh](mikugate.sh) 审阅内容；下载失败不会继续执行内部安装器。原 [install-online.sh](install-online.sh) 及正式 Release 附件保留。不要使用来源不明的镜像站或关闭 TLS 校验。
+脚本是仓库中的 [install-online.sh](install-online.sh)，也作为 Release 附件提供。执行前可先下载审阅。不要把安装脚本交给来源不明的镜像站，也不要用关闭 TLS 校验的方式解决下载错误。
 
 ### 私有仓库安装（仅在仓库改为私有时）
 
@@ -116,31 +120,31 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mi
   curl --proto '=https' --tlsv1.2 -fsSL \
     -H "Authorization: Bearer $GITHUB_TOKEN" \
     -H 'Accept: application/vnd.github.raw+json' \
-    'https://api.github.com/repos/vioIetMiku/miku-gate/contents/install-online.sh?ref=v0.2.3' \
+    'https://api.github.com/repos/vioIetMiku/miku-gate/contents/install-online.sh?ref=v0.2.4' \
     -o "$d/install-online.sh"
   bash "$d/install-online.sh"
 )
 ```
 
-访问令牌仅用于读取当前仓库的 Release。自定义管理端口时，在执行脚本前设置 `export WEB_PORT=9900`；锁定版本使用 `export MIKU_VERSION=v0.2.3`。已经下载脚本时，也可先运行 `bash install-online.sh --download-only /root/miku-packages`，只下载并校验，不安装服务。
+访问令牌仅用于读取当前仓库的 Release。自定义管理端口时，在执行脚本前设置 `export WEB_PORT=9900`；锁定版本使用 `export MIKU_VERSION=v0.2.4`。已经下载脚本时，也可先运行 `bash install-online.sh --download-only /root/miku-packages`，只下载并校验，不安装服务。
 
 ### 手动安装 / 离线传包
 
-在 [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.3) 下载以下文件。私有仓库需要先登录 GitHub：
+在 [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.4) 下载以下文件。私有仓库需要先登录 GitHub：
 
 | 文件 | 用途 |
 | --- | --- |
 | `miku` | 自解压安装文件，含双架构程序；`sudo bash miku` 即可安装，`bash miku --verify` 只校验 |
-| `miku-gate-vps-v0.2.3.tar.gz` | VPS 通用安装包，包含两种架构的主程序、旧版导出程序与维护工具 |
-| `miku-gate-v0.2.3.zip` | 完整源码 + 两种架构安装二进制；不是 GitHub 自动生成的纯源码压缩包 |
+| `miku-gate-vps-v0.2.4.tar.gz` | VPS 通用安装包，包含两种架构的主程序、旧版导出程序与维护工具 |
+| `miku-gate-v0.2.4.zip` | 完整源码 + 两种架构安装二进制；不是 GitHub 自动生成的纯源码压缩包 |
 | `install-online.sh` | 最新正式版在线安装入口 |
 | `SHA256SUMS` | 上述四个附件的 SHA256 校验清单 |
 
 将 VPS 包和校验文件放到同一目录后运行：
 
 ```bash
-grep '  miku-gate-vps-v0.2.3.tar.gz$' SHA256SUMS | sha256sum -c -
-sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.3.tar.gz
+grep '  miku-gate-vps-v0.2.4.tar.gz$' SHA256SUMS | sha256sum -c -
+sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.4.tar.gz
 sudo bash miku-gate/install.sh
 ```
 
@@ -205,7 +209,7 @@ miku stop
 miku restart
 miku logs
 miku backup          # 停机一致性备份；完成后恢复原运行状态
-miku update /root/miku-gate-vps-v0.2.3.tar.gz
+miku update /root/miku-gate-vps-v0.2.4.tar.gz
 miku rollback        # 仅用于已登记的旧架构迁移，恢复切换前配套快照
 miku uninstall       # 停止并取消自启，保留程序、数据与备份
 # 以下为破坏性操作，先将备份复制到 /var/lib/miku 之外：
@@ -245,7 +249,7 @@ sudo /tmp/miku-gate-tests -test.count=1 -test.timeout=5m
 go vet ./...
 (cd compat/miku-export && go test ./... && go vet ./...)
 (cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap test_quick)
-python3 scripts/build-release.py --version 0.2.0 --label v0.2.3 --output dist
+python3 scripts/build-release.py --version 0.2.0 --label v0.2.4 --output dist
 ```
 
 构建脚本从源码重新编译两种架构的主程序和兼容导出程序，生成 VPS 包、完整 ZIP、在线安装脚本、`BUILD.json`、自解压 `miku` 与 `SHA256SUMS`。Git 标签 `vX.Y.Z` 触发自动检查、构建及正式发布；检查失败不会发布正式 Release。

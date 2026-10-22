@@ -284,6 +284,19 @@ type xrayProc struct {
 	dir  string
 	cmd  *exec.Cmd
 	logf *os.File
+	done <-chan struct{} // closed by Wait; never read ProcessState concurrently
+}
+
+func (p *xrayProc) running() bool {
+	if p.cmd == nil || p.cmd.Process == nil || p.done == nil {
+		return false
+	}
+	select {
+	case <-p.done:
+		return false
+	default:
+		return true
+	}
 }
 
 // restart 用当前配置重启 xray。配置已在调用前写好并校验过。
@@ -308,7 +321,13 @@ func (p *xrayProc) restart(cfgPath string) error {
 	}
 	p.cmd, p.logf = cmd, f
 	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
+	done := make(chan struct{})
+	p.done = done
+	go func() {
+		err := cmd.Wait()
+		close(done)
+		exited <- err
+	}()
 	p.writePID(cmd.Process.Pid)
 
 	// 起得来但立刻退出的情况要能被发现，否则界面会显示成功而实际不通

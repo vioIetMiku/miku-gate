@@ -295,6 +295,7 @@ button,input,select,textarea{border-radius:8px}button{padding:7px 12px}h2,.bar h
           </button>
         </div>
         <div class="hint" id="availhint"></div>
+		<div class="hint">按数量的 3 倍并行尝试同地区候选，候选不足时只连接实际可用数量。先连通并验证的出口立即显示，凑齐后断开多余候选；可在任务中停止补齐。</div>
       </label>
       <details style="margin-top:12px"><summary>添加 VPN Gate 来源链接</summary><label class="f"><span>OpenVPN 节点清单（CSV）</span><input type="text" id="sourceQuickURL" placeholder="粘贴公网 CSV 链接"></label><button id="sourceQuickAdd">确认加入</button><div class="hint" id="sourceQuickHint"></div></details>
       <label class="f" id="tplwrap">
@@ -728,6 +729,7 @@ document.addEventListener('toggle',event=>{
 function renderJobs(jobs){
   syncDomainJob(jobs);
   syncQuickSetup(jobs);
+	$('#stopall').disabled = !(view.exits || []).length && !jobs.some(j => j.status === 'running' && (j.kind === 'provision' || j.kind === 'quick-setup'));
   const box = $('#jobs');
   box.innerHTML = jobs.map(j => {
     const steps = j.steps.map(s => {
@@ -737,7 +739,7 @@ function renderJobs(jobs){
         + '<span>'+esc(s.status === 'ok' && s.detail ? s.detail : s.label)
         + (s.status === 'failed' && s.detail ? '<small class="step-detail">'+esc(s.detail)+'</small>' : '')+'</span></span>';
     }).join('');
-    const close = j.status === 'running' ? ''
+    const close = j.status === 'running' ? (j.kind === 'provision' ? '<button data-provision-stop="' + esc(j.id) + '">停止补齐</button>' : '')
       : '<button class="icon" data-job="' + esc(j.id) + '" title="关闭">' + ICON.x + '</button>';
     const finished=j.status!=='running',tag=finished?'details':'div',head=finished?'summary':'div';
     return '<'+tag+' class="job'+(finished?' job-history':'')+'"'+(finished?' data-job-history="'+esc(j.id)+'"'+(expandedJobs.has(j.id)?' open':''):'')+'><'+head+' class="top"><strong>' + esc(j.summary) + '</strong>'
@@ -1072,6 +1074,14 @@ document.addEventListener('click', async e => {
     poll();
     return;
   }
+  const provisionStop = e.target.closest('[data-provision-stop]');
+  if(provisionStop){
+    provisionStop.disabled = true;
+    try{ await api('/api/provision/stop?id=' + encodeURIComponent(provisionStop.dataset.provisionStop), {method:'POST'}); toast('正在停止补齐，已保留连通节点'); }
+    catch(err){ toast(err.message, true); }
+    poll();
+    return;
+  }
   const del = e.target.closest('[data-delorphans]');
   if(del){
     const list = view.direct || [];
@@ -1098,14 +1108,10 @@ document.addEventListener('click', async e => {
 });
 
 $('#stopall').onclick = async e => {
-  if(!confirm('停止全部 ' + view.exits.length + ' 个出口？')) return;
+  if(!confirm('停止全部 ' + view.exits.length + ' 个出口，并停止后台补齐？')) return;
   e.target.disabled = true;
-  if(quickActive && quickResultJob){
-    try{ await api('/api/quick-setup/stop?id='+encodeURIComponent(quickResultJob.id),{method:'POST'}); }catch(err){toast(err.message,true);e.target.disabled=false;return;}
-  }
-  for(const x of view.exits){
-    try{ await api('/api/stop?slot=' + x.slot, {method:'POST'}); }catch(err){}
-  }
+  try{ await api('/api/stop-all', {method:'POST'}); }
+  catch(err){ toast(err.message, true); }
   poll();
 };
 

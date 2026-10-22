@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 func sameNodeEndpoint(a, b Node) bool {
@@ -44,6 +45,7 @@ func (m *Manager) acceptExitIP(t *Tunnel) bool {
 		}
 	}
 	t.Status = "up"
+	t.readyAt = time.Now()
 	return true
 }
 

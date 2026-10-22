@@ -135,6 +135,12 @@ func (m *Manager) preflightCandidates(t *Tunnel, nodes []Node) []Node {
 		if af != bf {
 			return !af
 		}
+		// A working original node keeps the exit IP and client sessions stable.
+		// Only a conclusive endpoint failure lets an alternative lead it.
+		ac, bc := a.node.HostName == t.Node.HostName, b.node.HostName == t.Node.HostName
+		if ac != bc {
+			return ac
+		}
 		if a.rank != b.rank {
 			return a.rank < b.rank
 		}

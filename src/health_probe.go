@@ -16,13 +16,15 @@ type healthTask struct {
 	Node      Node
 	ExitIP    string
 	Namespace string
+	ReadyAt   time.Time
 }
 type healthResult struct {
-	Task    healthTask
-	Healthy bool
-	MS      float64
-	Target  string
-	Geo     *IPInfo
+	Task             healthTask
+	Healthy          bool
+	MS               float64
+	Target           string
+	Geo              *IPInfo
+	IdentityMismatch bool
 }
 
 func parseTunnelTiming(raw []byte) (string, float64, error) {
@@ -66,7 +68,7 @@ func probeTunnelHealth(task healthTask) healthResult {
 
 func probeTunnelHealthWith(task healthTask, fetch func(string, string) (string, float64, error)) healthResult {
 	result := healthResult{Task: task}
-	for _, address := range []string{"https://api.ipify.org", "https://ping0.cc/geo"} {
+	for _, address := range []string{"https://api.ipify.org", "https://ping0.cc/geo", "https://checkip.amazonaws.com"} {
 		body, ms, err := fetch(task.Namespace, address)
 		if err != nil {
 			continue
@@ -87,6 +89,7 @@ func probeTunnelHealthWith(task healthTask, fetch func(string, string) (string, 
 		}
 		// A real response from the wrong exit is never masked by another site.
 		if got != task.ExitIP {
+			result.IdentityMismatch = true
 			return result
 		}
 		if ms < 0 || math.IsNaN(ms) || math.IsInf(ms, 0) {
@@ -104,14 +107,14 @@ func (m *Manager) healthSnapshot(t *Tunnel) (healthTask, bool) {
 	if m.tunnels[t.Slot] != t || t.Status != "up" || t.ExitIP == "" {
 		return healthTask{}, false
 	}
-	return healthTask{Tunnel: t, Slot: t.Slot, Node: t.Node, ExitIP: t.ExitIP, Namespace: t.nsName()}, true
+	return healthTask{Tunnel: t, Slot: t.Slot, Node: t.Node, ExitIP: t.ExitIP, Namespace: t.nsName(), ReadyAt: t.readyAt}, true
 }
 
 func (m *Manager) healthResultCurrent(result healthResult) bool {
 	t := result.Task.Tunnel
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.tunnels[result.Task.Slot] == t && t.Status == "up" && t.ExitIP == result.Task.ExitIP && latencyKey(t.Node) == latencyKey(result.Task.Node)
+	return m.tunnels[result.Task.Slot] == t && t.Status == "up" && t.ExitIP == result.Task.ExitIP && latencyKey(t.Node) == latencyKey(result.Task.Node) && t.readyAt.Equal(result.Task.ReadyAt)
 }
 
 func (m *Manager) scheduleEntryRepair(t *Tunnel) {

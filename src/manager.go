@@ -31,6 +31,8 @@ type Manager struct {
 	quickMu        sync.Mutex
 	quickJob       *Job
 	quickCancel    context.CancelFunc
+	provisionMu    sync.Mutex
+	provisionJobs  map[string]context.CancelFunc
 	nodesChanged   chan struct{}
 }
 
@@ -562,6 +564,7 @@ func (m *Manager) pickSwapTarget(t *Tunnel) (Node, error) {
 // StopAll 停掉所有隧道并清空状态文件。
 func (m *Manager) StopAll() {
 	m.cancelQuickSetup()
+	m.cancelProvisions()
 	for _, t := range m.allTunnels() {
 		_ = m.Stop(t.Slot)
 	}
@@ -652,6 +655,7 @@ func (m *Manager) syncCred(t *Tunnel) {
 // Shutdown 停掉运行态但保留状态文件，让下次启动能恢复同样的隧道。
 func (m *Manager) Shutdown() {
 	m.cancelQuickSetup()
+	m.cancelProvisions()
 	for _, t := range m.allTunnels() {
 		if t.quickCandidate.Load() {
 			t.quickCancel()

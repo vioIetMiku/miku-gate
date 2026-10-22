@@ -6,14 +6,38 @@ import (
 )
 
 const (
-	healthInterval = 10 * time.Second
-	healthFailures = 2 // 连续失败几次才判定掉线，避免网络抖动误杀
+	healthInterval      = 10 * time.Second
+	healthFailures      = 3
+	healthRecoveryGrace = 75 * time.Second // allow OpenVPN's 45s soft restart to recover
 )
+
+type healthFailureState struct {
+	task  healthTask
+	count int
+	since time.Time
+}
+
+// A timeout is not proof that the VPN is dead. Require sustained failures on
+// the same connection; any verified success resets the entire outage window.
+func (s *healthFailureState) observe(result healthResult, now time.Time) bool {
+	if result.Healthy {
+		*s = healthFailureState{}
+		return false
+	}
+	if result.IdentityMismatch {
+		return true
+	}
+	if s.count == 0 || s.task.Tunnel != result.Task.Tunnel || s.task.ExitIP != result.Task.ExitIP || latencyKey(s.task.Node) != latencyKey(result.Task.Node) || !s.task.ReadyAt.Equal(result.Task.ReadyAt) {
+		*s = healthFailureState{task: result.Task, since: now}
+	}
+	s.count++
+	return s.count >= healthFailures && now.Sub(s.since) >= healthRecoveryGrace
+}
 
 // WatchHealth 周期检查每条隧道是否还能出网，掉线的自动换节点重连。
 // VPN Gate 是志愿者节点，运行中掉线很常见。
 func (m *Manager) WatchHealth() {
-	fails := map[*Tunnel]int{}
+	fails := map[*Tunnel]*healthFailureState{}
 	pending := map[*Tunnel]bool{}
 	queue := make(chan healthTask, 1024)
 	results := make(chan healthResult, 1024)
@@ -27,6 +51,11 @@ func (m *Manager) WatchHealth() {
 	ticker := time.NewTicker(healthInterval)
 	defer ticker.Stop()
 	schedule := func() {
+		for t, state := range fails {
+			if !m.healthResultCurrent(healthResult{Task: state.task}) {
+				delete(fails, t)
+			}
+		}
 		for _, t := range m.visibleTunnels() {
 			if pending[t] {
 				continue
@@ -52,7 +81,7 @@ func (m *Manager) WatchHealth() {
 				continue
 			}
 			if result.Healthy {
-				fails[t] = 0
+				delete(fails, t)
 				if m.latencies != nil {
 					m.latencies.recordTunnelSample(result.Task.Node, result.MS, result.Target)
 				}
@@ -65,14 +94,18 @@ func (m *Manager) WatchHealth() {
 				}
 				continue
 			}
-			fails[t]++
-			if fails[t] < healthFailures {
-				log.Printf("隧道 %d (%s) 探测失败 %d 次", t.Slot, t.Node.HostName, fails[t])
+			state := fails[t]
+			if state == nil {
+				state = &healthFailureState{}
+				fails[t] = state
+			}
+			if !state.observe(result, time.Now()) {
+				log.Printf("隧道 %d (%s) 探测失败 %d 次，保留当前节点等待恢复", t.Slot, t.Node.HostName, state.count)
 				continue
 			}
 
-			log.Printf("隧道 %d (%s) 已掉线，正在换节点重连", t.Slot, t.Node.HostName)
-			fails[t] = 0
+			log.Printf("隧道 %d (%s) 已确认不可用，优先恢复原节点", t.Slot, t.Node.HostName)
+			delete(fails, t)
 			m.reconnectExpected(t, result.Task.Node.HostName, &result.Task)
 		}
 	}
@@ -115,10 +148,12 @@ func (m *Manager) reconnectExpected(t *Tunnel, oldHost string, expected *healthT
 		log.Printf("保存状态失败: %v", err)
 	}
 
+	t.mu.Lock()
 	if t.ovpn != nil && t.ovpn.Process != nil {
 		_ = t.ovpn.Process.Kill()
 		t.ovpn = nil
 	}
+	t.mu.Unlock()
 	t.teardownNetns()
 
 	go func() {
@@ -155,13 +190,13 @@ func (m *Manager) beginReconnect(t *Tunnel, expected *healthTask) bool {
 		return false
 	}
 	if expected != nil {
-		if expected.Tunnel != t || expected.Slot != t.Slot || t.Status != "up" || t.ExitIP != expected.ExitIP || latencyKey(t.Node) != latencyKey(expected.Node) {
+		if expected.Tunnel != t || expected.Slot != t.Slot || t.Status != "up" || t.ExitIP != expected.ExitIP || latencyKey(t.Node) != latencyKey(expected.Node) || !t.readyAt.Equal(expected.ReadyAt) {
 			return false
 		}
 		t.recordAutoReconnect(time.Now())
 	}
 	t.Status = "starting"
-	t.Err = "正在换节点重连"
+	t.Err = "正在恢复连接，优先重试当前节点"
 	t.ExitIP = ""
 	t.EntryReady = t.TemplateID == 0
 	return true

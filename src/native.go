@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -13,10 +16,11 @@ import (
 // 入站数据存在 native.json，Xray 的运行配置每次改动后整份重新生成。
 // 全量重写比增量改省心：配置是纯函数产物，不会出现改了一半的中间态。
 type Native struct {
-	mu    sync.Mutex
-	dir   string
-	store *nativeStore
-	proc  *xrayProc
+	mu            sync.Mutex
+	dir           string
+	store         *nativeStore
+	proc          *xrayProc
+	appliedConfig []byte // guarded by mu; the configuration of the running core
 }
 
 func openNative(workDir string) (*Native, error) {
@@ -74,6 +78,13 @@ func (n *Native) apply(tunnels []*Tunnel) error {
 	if err != nil {
 		return err
 	}
+	identity := nativeRuntimeIdentity(cfg, n.store.sorted())
+	// Resync/rebind of a recovered original node often produces the exact
+	// configuration already running. Restarting here drops every other exit's
+	// client connections. Still restore the disk file and persist UI metadata.
+	if len(identity) != 0 && bytes.Equal(identity, n.appliedConfig) && n.proc.running() {
+		return n.store.save(n.dir)
+	}
 	if err := n.proc.verify(path); err != nil {
 		return err
 	}
@@ -85,7 +96,39 @@ func (n *Native) apply(tunnels []*Tunnel) error {
 	if err := n.proc.restart(path); err != nil {
 		return err
 	}
+	n.appliedConfig = identity
 	return n.store.save(n.dir)
+}
+
+// Certificates can be renewed at the same paths without changing JSON. Include
+// their bytes so a no-op optimization cannot leave an expired certificate live.
+// If a referenced file cannot be read, use the normal verifier/restart path.
+func nativeRuntimeIdentity(cfg map[string]any, inbounds []*nativeInbound) []byte {
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return nil
+	}
+	digest := sha256.New()
+	_, _ = digest.Write(raw)
+	for _, ib := range inbounds {
+		if !ib.Enable || ib.TLS == nil {
+			continue
+		}
+		for _, path := range []string{ib.TLS.CertFile, ib.TLS.KeyFile} {
+			if path == "" {
+				continue
+			}
+			contents, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			_, _ = digest.Write([]byte(path))
+			_, _ = digest.Write([]byte{0})
+			fileSum := sha256.Sum256(contents)
+			_, _ = digest.Write(fileSum[:])
+		}
+	}
+	return digest.Sum(nil)
 }
 
 // OnTunnelsChanged 在隧道集合变化后重建配置。自建模式下出站直接由隧道列表

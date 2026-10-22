@@ -1,11 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
-	"sync"
-	"time"
 )
 
 // ProvisionRequest 是"给我 N 个某地区的出口"这个意图。
@@ -35,6 +35,19 @@ func (m *Manager) Provision(req ProvisionRequest) (*Job, error) {
 	if err != nil {
 		return nil, err
 	}
+	m.mu.RLock()
+	capacity := linkSubnetCapacity
+	if m.maxSlots > 0 && m.maxSlots < capacity {
+		capacity = m.maxSlots
+	}
+	room := capacity - len(m.tunnels)
+	m.mu.RUnlock()
+	if room <= 0 {
+		return nil, fmt.Errorf("槽位已满，先停几个出口再来")
+	}
+	if len(picks) > room {
+		picks = picks[:room]
+	}
 
 	labels := make([]string, 0, len(picks)+1)
 	for _, n := range picks {
@@ -54,9 +67,29 @@ func (m *Manager) Provision(req ProvisionRequest) (*Job, error) {
 		title = fmt.Sprintf("开 %d 个任意地区出口", len(picks))
 	}
 	job := m.jobs.New(title, labels)
+	job.SetKind("provision")
 	firstOrder := m.reserveOrders(len(picks))
-
-	go m.runProvisionOrdered(job, picks, req.TemplateID, firstOrder)
+	ctx, cancel := context.WithCancel(context.Background())
+	m.provisionMu.Lock()
+	if m.provisionJobs == nil {
+		m.provisionJobs = map[string]context.CancelFunc{}
+	}
+	m.provisionJobs[job.ID()] = cancel
+	m.provisionMu.Unlock()
+	go func() {
+		defer cancel()
+		defer func() {
+			m.provisionMu.Lock()
+			delete(m.provisionJobs, job.ID())
+			m.provisionMu.Unlock()
+		}()
+		defer job.Finish()
+		steps := make([]int, len(picks))
+		for i := range steps {
+			steps[i] = i
+		}
+		m.runProvisionPlanContext(ctx, job, picks, req.TemplateID, firstOrder, steps, len(picks))
+	}()
 	return job, nil
 }
 
@@ -73,9 +106,17 @@ func (m *Manager) runProvisionOrdered(job *Job, picks []Node, templateID int, fi
 	m.runProvisionPlan(job, picks, templateID, firstOrder, steps, len(picks))
 }
 
-// A shared runner keeps normal provisioning and quick setup on the same
-// tunnel/entry reconciliation path. Quick setup supplies its own step indices.
+// Normal creation uses the same rolling race as quick setup, including countries
+// outside its preset. Only verified winners become visible or survive restart.
 func (m *Manager) runProvisionPlan(job *Job, picks []Node, templateID int, firstOrder uint64, steps []int, summaryStep int) {
+	m.runProvisionPlanContext(context.Background(), job, picks, templateID, firstOrder, steps, summaryStep)
+}
+
+func (m *Manager) runProvisionPlanContext(ctx context.Context, job *Job, picks []Node, templateID int, firstOrder uint64, steps []int, summaryStep int) {
+	if ctx.Err() != nil {
+		job.failUnfinished("后台补齐已停止，已保留连通节点。")
+		return
+	}
 	if templateID < 0 {
 		panel, err := openPanel()
 		if err != nil {
@@ -95,78 +136,62 @@ func (m *Manager) runProvisionPlan(job *Job, picks []Node, templateID int, first
 		}
 		templateID = created.ID
 	}
-	started := make([]*Tunnel, len(picks))
-	// Reserve the entire batch before retry goroutines can claim its candidates.
+	targets := make([]quickTarget, 0, len(picks))
 	for i, node := range picks {
-		t, err := m.prepareTunnel(node, firstOrder+uint64(i), templateID, false)
-		if err != nil {
-			job.Set(steps[i], "failed", err.Error())
-			continue
-		}
-		started[i] = t
-		job.Set(steps[i], "running", "正在连接 "+node.HostName)
+		targets = append(targets, quickTarget{normalizeRegion(node.CountryCode), steps[i]})
 	}
-	_ = m.saveState()
-	var wg sync.WaitGroup
-	for i, t := range started {
-		if t == nil {
-			continue
-		}
-		go m.bringUp(t, true)
-		wg.Add(1)
-		go func(i int, t *Tunnel) {
-			defer wg.Done()
-			m.waitUp(t)
-			if t.Status == "up" && (templateID == 0 || t.EntryReady) {
-				job.Set(steps[i], "ok", t.ExitIP)
-				return
-			}
-			if t.Status == "stopped" {
-				job.Set(steps[i], "failed", "已断开")
-				return
-			}
-			if t.EntryError != "" {
-				job.Set(steps[i], "failed", firstLine(t.EntryError))
-				return
-			}
-			job.Set(steps[i], "failed", "仍在自动重试同国家节点，可随时停止")
-		}(i, t)
+	m.runExitRace(job, targets, templateID, quickRaceOps{ctx: ctx, firstOrder: firstOrder})
+	if ctx.Err() != nil {
+		job.failUnfinished("后台补齐已停止，已保留连通节点。")
+		return
 	}
-	wg.Wait()
 	if templateID == 0 {
 		return
 	}
-	ready, pending := 0, 0
-	for _, t := range started {
-		if t != nil {
-			if t.EntryReady && t.Status == "up" {
-				ready++
-			} else {
-				pending++
-			}
+	ready := 0
+	view := job.View()
+	for _, step := range steps {
+		if view.Steps[step].Status == "ok" {
+			ready++
 		}
 	}
 	if ready == 0 {
 		job.Set(summaryStep, "failed", "连接成功后会自动补建入口")
 		return
 	}
-	message := fmt.Sprintf("已就绪 %d 个入口", ready)
-	if pending > 0 {
-		message += fmt.Sprintf("，%d 个将继续自动重试", pending)
-	}
-	job.Set(summaryStep, "ok", message)
+	job.Set(summaryStep, "ok", fmt.Sprintf("已就绪 %d 个入口，多余候选已取消", ready))
 }
 
-// waitUp 等一条隧道跑完 bringUp。bringUp 最多试 6 个候选节点，
-// 每个节点等 tun0 最长 40 秒，所以这里给足余量。
-func (m *Manager) waitUp(t *Tunnel) {
-	const maxWait = 5 * time.Minute
-	deadline := time.Now().Add(maxWait)
-	for time.Now().Before(deadline) {
-		if t.Status == "up" && (t.TemplateID == 0 || t.EntryReady) || t.Status == "failed" || t.Status == "stopped" {
+func (m *Manager) cancelProvisions() {
+	m.provisionMu.Lock()
+	defer m.provisionMu.Unlock()
+	for _, cancel := range m.provisionJobs {
+		cancel()
+	}
+}
+
+func (m *Manager) provisionRunning() bool {
+	m.provisionMu.Lock()
+	defer m.provisionMu.Unlock()
+	return len(m.provisionJobs) > 0
+}
+
+func apiProvisionStop(m *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			writeJSON(w, 405, map[string]string{"error": "请使用 POST 停止后台补齐。"})
 			return
 		}
-		time.Sleep(time.Second)
+		m.provisionMu.Lock()
+		defer m.provisionMu.Unlock()
+		cancel := m.provisionJobs[r.URL.Query().Get("id")]
+		if cancel == nil {
+			writeJSON(w, 409, map[string]string{"error": "任务已变化，请刷新后重试。"})
+			return
+		}
+		cancel()
+		writeJSON(w, 202, map[string]string{"ok": "正在停止后台补齐，已保留连通节点。"})
 	}
 }
 
@@ -193,7 +218,7 @@ func (m *Manager) pickNodes(region string, count int, avoid map[string]bool) ([]
 		if len(out) >= count {
 			break
 		}
-		if used[n.HostName] || avoid[n.HostName] || n.IP != "" && usedIPs[n.IP] {
+		if n.HostName == "" || used[n.HostName] || avoid[n.HostName] || n.IP != "" && usedIPs[n.IP] {
 			continue
 		}
 		if region != "" && !strings.EqualFold(n.CountryCode, region) {
@@ -224,13 +249,18 @@ func (m *Manager) pickEveryRegion(perRegion int) ([]Node, error) {
 
 	m.mu.RLock()
 	used := map[string]bool{}
+	usedIPs := map[string]bool{}
 	for _, t := range m.tunnels {
 		used[t.Node.HostName] = true
+		if t.Node.IP != "" {
+			usedIPs[t.Node.IP] = true
+		}
 	}
-	room := len(m.nodes)
-	if m.maxSlots > 0 {
-		room = m.maxSlots - len(m.tunnels)
+	capacity := linkSubnetCapacity
+	if m.maxSlots > 0 && m.maxSlots < capacity {
+		capacity = m.maxSlots
 	}
+	room := capacity - len(m.tunnels)
 	pool := m.nodePoolLocked()
 	filtered := len(pool) < len(m.nodes)
 
@@ -238,7 +268,7 @@ func (m *Manager) pickEveryRegion(perRegion int) ([]Node, error) {
 	byRegion := map[string][]Node{}
 	var order []string
 	for _, n := range pool {
-		if used[n.HostName] || n.CountryCode == "" {
+		if n.HostName == "" || used[n.HostName] || n.IP != "" && usedIPs[n.IP] || normalizeRegion(n.CountryCode) == "" {
 			continue
 		}
 		code := strings.ToUpper(n.CountryCode)
@@ -247,6 +277,10 @@ func (m *Manager) pickEveryRegion(perRegion int) ([]Node, error) {
 		}
 		if len(byRegion[code]) < perRegion {
 			byRegion[code] = append(byRegion[code], n)
+			used[n.HostName] = true
+			if n.IP != "" {
+				usedIPs[n.IP] = true
+			}
 		}
 	}
 	m.mu.RUnlock()
@@ -328,13 +362,17 @@ func (m *Manager) Regions() []RegionStat {
 	defer m.mu.RUnlock()
 
 	used := map[string]bool{}
+	usedIPs := map[string]bool{}
 	for _, t := range m.tunnels {
 		used[t.Node.HostName] = true
+		if t.Node.IP != "" {
+			usedIPs[t.Node.IP] = true
+		}
 	}
 
 	byCode := map[string]*RegionStat{}
 	for _, n := range m.nodePoolLocked() {
-		if used[n.HostName] || n.CountryCode == "" {
+		if n.HostName == "" || used[n.HostName] || n.IP != "" && usedIPs[n.IP] || n.CountryCode == "" {
 			continue
 		}
 		s := byCode[n.CountryCode]
@@ -343,6 +381,10 @@ func (m *Manager) Regions() []RegionStat {
 			byCode[n.CountryCode] = s
 		}
 		s.Available++
+		used[n.HostName] = true
+		if n.IP != "" {
+			usedIPs[n.IP] = true
+		}
 		if n.SpeedMbps > s.BestSpeed {
 			s.BestSpeed = n.SpeedMbps
 		}

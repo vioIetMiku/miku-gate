@@ -18,7 +18,7 @@ ROOT=Path(__file__).resolve().parents[1]
 UPSTREAM='d7ce5224caf3469b19876982abdf8d1be16c4a8b'
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.3');parser.add_argument('--label',default='v0.2.3');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.4');parser.add_argument('--label',default='v0.2.4');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',args.version) or not re.fullmatch(r'[A-Za-z0-9_.-]+',args.label):raise ValueError('invalid version/label')
     args.output=args.output.resolve()
     args.output.mkdir(parents=True,exist_ok=True)
@@ -41,6 +41,7 @@ def main():
             shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
         (stage/'docs').mkdir()
         shutil.copyfile(ROOT/'docs/DEV_HISTORY.md',stage/'docs/DEV_HISTORY.md')
+        if (ROOT/'docs/CONNECTION_POLICY.md').exists():shutil.copyfile(ROOT/'docs/CONNECTION_POLICY.md',stage/'docs/CONNECTION_POLICY.md')
         (stage/'src/assets').mkdir(parents=True)
         shutil.copyfile(ROOT/'src/assets/miku-hero-v1.png',stage/'src/assets/miku-hero-v1.png')
         shutil.copyfile(ROOT/'src/assets/miku-mark.svg',stage/'src/assets/miku-mark.svg')

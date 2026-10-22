@@ -47,6 +47,11 @@ async function setup({savedMode,job=null,sessionSeen=''}={}){
    }else if(u.pathname.endsWith('/api/quick-setup/stop')){
     assert.equal(opts.method,'POST');assert.equal(u.searchParams.get('id'),'quick-123');
     body={ok:'正在停止后台补齐'};status=202;state.jobs=[finishedJob(3)];
+   }else if(u.pathname.endsWith('/api/provision/stop')){
+    assert.equal(opts.method,'POST');assert.equal(u.searchParams.get('id'),'ordinary-123');
+    state.jobs=state.jobs.map(j=>({...j,status:'failed'}));status=202;
+   }else if(u.pathname.endsWith('/api/stop-all')){
+    assert.equal(opts.method,'POST');state.jobs=state.jobs.map(j=>({...j,status:'failed'}));state.exits=[];
    }else if(u.pathname.endsWith('/api/exits/links')){
     if(state.linkMissing){status=404;body={error:'此出口没有可复制的启用节点，请先创建或修复入口'};}
     else body={links:[entryLink(u.searchParams.get('id') || '501')]};
@@ -211,5 +216,16 @@ async function setup({savedMode,job=null,sessionSeen=''}={}){
  assert.equal(a.d.activeElement,a.d.querySelector('#ipBtn'),'closing IP info should return keyboard focus');
  a.state.exits=[];await a.w.poll();assert.equal(a.d.querySelector('#onlineCount').textContent,'0');
  assert.equal(a.state.errors.length,0,a.state.errors.join('\n'));a.dom.window.close();
- console.log('PASS: existing panel flows, IP query/submit/copy, Ping0 placement, compact facts, unknown flags, escaped metadata, stale response isolation, failure recovery, dialog focus, live counts and themes.');
+ a=await setup({job:{id:'ordinary-123',kind:'provision',summary:'开3个日本出口',status:'running',done:1,total:3,steps:[{label:'日本1',status:'ok',detail:'198.51.100.1'},{label:'日本2',status:'running'},{label:'日本3',status:'running'}]}});
+ assert.match(a.d.querySelector('#wizard').textContent,/3 倍/);
+ assert(a.d.querySelector('[data-provision-stop]'),'ordinary provisioning must be stoppable');
+ a.d.querySelector('[data-provision-stop]').click();await settle();
+ assert(a.state.requests.some(x=>x.url.pathname.endsWith('/api/provision/stop')));
+ assert.equal(a.state.exits.length,2,'stop top-up must keep successful exits');
+ a.state.jobs=[{...runningJob(),kind:'provision'}];a.state.exits=[];await a.w.poll();
+ assert(!a.d.querySelector('#stopall').disabled,'hidden candidates must still allow stop-all');
+ a.w.confirm=()=>true;a.d.querySelector('#stopall').click();await settle();
+ assert(a.state.requests.some(x=>x.url.pathname.endsWith('/api/stop-all')),'stop-all must cancel workers as well as visible exits');
+ assert.equal(a.state.errors.length,0,a.state.errors.join('\n'));a.dom.window.close();
+ console.log('PASS: panel flows, partial results, ordinary provisioning cancellation, stop-all, IP queries, escaped metadata, stale response isolation, dialog focus, counts and themes.');
 })().catch(e=>{console.error(e);process.exitCode=1;setTimeout(()=>process.exit(1),100)});

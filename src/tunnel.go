@@ -65,6 +65,7 @@ type Tunnel struct {
 	repairPending   bool
 	lastProbeSample *GateLatency
 	autoReconnects  []time.Time
+	readyAt         time.Time // guarded by Manager.mu; distinguishes same-node reconnects
 }
 
 func (t *Tunnel) connectionContext() context.Context {
@@ -310,7 +311,7 @@ func (t *Tunnel) startOpenVPN(dir string) error {
 	}
 	ns := t.nsName()
 	cfgPath := filepath.Join(dir, ns+".ovpn")
-	if err := os.WriteFile(cfgPath, []byte(t.Node.Config), 0600); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(managedVPNProfile(t.Node.Config)), 0600); err != nil {
 		return fmt.Errorf("写配置失败: %w", err)
 	}
 	// Each candidate owns its credentials file; parallel truncation of a shared
@@ -321,20 +322,9 @@ func (t *Tunnel) startOpenVPN(dir string) error {
 	}
 
 	logPath := filepath.Join(dir, ns+".log")
-	args := []string{"netns", "exec", ns, "openvpn",
-		"--config", cfgPath,
-		"--auth-user-pass", authPath,
-		"--auth-nocache",
-		"--dev", "tun0",
-		"--connect-retry-max", "2",
-		"--connect-timeout", "20",
-		"--data-ciphers", "AES-128-CBC:AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305",
-		"--verb", "3",
-		"--log", logPath,
-	}
+	args := t.openVPNArgs(cfgPath, authPath, logPath)
 	wait := 40 * time.Second
 	if t.quickCandidate.Load() {
-		args = append(args, "--connect-retry-max", "1", "--connect-timeout", "8", "--connect-retry", "1", "1", "--hand-window", "22")
 		wait = 28 * time.Second
 	}
 	cmd := exec.Command("ip", args...)

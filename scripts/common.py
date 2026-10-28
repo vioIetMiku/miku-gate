@@ -177,7 +177,7 @@ def reserved_ports(data=None,include_common=True):
         if not path.exists():continue
         try:
             value=json.loads(trusted(path,max_bytes=8<<20))
-            ports.update(int(i['port']) for i in value.get(field,[]) if isinstance(i,dict) and str(i.get('port','')).isdigit())
+            ports.update(int(i['port']) for i in (value.get(field) or []) if isinstance(i,dict) and str(i.get('port','')).isdigit())
         except (ValueError,KeyError,RuntimeError):pass
     return ports
 

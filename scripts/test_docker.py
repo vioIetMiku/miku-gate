@@ -66,6 +66,14 @@ class DockerDataTests(unittest.TestCase):
         for name in ('password', 'basepath', 'settings.json', 'install.json'):
             self.assertEqual(stat.S_IMODE((self.data / name).stat().st_mode), 0o600)
 
+    def test_restart_after_go_persisted_null_nodes_preserves_credentials(self):
+        d.initialize()
+        before={name:(self.data/name).read_bytes() for name in ('password','basepath','settings.json')}
+        for name,field in (('state.json','tunnels'),('native.json','inbounds'),('xray.json','inbounds')):
+            c.write_json(self.data/name,{field:None})
+        d.initialize()
+        self.assertEqual(before,{name:(self.data/name).read_bytes() for name in before})
+
     def test_explicit_environment_changes_only_requested_settings(self):
         d.initialize()
         value = c.settings()

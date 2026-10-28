@@ -1,5 +1,8 @@
 """Automatic port selection with real IPv4/IPv6 listeners and reserved ports."""
 import socket
+import json
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -38,6 +41,16 @@ class PortSelectionTests(unittest.TestCase):
         with listener:
             listener.listen()
             self.assertNotEqual(c.select_port(listener.getsockname()[1]), listener.getsockname()[1])
+
+    def test_null_saved_collections_are_empty_not_a_restart_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            for name,field in (('state.json','tunnels'),('native.json','inbounds'),('xray.json','inbounds')):
+                (root/name).write_text(json.dumps({field:None}),encoding='utf-8')
+            with patch.object(c,'trusted',side_effect=lambda path,**kwargs:Path(path).read_bytes()):
+                self.assertEqual(c.reserved_ports(root,include_common=False),set())
+                (root/'native.json').write_text(json.dumps({'inbounds':[{'port':19443}]}),encoding='utf-8')
+                self.assertEqual(c.reserved_ports(root,include_common=False),{19443})
 
     def test_invalid_preferences_and_exhaustion(self):
         for port in (0, 80, 65536, '8900', None):

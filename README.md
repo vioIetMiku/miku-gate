@@ -23,70 +23,15 @@ VPN Gate 不属于 Miku Gate。节点数量、国家、在线时间随时变化�
 
 | 你想怎么用 | 选择哪一节 | 是否要 Docker | 安装后的管理命令 |
 | --- | --- | --- | --- |
-| 直接装在 VPS 上，继续用原来的面板和 miku 菜单 | [方式一：原生一键安装](#install-native) | 不需要 | `miku`、`miku info`、`miku quick` |
+| 直接装在 VPS 上，使用面板和 miku 菜单 | [方式一：原生一键安装](#install-native) | 不需要 | `miku`、`miku info`、`miku quick` |
 | 在一台 VPS 上用 Docker，同时运行独立前端和后端 | [方式二：Docker 同机部署](#install-docker) | 需要 | 在部署目录运行 `bash install-docker.sh ...` |
 | 后端在 VPS A，前端放到服务器 B | [方式三：跨服务器部署](#install-remote) | 两台都需要 | A 管后端；B 运行 `python3 -B scripts/frontend.py ...` |
 | 不想在线运行脚本，自己下载并上传安装文件 | [方式四：手动安装](#install-offline) | 取决于选择的模式 | 仍分别使用原生或 Docker 的管理命令 |
 
-**原生一键安装，还是这一条，不加任何参数：**
 
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)
-```
-
-**想用 Docker 才加 `--docker`：**
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh) --docker
-```
-
-这两条命令下载的是**已发布的 Latest 正式安装器**，不是直接运行 main 的全部源码。本文的 Docker 默认前后端分离功能从 v0.2.6 开始；如果 Release 页面还没发布 v0.2.6，就不能把新文档当作旧安装包已经具有该功能。
-
-## 所有安装方式先做这一步：进入正确的终端
-
-**在哪里做：**通过 SSH 登录你的 Linux VPS。以下安装命令是在 **VPS 的 Bash 终端**执行，不是在本地 Windows PowerShell 执行。
-
-- 已经用 root 登录：直接继续。
-- 用的是具有 sudo 权限的普通用户：先运行下面命令，后续示例按 root 终端编写。
-
-```bash
-sudo -i
-```
-
-**这一步的作用：**进入 root Shell，后端才能创建网络命名空间、TUN 和防火墙规则。不要只在 `bash <(curl ...)` 前随意加 sudo，然后认为整段命令都已经处于 root 环境。
-
-**后端 VPS 要求：**Linux amd64 / arm64、可用 TUN、允许 netns / iptables；原生安装还需要 systemd 或 OpenRC。只装前端的服务器 B 不需要 TUN，可跳过下面的 TUN 检查。后端 VPS 检查：
-
-```bash
-test -c /dev/net/tun && echo "TUN 已存在" || echo "未找到 TUN，请先向 VPS 服务商开启"
-```
-
-如果提示没有 TUN，先在 VPS 服务商面板开启，不能靠换成 Docker 绕过宿主机限制。
-
-检查下载工具：
-
-```bash
-curl --version
-```
-
-只有提示没有 curl 时才安装。Debian / Ubuntu 可以执行下面这组；其他系统用自己的包管理器安装 Bash、curl 和 CA 证书：
-
-```bash
-apt-get update
-apt-get install -y curl ca-certificates bash
-```
-
-**不要在同一 VPS 同时启动原生 Miku 后端和 Docker Miku 后端，也不要把原生 `/var/lib/miku` 直接挂给 Docker 当作迁移。** 安装前先选好一种，已有实例需要切换方式时先备份并停止旧服务。
-
-<a id="install-native"></a>
-
-## 方式一：原生一键安装（原来的方式，推荐新手）
+## 方式一：原生一键安装（推荐）
 
 这条路线**不需要 Docker、Compose、Node.js，也不需要提前安装 Go**。程序安装到 VPS，由 systemd / OpenRC 管理；网页由后端内嵌提供。
-
-### 第 1 步：运行原生安装命令
-
-**在哪里做：**上面准备好的 VPS root Bash，当前目录不限。
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)

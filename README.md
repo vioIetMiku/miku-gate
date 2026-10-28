@@ -60,7 +60,7 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
 | Docker / Compose | Linux host 网络、特权与 TUN；持久化、健康检查、备份和重建更新，见 [部署指南](docs/DOCKER.md) |
 | 日常运维 | 随机管理路径、登录口令、域名 / 证书管理、备份、更新、修复与旧版回滚 |
 
-## 一键安装：`mikugate.sh`（推荐）
+## VPS一键安装：`mikugate.sh`（推荐）
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)

@@ -80,3 +80,7 @@ dev41 独立实现简洁终端结果输出、共用居中内容框架、Miku 欢
 ## v0.2.5 Docker 部署
 
 基于用户提供的 miku-gate-v0.2.4-docker(1).zip 引入 Dockerfile、Compose、容器初始化 / CLI / staging 与离线测试，应用 Go 源码沿用 v0.2.4。新版本为 v0.2.5，不修改原有标签。保留原生 VPS 流程与原许可证；文档明示 Linux rootful Docker、host 网络、privileged 和 TUN 要求，Docker 不运行原生 systemd 续期 timer。正式构建从源码重建两种架构，打包排除 Docker 数据、私钥、环境配置和备份。
+
+## main Docker 安装优化（仍为 0.2.5）
+
+应用 Go 源码与原正式版本不变；部署层增加 SHA256 输入指纹缓存、去除强制基础镜像拉取，并保留显式安全刷新选项。仅更新 main，不创建或替换 Release / 标签 / 附件。Docker Engine 与 Compose 安装链接来自官方文档。

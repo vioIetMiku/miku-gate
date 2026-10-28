@@ -6,6 +6,7 @@ services:
       context: .
       args:
         MIKU_BINARY_SOURCE: ${MIKU_BINARY_SOURCE:-prebuilt}
+        MIKU_BUILD_KEY: ${MIKU_BUILD_KEY:-unknown}
     restart: unless-stopped
     network_mode: host
     # ip netns needs mount/setns permissions as well as NET_ADMIN and TUN.

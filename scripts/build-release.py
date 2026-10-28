@@ -52,7 +52,7 @@ def main():
         if (ROOT/'docs/CONNECTION_POLICY.md').exists():shutil.copyfile(ROOT/'docs/CONNECTION_POLICY.md',stage/'docs/CONNECTION_POLICY.md')
         shutil.copyfile(ROOT/'docs/DOCKER.md',stage/'docs/DOCKER.md')
         (stage/'docker').mkdir()
-        for name in ('container.py','stage.py','entrypoint.sh','miku.sh'):
+        for name in ('container.py','build-key.py','stage.py','entrypoint.sh','miku.sh'):
             shutil.copyfile(ROOT/'docker'/name,stage/'docker'/name)
         (stage/'src/assets').mkdir(parents=True)
         shutil.copyfile(ROOT/'src/assets/miku-hero-v1.png',stage/'src/assets/miku-hero-v1.png')
@@ -148,7 +148,7 @@ __MIKU_ARCHIVE_BELOW__
                 mode=0o755 if name.startswith('bin/') or name.endswith('.sh') else 0o644
                 info.external_attr=(stat.S_IFREG|mode)<<16
                 archive.writestr(info,(source_stage/name).read_bytes(),compress_type=zipfile.ZIP_DEFLATED,compresslevel=6)
-        with sources.open('rb') as complete:
+        with sources.open('rb+') as complete:
             os.fsync(complete.fileno())
         with zipfile.ZipFile(sources) as checked:
             if checked.testzip() is not None:raise RuntimeError('source archive CRC failed')

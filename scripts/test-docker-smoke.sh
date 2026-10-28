@@ -5,7 +5,7 @@ export WEB_PORT=38899 MIKU_PUBLIC_IP=1.1.1.1
 sudo modprobe tun
 [[ -c /dev/net/tun ]]
 docker compose config --quiet
-docker compose build
+bash install-docker.sh build
 cleanup() {
   status=$?
   docker compose logs --tail=80 miku || true
@@ -13,7 +13,11 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
-docker compose up -d --wait --wait-timeout 180
+# Capture info (contains an ephemeral test password) without printing credentials.
+cached_start=$(bash install-docker.sh up)
+[[ "$cached_start" == *'复用本地镜像'* ]]
+unset cached_start
+echo 'PASS: unchanged-input Docker image reused without rebuilding.'
 docker compose exec -T miku miku status
 # Confirm this VPS-oriented container really has mount / setns permissions.
 docker compose exec -T miku sh -ec 'ns="miku-ci-$$"; ip netns add "$ns"; trap '\''ip netns delete "$ns"'\'' EXIT; ip netns exec "$ns" ip link set lo up'

@@ -193,7 +193,7 @@ if 'run' in args and os.environ.get('DOCKER_FIXTURE_BACKUP_FAIL') == '1':
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls()
         self.assertIn(['compose', '--project-directory', str(self.root), '-f', str(self.root / 'compose.yaml'), 'config', '--quiet'], calls)
-        self.assertEqual(calls[-1][-2:], ['build', '--pull'])
+        self.assertEqual(calls[-1][-1:], ['build'])
 
     def test_failed_backup_restores_running_service_and_propagates_failure(self):
         result = self.run_script('backup', DOCKER_FIXTURE_RUNNING='1', DOCKER_FIXTURE_BACKUP_FAIL='1')

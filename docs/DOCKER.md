@@ -12,6 +12,18 @@
 
 Compose 使用 `network_mode: host` 和 `privileged: true`：程序需要创建 netns、挂载命名空间、调用 setns、配置 TUN、iptables 与 IPv4 转发。容器共享宿主机网络，不需要配置 `ports`。这些权限适用于自己管理的 VPS；rootless Docker、普通受限容器及 Docker Desktop 不作为支持环境。相关行为见 [Docker host 网络说明](https://docs.docker.com/engine/network/drivers/host/) 和 [Compose 服务配置](https://docs.docker.com/reference/compose-file/services/)。
 
+## 官方安装链接与 main 加速补充
+
+- [Docker Engine 总览](https://docs.docker.com/engine/install/)
+- [Ubuntu](https://docs.docker.com/engine/install/ubuntu/) / [Debian](https://docs.docker.com/engine/install/debian/)
+- [Compose v2 插件](https://docs.docker.com/compose/install/linux/)
+
+本次仅推送 main，仍为 0.2.5，不新建或替换任何 Release / 标签。旧附件和短入口下载的旧安装器不变；使用 main 源码或将新部署文件合并到已有项目后才应用以下优化。
+
+固定核心层前移；默认去掉强制基础镜像拉取，构建层和依赖缓存可复用。构建输入指纹相同的已标记本地镜像会直接复用，`up` / `start` / `update` 无需再运行镜像构建。启动使用 `--no-build --pull never`。首次仍需要联网安装依赖 / 构建，不提供预构建镜像。
+
+强制刷新基础镜像与 apt 依赖：`sudo env MIKU_DOCKER_REFRESH=1 bash install-docker.sh update`。此操作忽略缓存，更慢；建议管理员按安全更新需求执行。
+
 ## 新安装
 
 完整安装包支持统一入口，会把所需文件复制到固定目录，适用于 ZIP、VPS tar.gz，也适用于重新构建后的自解压安装器：
@@ -35,7 +47,7 @@ cp -n .env.example .env
 bash install-docker.sh
 ```
 
-默认命令为 `up`：校验 Compose 配置、构建镜像、后台启动，等待健康检查通过后打印管理地址和口令。首次默认管理端口为 **8899**；被其他服务占用时会明确报错，请在 `.env` 中指定其他端口后重新运行。
+默认命令为 `up`：校验 Compose 配置，复用输入指纹相同的镜像或构建缺失镜像，再后台启动并等待健康检查。首次默认管理端口为 **8899**；被其他服务占用时会明确报错，请在 `.env` 中指定其他端口后重新运行。
 
 Docker 支持自 v0.2.5 正式发布。此前 v0.2.4 的旧附件不含 Docker 文件或 `--docker`，请使用 v0.2.5 及以后完整包，或当前 main 的短入口。
 
@@ -135,9 +147,13 @@ bash install-docker.sh update
 bash install-docker.sh down
 ```
 
-`update` 根据当前目录的程序重新构建镜像并重建容器，不会自动下载新版本。镜像更新保留数据目录里已有的 Xray / sing-box，避免覆盖已配置的核心。不要通过网页的主程序更新功能管理 Docker 镜像版本；请使用此更新流程。
+`update` 根据当前目录的运行文件指纹复用或构建镜像并重建容器，不会自动下载新版本。镜像更新保留数据目录里已有的 Xray / sing-box，避免覆盖已配置的核心。不要通过网页的主程序更新功能管理 Docker 镜像版本；请使用此更新流程。
 
-## 验证范围
+## main 优化的验证状态
+
+已完成离线输入指纹、缓存派发、Shell / Python 语法和模拟打包验证；该补丁的 Linux / Docker CI 尚待推送后执行，不能把此前 v0.2.5 的实机结果当作本次优化已验证。
+
+## v0.2.5 原有验证范围
 
 正式发布流程包含 Docker 离线生命周期测试、Linux amd64 镜像构建、Compose 健康启动、独立 netns 创建 / 删除、备份、容器重建后的凭据与节点配置保留、停止后清理及源码模式构建。主程序仍从源码生成 amd64 / arm64 两种架构，并对两种架构的预编译选择进行摘要回归验证。
 

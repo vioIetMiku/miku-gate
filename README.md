@@ -69,55 +69,63 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mi
 
 ## Docker 部署
 
-> **权限与共存限制：**需要 Linux、rootful Docker Engine、Compose v2 和 `/dev/net/tun`。本项目使用 `network_mode: host` 与 `privileged: true` 来创建 netns / 配置 iptables，能够影响宿主机网络；不适用于 rootless Docker、Windows/macOS Desktop 或共享不可信宿主机。不要与同一 VPS 上的原生 Miku 服务同时运行，也不要直接挂载原生 `/var/lib/miku`。
+### Docker Engine 与 Compose v2 官方安装链接
 
-### 方式一：原短入口加 `--docker`
+- **[Docker Engine 安装总览](https://docs.docker.com/engine/install/)**
+- **[Ubuntu 安装 Docker](https://docs.docker.com/engine/install/ubuntu/)**
+- **[Debian 安装 Docker](https://docs.docker.com/engine/install/debian/)**
+- **[Compose v2 插件安装说明](https://docs.docker.com/compose/install/linux/)**：使用 `docker compose`，不是旧版独立的 `docker-compose`。
 
-先自行安装并启动 Docker Engine 与 Compose v2，在 VPS **root Bash** 中执行：
+官方 Docker 仓库安装方案可安装 `docker-compose-plugin`。已经安装则无需重装，先运行 `docker info` 和 `docker compose version` 检查。
+
+### 一键安装与权限
+
+在 Linux VPS 的 root Bash 中运行：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh) --docker
 ```
 
-安装器会验证最新正式包，将 Docker 项目持久保存到 **`/opt/miku-gate-docker`**，再在本机构建镜像并后台启动。此流程不会自动安装 Docker，不会向镜像仓库发布或拉取名为 `miku-gate` 的预制项目镜像；基础镜像和固定版本 Xray / sing-box 仍需联网下载。
+要求 rootful Docker、Compose 与 `/dev/net/tun`。项目使用 **host 网络 + privileged**，可以影响宿主网络；不要与同机原生 Miku 服务混跑，不支持 rootless / Desktop。项目保存在 `/opt/miku-gate-docker`。
 
-### 方式二：下载完整包后部署
+### 本次 main 安装速度优化（仍为 0.2.5，不发新版）
 
-从 [v0.2.5 Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.5) 下载 VPS 包和 `SHA256SUMS`。可选用完整 ZIP，但不要把 GitHub 自动生成的纯源码包当作预编译包：
+- Dockerfile 将固定核心准备层放到主程序复制之前，程序版本变化时不必无谓重新下载核心。
+- 默认构建不再每次强制 `--pull`；依赖和基础镜像可复用 Docker 本地层缓存。
+- 输入指纹相同且已存在已标记镜像时，`up` / `start` / `update` 直接复用，跳过镜像构建和基础镜像网络检查。指纹验证架构、程序 SHA256 和镜像运行文件，不把密码、节点数据、`.env` 或 README 纳入镜像。
+- 启动使用 `--no-build --pull never`，避免 Compose 再次构建 / 拉取。健康检查间隔从 30 秒改为 10 秒，减少启动等待。
+- **首次仍需下载依赖和构建镜像，速度取决于网络及 VPS 性能，不承诺固定秒数。** 本次不发布预构建镜像，也不新增 Release 附件。
+
+**适用范围：**这些优化随 `main` 源码更新；现有 v0.2.5 Release 附件及短入口所下载的旧附件保持不变，不会被悄悄替换。要立即使用 main 优化，可在新目录获取源码：
 
 ```bash
-grep '  miku-gate-vps-v0.2.5.tar.gz$' SHA256SUMS | sha256sum -c -
-sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.5.tar.gz
-cd miku-gate
-sudo bash install.sh --docker
-cd /opt/miku-gate-docker
-sudo bash install-docker.sh info
+git clone --depth 1 https://github.com/vioIetMiku/miku-gate.git miku-gate-main
+cd miku-gate-main
+sudo bash install-docker.sh up
 ```
 
-Docker 服务默认从 `8899` 启动；若冲突，在项目目录 `.env` 设置 `WEB_PORT` 后重建。host 网络不使用 `ports:` 映射，请在安全组放行实际管理端口与节点端口。无预编译文件的 Git 源码目录请使用 `sudo bash install-docker.sh up`，脚本自动选择源码构建。
+首次源码构建会在容器内编译 Go；已有 Docker 部署升级请先备份，将 main 的部署文件与源码更新到原项目目录，保留 `.env`、`docker-data`、`docker-certs`、`docker-backups`，不要另开第二套服务。
 
-### Docker 运维
-
-以下命令都在 `/opt/miku-gate-docker` 执行，或在你直接运行 Compose 的项目目录执行：
+### 运维、备份和强制刷新
 
 ```bash
+cd /opt/miku-gate-docker  # 或你实际使用的源码部署目录
 sudo bash install-docker.sh info
 sudo bash install-docker.sh quick --no-domain --background
 sudo bash install-docker.sh sub
-sudo bash install-docker.sh password
-sudo bash install-docker.sh logs
 sudo bash install-docker.sh backup
+sudo bash install-docker.sh update
 sudo bash install-docker.sh stop
 sudo bash install-docker.sh start
-sudo bash install-docker.sh down   # 移除容器，保留数据目录
 ```
 
-- `docker-data/` 保存登录凭据、节点、配置、核心与入口证书；`docker-certs/etc/` 和 `docker-certs/lib/` 保存 Certbot 记录；`docker-backups/` 保存权限为 `600` 的敏感备份，请另存一份。
-- 升级前备份，将经过验证的新版本程序及部署文件更新到同一目录，**保留 `.env` 与上述数据目录**，再运行 `sudo bash install-docker.sh update`。`update` 仅重建当前目录内容，不会自行下载新版本。
-- Docker 不使用宿主机 `miku update` / `miku backup`。管理域名与证书在网页配置；容器没有 systemd 续期 timer，暂需在证书到期前网页重新签发，或用宿主机续期流程更新挂载证书后在网页应用。
-- 修改 `.env` 后运行 `start` 触发配置重建；`restart` 只重启已有容器，不重新读取环境变量。
+需要获取基础镜像和依赖的安全更新时，显式忽略缓存重新构建（较慢）：
 
-完整参数、证书、备份恢复和限制见 **[Docker 部署指南](docs/DOCKER.md)**。
+```bash
+sudo env MIKU_DOCKER_REFRESH=1 bash install-docker.sh update
+```
+
+更新代码不等于自动下载依赖安全更新；默认缓存复用是为了速度，定期刷新由管理员决定。Docker 暂无后台自动续证，证书需网页重新签发或由宿主机续期流程更新后应用。完整流程见 **[Docker 指南](docs/DOCKER.md)**。
 
 ##  一般安装
 
@@ -300,7 +308,7 @@ go test -race -c -o /tmp/miku-gate-tests ./src
 sudo /tmp/miku-gate-tests -test.count=1 -test.timeout=5m
 go vet ./...
 (cd compat/miku-export && go test ./... && go vet ./...)
-(cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_docker)
+(cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_docker test_build_key)
 python3 scripts/build-release.py --version 0.2.0 --label v0.2.5 --output dist
 ```
 

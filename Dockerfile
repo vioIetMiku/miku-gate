@@ -16,6 +16,9 @@ COPY docker/entrypoint.sh /usr/local/bin/miku-entrypoint
 RUN chmod 600 CORE_ASSETS.json \
     && chmod 755 /usr/local/bin/miku /usr/local/bin/miku-entrypoint
 
+# Seed pinned cores before the application binary: version-only updates reuse this layer.
+RUN python3 -B container.py seed-cores
+
 # Release ZIP/tar bundles already contain both architectures; no Go is needed.
 FROM runtime AS prebuilt
 ARG TARGETARCH
@@ -41,12 +44,12 @@ RUN test "$TARGETOS" = linux \
 FROM ${MIKU_BINARY_SOURCE} AS selected
 
 FROM runtime AS final
+ARG MIKU_BUILD_KEY=unknown
+LABEL io.github.mikugate.build-key=$MIKU_BUILD_KEY
 COPY --from=selected /out/miku ./miku
-# Download and verify the pinned official cores while building the image.
-# They are copied into the persistent data directory only when absent.
-RUN python3 -B container.py seed-cores
+# Pinned cores are already in the runtime image and copied to data only when absent.
 STOPSIGNAL SIGTERM
-HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=10s --start-period=45s --retries=3 \
     CMD ["python3", "-B", "/usr/local/lib/miku/container.py", "healthcheck"]
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/miku-entrypoint"]
 CMD ["serve"]

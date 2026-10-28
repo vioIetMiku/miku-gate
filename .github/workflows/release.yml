@@ -42,7 +42,7 @@ jobs:
           go vet ./...
           (cd compat/miku-export && go test ./... && go vet ./...)
       - name: Offline installer regression tests
-        run: cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_docker
+        run: cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_docker test_build_key
       - name: Check Go formatting
         run: test -z "$(gofmt -l src)"
       - uses: actions/setup-node@v4

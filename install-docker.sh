@@ -9,7 +9,7 @@ if (($#)); then shift; fi
 case "$action" in
   -h|--help|help)
     echo '用法：bash install-docker.sh [up|build|info|quick [参数]|sub|password|status|logs|start|stop|restart|backup|update|down]'
-    echo '默认 up：构建镜像并后台启动；要求 Linux、Docker Engine、Compose v2 和 TUN。'
+    echo '默认 up：优先复用输入相同的本地镜像；首次构建后后台启动；要求 Linux、Docker Engine、Compose v2 和 TUN。'
     exit 0 ;;
   up|build|info|quick|sub|password|status|logs|start|stop|restart|backup|update|down) ;;
   *) echo "未知命令：$action" >&2; exit 2 ;;
@@ -29,6 +29,29 @@ case "${MIKU_BINARY_SOURCE:-prebuilt}" in prebuilt|source) ;; *) echo 'MIKU_BINA
 compose=(docker compose --project-directory "$MIKU_DOCKER_DIR" -f "$MIKU_DOCKER_DIR/compose.yaml")
 "${compose[@]}" config --quiet
 
+prepare_image() {
+  local force="${1:-0}" cached='' arch=''
+  export MIKU_BUILD_KEY=unknown
+  if command -v python3 >/dev/null 2>&1 && [[ -f docker/build-key.py ]]; then
+    case "$(docker info --format '{{.Architecture}}')" in
+      x86_64|amd64) arch=amd64 ;;
+      aarch64|arm64) arch=arm64 ;;
+      *) echo '仅支持 amd64 / arm64' >&2; return 2 ;;
+    esac
+    MIKU_BUILD_KEY=$(python3 -B docker/build-key.py "$MIKU_DOCKER_DIR" "$arch" "${MIKU_BINARY_SOURCE:-prebuilt}")
+    cached=$(docker image inspect --format '{{index .Config.Labels "io.github.mikugate.build-key"}}' miku-gate:local 2>/dev/null || true)
+    if [[ "$force" == 0 && "${MIKU_DOCKER_REFRESH:-0}" != 1 && "$cached" == "$MIKU_BUILD_KEY" ]]; then
+      echo '构建输入未变化，复用本地镜像；跳过构建和远程基础镜像检查。'
+      return
+    fi
+  fi
+  if [[ "${MIKU_DOCKER_REFRESH:-0}" == 1 ]]; then
+    "${compose[@]}" build --pull --no-cache
+  else
+    "${compose[@]}" build
+  fi
+}
+
 runtime_check() {
   [[ -c /dev/net/tun ]] || { echo '宿主机缺少 /dev/net/tun；请先在 VPS 面板启用 TUN（可尝试 sudo modprobe tun）。' >&2; exit 1; }
   mkdir -p docker-data docker-certs/etc docker-certs/lib docker-backups
@@ -42,13 +65,14 @@ show_info() {
 case "$action" in
   up|update)
     runtime_check
-    "${compose[@]}" build --pull
-    "${compose[@]}" up -d --wait --wait-timeout 180
+    prepare_image
+    "${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 180
     show_info ;;
-  build) "${compose[@]}" build --pull ;;
+  build) prepare_image 1 ;;
   start)
     runtime_check
-    "${compose[@]}" up -d --wait --wait-timeout 180
+    prepare_image
+    "${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 180
     show_info ;;
   restart)
     runtime_check

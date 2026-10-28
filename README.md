@@ -1,6 +1,6 @@
 # Miku Gate
 
-**当前正式版：`v0.2.4`**，基于本地改进版 dev41 / v0.2.4。普通新建也按目标数量竞发，增加连接恢复宽限与保活策略。
+**当前正式版：`v0.2.5`**。新增 Linux Docker / Compose 部署，保留原生 VPS 安装、终端一键配置和 v0.2.4 的连接恢复策略。
 
 ## VPN Gate 是什么？
 
@@ -25,24 +25,24 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
 
 <p align="center">
   <a href="https://github.com/vioIetMiku/miku-gate/releases/latest">下载正式版</a> ·
-  <a href="#vps-一键安装">VPS 一键安装</a> ·
+  <a href="#docker-部署">Docker 部署</a> ·
+  <a href="#vps-一键安装">VPS 原生安装</a> ·
   <a href="#第一次使用">第一次使用</a> ·
   <a href="CHANGELOG.md">更新记录</a>
 </p>
 
-**当前正式版：`v0.2.4`**，基于 `dev41`。支持 Linux **amd64 / arm64**，管理界面支持白天 / 夜间主题、移动端布局和展示 / 管理模式，新增终端一键配置。安装包已经编译，**VPS 不需要 Go**。
+支持 Linux **amd64 / arm64**，管理界面支持白天 / 夜间主题、移动端布局和展示 / 管理模式，新增终端一键配置。安装包已经编译，**VPS 不需要 Go**。
 
-> 升级提醒：`v0.2.4` 使用基于 fanout 的单页架构。旧版任务、远程 Agent、多账号和高级记录不会完整迁移；安装器仅迁移已识别旧安装的可用入口、普通 OpenVPN 出口及相关凭据，升级前请备份。不要将“正式 Release”理解为对所有 VPS、面板与 VPN Gate 节点均已完成实机验证。
+> 升级提醒：`v0.2.5` 使用基于 fanout 的单页架构。旧版任务、远程 Agent、多账号和高级记录不会完整迁移；安装器仅迁移已识别旧安装的可用入口、普通 OpenVPN 出口及相关凭据，升级前请备份。不要将“正式 Release”理解为对所有 VPS、面板与 VPN Gate 节点均已完成实机验证。
 
-## v0.2.4 更新重点
+## v0.2.5 更新重点
 
-- 新增自解压安装文件 **`miku`**，上传 VPS 后运行 `sudo bash miku`；包含两种架构，无需先安装 Go。原在线安装脚本继续保留。
-- 终端 `miku quick` 和网页一键配置共用后台任务，目标为日本 **5**、韩国 **3**、美国 **3** 个就绪出口；默认计划最多同时竞争 **33** 个候选，遵守实际槽位上限，失败自动轮换、刷新来源并补齐。
-- 节点来源、核心与证书并行准备；管理页面和旧隧道恢复不再等待慢来源。候选未就绪前不进入订阅、展示卡片或重启恢复。
-- `miku sub` 输出通用 Base64、V2Ray/v2rayN、Clash/Mihomo、sing-box 和明文链接五种订阅与可用节点。终端默认静默等待，Ctrl+C 输出当前结果但不取消后台补齐。
-- 页面重做欢迎区、真实连接统计、白天 / 夜间主题、节点卡片与 IP 详情；桌面双列，**620px 以下单列**。点击 IP 查询，主要操作为复制节点与切换，其他操作收进「代理与管理」。
-- 内置 SVG 国旗，默认按有效的近期 VPS 实测延迟排序，支持切回创建顺序；已完成任务默认折叠并记住展开状态。
-- 一键节点域名切换或改回 REALITY 时保留原有自动入口的端口与凭据；管理域名仍单独通过 `miku domain` 管理。
+- 新增 Dockerfile、Compose、独立容器启动与维护工具，支持完整包的预编译程序和源码构建两种方式。
+- 原短入口增加 `--docker`，部署文件保存到 `/opt/miku-gate-docker`，不依赖安装器临时目录，也不安装原生 systemd 服务。
+- 容器直接在 tini 下运行主程序，持久化登录口令、随机路径、节点、核心、证书及 Certbot 数据，提供健康检查和停机一致性备份。
+- 保留 amd64 / arm64 原生 VPS 安装及 `miku quick` / `miku sub`；Docker 模式用独立维护命令管理生命周期。
+- Docker 使用 **host 网络 + privileged + TUN**，不是普通低权限容器；仅用于自己控制的 Linux VPS。Docker 模式暂不提供后台自动续证，请按下文管理证书。
+
 
 ## 主要功能
 
@@ -57,6 +57,7 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
 | 出口信息 | 国家、地区、ASN、归属商、IP 类型与来源说明；住宅属性是规则推断，不是认证 |
 | 连通与延迟 | 有界并发健康检查、同国家换线与地域 / ASN 偏好；30 秒刷新限频和断线稳定性提示 |
 | 一键配置与 CLI | `miku quick` 后台持续补齐日本 5 / 韩国 3 / 美国 3；`miku sub` 输出五种订阅与明文节点 |
+| Docker / Compose | Linux host 网络、特权与 TUN；持久化、健康检查、备份和重建更新，见 [部署指南](docs/DOCKER.md) |
 | 日常运维 | 随机管理路径、登录口令、域名 / 证书管理、备份、更新、修复与旧版回滚 |
 
 ## 一行安装：`mikugate.sh`
@@ -66,6 +67,58 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mi
 ```
 
 短入口下载当前 Latest 正式版安装器；正式安装器继续负责 Release 选择、SHA256、BUILD 清单、权限和路径校验。也可传入 `--quick`、`--panel`、`--domain`、`--no-domain` 和 `--background` 参数。
+
+## Docker 部署
+
+> **权限与共存限制：**需要 Linux、rootful Docker Engine、Compose v2 和 `/dev/net/tun`。本项目使用 `network_mode: host` 与 `privileged: true` 来创建 netns / 配置 iptables，能够影响宿主机网络；不适用于 rootless Docker、Windows/macOS Desktop 或共享不可信宿主机。不要与同一 VPS 上的原生 Miku 服务同时运行，也不要直接挂载原生 `/var/lib/miku`。
+
+### 方式一：原短入口加 `--docker`
+
+先自行安装并启动 Docker Engine 与 Compose v2，在 VPS **root Bash** 中执行：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh) --docker
+```
+
+安装器会验证最新正式包，将 Docker 项目持久保存到 **`/opt/miku-gate-docker`**，再在本机构建镜像并后台启动。此流程不会自动安装 Docker，不会向镜像仓库发布或拉取名为 `miku-gate` 的预制项目镜像；基础镜像和固定版本 Xray / sing-box 仍需联网下载。
+
+### 方式二：下载完整包后部署
+
+从 [v0.2.5 Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.5) 下载 VPS 包和 `SHA256SUMS`。可选用完整 ZIP，但不要把 GitHub 自动生成的纯源码包当作预编译包：
+
+```bash
+grep '  miku-gate-vps-v0.2.5.tar.gz$' SHA256SUMS | sha256sum -c -
+sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.5.tar.gz
+cd miku-gate
+sudo bash install.sh --docker
+cd /opt/miku-gate-docker
+sudo bash install-docker.sh info
+```
+
+Docker 服务默认从 `8899` 启动；若冲突，在项目目录 `.env` 设置 `WEB_PORT` 后重建。host 网络不使用 `ports:` 映射，请在安全组放行实际管理端口与节点端口。无预编译文件的 Git 源码目录请使用 `sudo bash install-docker.sh up`，脚本自动选择源码构建。
+
+### Docker 运维
+
+以下命令都在 `/opt/miku-gate-docker` 执行，或在你直接运行 Compose 的项目目录执行：
+
+```bash
+sudo bash install-docker.sh info
+sudo bash install-docker.sh quick --no-domain --background
+sudo bash install-docker.sh sub
+sudo bash install-docker.sh password
+sudo bash install-docker.sh logs
+sudo bash install-docker.sh backup
+sudo bash install-docker.sh stop
+sudo bash install-docker.sh start
+sudo bash install-docker.sh down   # 移除容器，保留数据目录
+```
+
+- `docker-data/` 保存登录凭据、节点、配置、核心与入口证书；`docker-certs/etc/` 和 `docker-certs/lib/` 保存 Certbot 记录；`docker-backups/` 保存权限为 `600` 的敏感备份，请另存一份。
+- 升级前备份，将经过验证的新版本程序及部署文件更新到同一目录，**保留 `.env` 与上述数据目录**，再运行 `sudo bash install-docker.sh update`。`update` 仅重建当前目录内容，不会自行下载新版本。
+- Docker 不使用宿主机 `miku update` / `miku backup`。管理域名与证书在网页配置；容器没有 systemd 续期 timer，暂需在证书到期前网页重新签发，或用宿主机续期流程更新挂载证书后在网页应用。
+- 修改 `.env` 后运行 `start` 触发配置重建；`restart` 只重启已有容器，不重新读取环境变量。
+
+完整参数、证书、备份恢复和限制见 **[Docker 部署指南](docs/DOCKER.md)**。
 
 ## VPS 一键安装
 
@@ -78,7 +131,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mi
 
 ### 独立文件安装（推荐）
 
-从 [正式 Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.4) 下载 **`miku`** 和 `SHA256SUMS`，上传到 VPS 同一目录：
+从 [正式 Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.5) 下载 **`miku`** 和 `SHA256SUMS`，上传到 VPS 同一目录：
 
 ```bash
 grep '  miku$' SHA256SUMS | sha256sum -c -
@@ -120,31 +173,31 @@ bash -c 'set -e; d=$(mktemp -d); trap '\''rm -rf -- "$d"'\'' EXIT; curl --proto 
   curl --proto '=https' --tlsv1.2 -fsSL \
     -H "Authorization: Bearer $GITHUB_TOKEN" \
     -H 'Accept: application/vnd.github.raw+json' \
-    'https://api.github.com/repos/vioIetMiku/miku-gate/contents/install-online.sh?ref=v0.2.4' \
+    'https://api.github.com/repos/vioIetMiku/miku-gate/contents/install-online.sh?ref=v0.2.5' \
     -o "$d/install-online.sh"
   bash "$d/install-online.sh"
 )
 ```
 
-访问令牌仅用于读取当前仓库的 Release。自定义管理端口时，在执行脚本前设置 `export WEB_PORT=9900`；锁定版本使用 `export MIKU_VERSION=v0.2.4`。已经下载脚本时，也可先运行 `bash install-online.sh --download-only /root/miku-packages`，只下载并校验，不安装服务。
+访问令牌仅用于读取当前仓库的 Release。自定义管理端口时，在执行脚本前设置 `export WEB_PORT=9900`；锁定版本使用 `export MIKU_VERSION=v0.2.5`。已经下载脚本时，也可先运行 `bash install-online.sh --download-only /root/miku-packages`，只下载并校验，不安装服务。
 
 ### 手动安装 / 离线传包
 
-在 [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.4) 下载以下文件。私有仓库需要先登录 GitHub：
+在 [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.5) 下载以下文件。私有仓库需要先登录 GitHub：
 
 | 文件 | 用途 |
 | --- | --- |
 | `miku` | 自解压安装文件，含双架构程序；`sudo bash miku` 即可安装，`bash miku --verify` 只校验 |
-| `miku-gate-vps-v0.2.4.tar.gz` | VPS 通用安装包，包含两种架构的主程序、旧版导出程序与维护工具 |
-| `miku-gate-v0.2.4.zip` | 完整源码 + 两种架构安装二进制；不是 GitHub 自动生成的纯源码压缩包 |
+| `miku-gate-vps-v0.2.5.tar.gz` | VPS 通用安装包，包含两种架构的主程序、旧版导出程序与维护工具 |
+| `miku-gate-v0.2.5.zip` | 完整源码 + 两种架构安装二进制；不是 GitHub 自动生成的纯源码压缩包 |
 | `install-online.sh` | 最新正式版在线安装入口 |
 | `SHA256SUMS` | 上述四个附件的 SHA256 校验清单 |
 
 将 VPS 包和校验文件放到同一目录后运行：
 
 ```bash
-grep '  miku-gate-vps-v0.2.4.tar.gz$' SHA256SUMS | sha256sum -c -
-sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.4.tar.gz
+grep '  miku-gate-vps-v0.2.5.tar.gz$' SHA256SUMS | sha256sum -c -
+sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.5.tar.gz
 sudo bash miku-gate/install.sh
 ```
 
@@ -209,7 +262,7 @@ miku stop
 miku restart
 miku logs
 miku backup          # 停机一致性备份；完成后恢复原运行状态
-miku update /root/miku-gate-vps-v0.2.4.tar.gz
+miku update /root/miku-gate-vps-v0.2.5.tar.gz
 miku rollback        # 仅用于已登记的旧架构迁移，恢复切换前配套快照
 miku uninstall       # 停止并取消自启，保留程序、数据与备份
 # 以下为破坏性操作，先将备份复制到 /var/lib/miku 之外：
@@ -248,8 +301,8 @@ go test -race -c -o /tmp/miku-gate-tests ./src
 sudo /tmp/miku-gate-tests -test.count=1 -test.timeout=5m
 go vet ./...
 (cd compat/miku-export && go test ./... && go vet ./...)
-(cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap test_quick)
-python3 scripts/build-release.py --version 0.2.0 --label v0.2.4 --output dist
+(cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_docker)
+python3 scripts/build-release.py --version 0.2.0 --label v0.2.5 --output dist
 ```
 
 构建脚本从源码重新编译两种架构的主程序和兼容导出程序，生成 VPS 包、完整 ZIP、在线安装脚本、`BUILD.json`、自解压 `miku` 与 `SHA256SUMS`。Git 标签 `vX.Y.Z` 触发自动检查、构建及正式发布；检查失败不会发布正式 Release。

@@ -17,8 +17,16 @@ import zipfile
 ROOT=Path(__file__).resolve().parents[1]
 UPSTREAM='d7ce5224caf3469b19876982abdf8d1be16c4a8b'
 
+def source_file(path):
+    relative=path.relative_to(ROOT)
+    excluded=('.git','bin','dist','__pycache__','docker-data','docker-certs','docker-backups')
+    return (path.is_file() and not any(part in excluded for part in relative.parts)
+            and path.suffix not in ('.zip','.gz','.pyc')
+            and relative.as_posix()!='BUILD.json'
+            and not (path.name.startswith('.env') and path.name!='.env.example'))
+
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.4');parser.add_argument('--label',default='v0.2.4');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.5');parser.add_argument('--label',default='v0.2.5');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',args.version) or not re.fullmatch(r'[A-Za-z0-9_.-]+',args.label):raise ValueError('invalid version/label')
     args.output=args.output.resolve()
     args.output.mkdir(parents=True,exist_ok=True)
@@ -30,18 +38,22 @@ def main():
         digest=hashlib.sha256()
         for path in sorted(ROOT.rglob('*')):
             relative=path.relative_to(ROOT)
-            if not path.is_file() or any(part in ('.git','bin','dist','__pycache__') for part in relative.parts) or path.suffix in ('.zip','.gz','.pyc') or relative.as_posix()=='BUILD.json':continue
+            if not source_file(path):continue
             digest.update(relative.as_posix().encode()+b'\0'+path.read_bytes()+b'\0')
         source='archive-sha256:'+digest.hexdigest()
     with tempfile.TemporaryDirectory(prefix='miku-release-',dir=args.output) as temporary:
         stage=Path(temporary)/'miku-gate';(stage/'bin').mkdir(parents=True);(stage/'scripts').mkdir()
-        for name in ('install.sh','install-online.sh','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','FLAG_ICONS_LICENSE','CORE_ASSETS.json'):
+        for name in ('install.sh','install-online.sh','mikugate.sh','install-docker.sh','Dockerfile','compose.yaml','.dockerignore','.env.example','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','FLAG_ICONS_LICENSE','CORE_ASSETS.json'):
             shutil.copy2(ROOT/name,stage/name)
         for name in ('common.py','install.py','maintain.py','quick.py','miku.sh'):
             shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
         (stage/'docs').mkdir()
         shutil.copyfile(ROOT/'docs/DEV_HISTORY.md',stage/'docs/DEV_HISTORY.md')
         if (ROOT/'docs/CONNECTION_POLICY.md').exists():shutil.copyfile(ROOT/'docs/CONNECTION_POLICY.md',stage/'docs/CONNECTION_POLICY.md')
+        shutil.copyfile(ROOT/'docs/DOCKER.md',stage/'docs/DOCKER.md')
+        (stage/'docker').mkdir()
+        for name in ('container.py','stage.py','entrypoint.sh','miku.sh'):
+            shutil.copyfile(ROOT/'docker'/name,stage/'docker'/name)
         (stage/'src/assets').mkdir(parents=True)
         shutil.copyfile(ROOT/'src/assets/miku-hero-v1.png',stage/'src/assets/miku-hero-v1.png')
         shutil.copyfile(ROOT/'src/assets/miku-mark.svg',stage/'src/assets/miku-mark.svg')
@@ -121,7 +133,7 @@ __MIKU_ARCHIVE_BELOW__
         source_files=[]
         for path in sorted(ROOT.rglob('*')):
             relative=path.relative_to(ROOT)
-            if not path.is_file() or any(part in ('.git','bin','dist','__pycache__') for part in relative.parts) or path.suffix in ('.zip','.gz','.pyc') or relative.as_posix()=='BUILD.json':continue
+            if not source_file(path):continue
             destination=source_stage/relative;destination.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(path,destination)
             destination.chmod(0o755 if path.suffix=='.sh' else 0o644);source_files.append(relative.as_posix())
         (source_stage/'bin').mkdir()

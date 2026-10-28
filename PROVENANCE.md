@@ -76,3 +76,7 @@ dev41 独立实现简洁终端结果输出、共用居中内容框架、Miku 欢
 ## v0.2.4
 
 本版把本地连接策略改进正式发布：竞发候选、OpenVPN 保活策略、软恢复宽限、健康检查回退及候选清理。连接策略文档和测试随源码分发；Miku Gate 品牌、短入口、独立 miku 安装文件、国旗许可证和上游 fanout 署名保持不变。
+
+## v0.2.5 Docker 部署
+
+基于用户提供的 miku-gate-v0.2.4-docker(1).zip 引入 Dockerfile、Compose、容器初始化 / CLI / staging 与离线测试，应用 Go 源码沿用 v0.2.4。新版本为 v0.2.5，不修改原有标签。保留原生 VPS 流程与原许可证；文档明示 Linux rootful Docker、host 网络、privileged 和 TUN 要求，Docker 不运行原生 systemd 续期 timer。正式构建从源码重建两种架构，打包排除 Docker 数据、私钥、环境配置和备份。

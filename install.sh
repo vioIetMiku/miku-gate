@@ -13,4 +13,10 @@ if ! command -v python3 >/dev/null 2>&1; then
   else echo '未找到包管理器，需先安装 python3'; exit 1; fi
 fi
 MIKU_PACKAGE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+if [[ "${1:-}" == --docker ]]; then
+  shift
+  MIKU_DOCKER_PROJECT_DIR="${MIKU_DOCKER_INSTALL_DIR:-/opt/miku-gate-docker}"
+  python3 -B "${MIKU_PACKAGE_DIR}/docker/stage.py" "${MIKU_PACKAGE_DIR}" "${MIKU_DOCKER_PROJECT_DIR}"
+  exec bash "${MIKU_DOCKER_PROJECT_DIR}/install-docker.sh" "$@"
+fi
 exec python3 -B "${MIKU_PACKAGE_DIR}/scripts/install.py" --directory "${MIKU_PACKAGE_DIR}" "$@"

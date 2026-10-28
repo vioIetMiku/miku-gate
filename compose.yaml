@@ -1,0 +1,30 @@
+name: miku-gate
+services:
+  miku:
+    image: miku-gate:local
+    build:
+      context: .
+      args:
+        MIKU_BINARY_SOURCE: ${MIKU_BINARY_SOURCE:-prebuilt}
+    restart: unless-stopped
+    network_mode: host
+    # ip netns needs mount/setns permissions as well as NET_ADMIN and TUN.
+    privileged: true
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      # Empty preserves a saved port; a fresh installation defaults to 8899.
+      WEB_PORT: ${WEB_PORT:-}
+      MIKU_PUBLIC_IP: ${MIKU_PUBLIC_IP:-}
+      MIKU_MAX_SLOTS: ${MIKU_MAX_SLOTS:-0}
+    volumes:
+      - ./docker-data:/var/lib/miku
+      - ./docker-certs/etc:/etc/letsencrypt
+      - ./docker-certs/lib:/var/lib/letsencrypt
+      - ./docker-backups:/backups
+    stop_grace_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

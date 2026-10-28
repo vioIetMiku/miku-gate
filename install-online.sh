@@ -3,8 +3,8 @@
 set -euo pipefail
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   printf '%s\n' 'Miku Gate VPS installer (Linux amd64/arm64, root).' \
-    'Usage: bash install-online.sh [--panel | --quick] [--domain HOST | --no-domain] [--background] [--download-only DIRECTORY]' \
-    'Environment: MIKU_VERSION=v0.2.4 (default: latest stable), GITHUB_TOKEN (private repository), WEB_PORT (default: 8899).'
+    'Usage: bash install-online.sh [--panel | --quick | --docker] [--domain HOST | --no-domain] [--background] [--download-only DIRECTORY]' \
+    'Environment: MIKU_VERSION=v0.2.5 (default: latest stable), GITHUB_TOKEN (private repository), WEB_PORT (default: 8899), MIKU_DOCKER_INSTALL_DIR (default: /opt/miku-gate-docker).'
   exit 0
 fi
 [[ "$(uname -s)" == Linux ]] || { echo '仅支持 Linux VPS。' >&2; exit 1; }
@@ -64,7 +64,7 @@ def fetch(url, limit, binary=False):
 
 def stable_release(version):
     if version != 'latest' and not re.fullmatch(r'v\d+\.\d+\.\d+', version):
-        raise RuntimeError('MIKU_VERSION 只能是 latest 或正式版本标签，例如 v0.2.4')
+        raise RuntimeError('MIKU_VERSION 只能是 latest 或正式版本标签，例如 v0.2.5')
     endpoint = '/releases/latest' if version == 'latest' else '/releases/tags/' + version
     release = json.loads(fetch(API + endpoint, 4 << 20))
     if release.get('draft') or release.get('prerelease') or not re.fullmatch(r'v\d+\.\d+\.\d+', release.get('tag_name', '')):
@@ -144,15 +144,16 @@ def main():
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--quick', action='store_true')
     modes.add_argument('--panel', action='store_true')
+    modes.add_argument('--docker', action='store_true', help='部署到固定目录并使用 Docker Compose')
     domain = parser.add_mutually_exclusive_group()
     domain.add_argument('--domain')
     domain.add_argument('--no-domain', action='store_true')
     parser.add_argument('--background', action='store_true')
     args = parser.parse_args()
-    if args.panel and (args.domain is not None or args.no_domain or args.background):
-        parser.error('--panel 不能与节点一键配置参数同时使用')
+    if (args.panel or args.docker) and (args.domain is not None or args.no_domain or args.background):
+        parser.error('--panel / --docker 不能与节点一键配置参数同时使用；Docker 安装后再运行 quick')
     install_args = []
-    for option in ('quick', 'panel', 'no_domain', 'background'):
+    for option in ('quick', 'panel', 'docker', 'no_domain', 'background'):
         if getattr(args, option):
             install_args.append('--' + option.replace('_', '-'))
     if args.domain is not None:

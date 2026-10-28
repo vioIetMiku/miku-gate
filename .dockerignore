@@ -1,0 +1,16 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+__pycache__
+**/__pycache__
+*.pyc
+dist
+upload
+docker-data
+docker-certs
+docker-backups
+*.tar.gz
+*.zip
+*.log

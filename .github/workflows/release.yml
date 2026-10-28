@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -33,7 +33,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Check shell and Python syntax
         run: |
-          for script in install.sh install-online.sh install-docker.sh scripts/miku.sh docker/*.sh; do bash -n "$script"; done
+          for script in install.sh install-online.sh install-docker.sh mikugate.sh scripts/miku.sh scripts/test-docker-smoke.sh docker/*.sh; do bash -n "$script"; done
           python3 -m compileall -q scripts docker
       - name: Offline Go regression tests and vet
         run: |
@@ -42,7 +42,11 @@ jobs:
           go vet ./...
           (cd compat/miku-export && go test ./... && go vet ./...)
       - name: Offline installer regression tests
-        run: cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_docker test_build_key
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends nginx
+          cd scripts
+          sudo env MIKU_NGINX=/usr/sbin/nginx python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_ports test_docker test_frontend test_frontend_lifecycle test_build_key
       - name: Check Go formatting
         run: test -z "$(gofmt -l src)"
       - uses: actions/setup-node@v4
@@ -53,6 +57,8 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/miku-ui" --ignore-scripts --no-audit --no-fund jsdom@26.1.0
           MIKU_UI_OUTPUT="$RUNNER_TEMP/miku-ui-fixture" go test ./src -run '^TestPanelBrowserFixture$' -count=1
           MIKU_JSDOM_MODULE="$RUNNER_TEMP/miku-ui/node_modules/jsdom" node scripts/test-ui.cjs "$RUNNER_TEMP/miku-ui-fixture/index.html"
+          python3 -B scripts/export-frontend.py
+          MIKU_JSDOM_MODULE="$RUNNER_TEMP/miku-ui/node_modules/jsdom" node scripts/test-ui.cjs frontend/public/index.html
       - name: Build both architectures from source
         run: python3 scripts/build-release.py --version '${{ steps.version.outputs.version }}' --label 'v${{ steps.version.outputs.version }}' --output dist
       - name: Verify release archives and embedded version
@@ -65,10 +71,55 @@ jobs:
           tar --no-same-owner -xzf "dist/miku-gate-vps-v${{ steps.version.outputs.version }}.tar.gz" -C smoke
           [[ "$(smoke/miku-gate/bin/miku-linux-amd64 -version)" == 'Miku Gate ${{ steps.version.outputs.version }}' ]]
           python3 -m zipfile -t "dist/miku-gate-v${{ steps.version.outputs.version }}.zip"
-      - name: Docker image and lifecycle integration tests (Linux amd64)
+      - name: Docker build, startup and persistent credentials smoke test
         shell: bash
         working-directory: smoke/miku-gate
-        run: bash "$GITHUB_WORKSPACE/scripts/test-docker-smoke.sh"
+        run: |
+          set -euo pipefail
+          [[ -c /dev/net/tun ]] || sudo modprobe tun
+          docker compose config --quiet
+          bash install-docker.sh build
+          trap 'docker compose logs --tail=80 miku; docker compose -f compose.frontend.yaml down; docker compose down; kill "$busy_ports_pid" 2>/dev/null || true' EXIT
+          # Both default ports are intentionally busy: startup must auto-fallback.
+          python3 -u -c 'import socket,time; holders=[]; [(holders.append(socket.socket()), holders[-1].bind(("0.0.0.0", port)), holders[-1].listen()) for port in (8899,8900)]; print("ports held",flush=True); time.sleep(900)' > "$RUNNER_TEMP/miku-busy-ports.log" 2>&1 &
+          busy_ports_pid=$!
+          sleep 1
+          kill -0 "$busy_ports_pid"
+          backend_info=$(bash install-docker.sh backend up)
+          [[ "$backend_info" == *'复用本地镜像'* ]]
+          unset backend_info
+          docker compose exec -T miku miku status
+          before=$(docker compose exec -T miku sha256sum /var/lib/miku/password /var/lib/miku/basepath)
+          docker compose stop miku
+          docker compose up -d --force-recreate --wait --wait-timeout 180
+          after=$(docker compose exec -T miku sha256sum /var/lib/miku/password /var/lib/miku/basepath)
+          [[ "$before" == "$after" ]]
+          sudo python3 -B scripts/frontend.py start
+          base=$(sudo cat docker-data/basepath)
+          port=$(sudo python3 -c 'import json; print(json.load(open("frontend/.runtime/state.json"))["port"])')
+          backend_port=$(sudo python3 -c 'import json; print(json.load(open("docker-data/settings.json"))["port"])')
+          [[ "$port" != 8900 && "$port" != 8899 && "$port" != "$backend_port" ]]
+          [[ "$backend_port" != 8899 && "$backend_port" != 8900 ]]
+          frontend="http://127.0.0.1:$port/$base/"
+          curl -fsS "$frontend" -o "$RUNNER_TEMP/frontend-login.html"
+          grep -q 'static/login-2.js' "$RUNNER_TEMP/frontend-login.html"
+          [[ "$(curl -s -o /dev/null -w '%{http_code}' "${frontend}api/jobs")" == 401 ]]
+          password=$(sudo cat docker-data/password)
+          printf '%s' "$password" | curl -fsS -c "$RUNNER_TEMP/frontend.cookies" --data-urlencode password@- "${frontend}login"
+          unset password
+          curl -fsS -b "$RUNNER_TEMP/frontend.cookies" "$frontend" -o "$RUNNER_TEMP/frontend-index.html"
+          grep -q 'static/index-2.js' "$RUNNER_TEMP/frontend-index.html"
+          curl -fsS -b "$RUNNER_TEMP/frontend.cookies" "${frontend}api/jobs" -o "$RUNNER_TEMP/frontend-jobs.json"
+          python3 -c 'import json,sys; assert isinstance(json.load(open(sys.argv[1])), list)' "$RUNNER_TEMP/frontend-jobs.json"
+          [[ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Origin: https://untrusted.example' -X POST "${frontend}login")" == 403 ]]
+          config_before=$(sudo sha256sum frontend/.runtime/nginx.conf)
+          sudo python3 -B scripts/frontend.py start
+          [[ "$config_before" == "$(sudo sha256sum frontend/.runtime/nginx.conf)" ]]
+          sudo python3 -B scripts/frontend.py stop
+          docker compose exec -T miku miku status
+          curl -fsS -b "$RUNNER_TEMP/frontend.cookies" "http://127.0.0.1:$backend_port/$base/api/jobs" -o /dev/null
+          sudo python3 -B scripts/frontend.py start
+          sudo python3 -B scripts/frontend.py info
       - uses: actions/upload-artifact@v4
         with:
           name: miku-gate-release
@@ -78,7 +129,7 @@ jobs:
   publish:
     if: startsWith(github.ref, 'refs/tags/')
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -104,5 +155,5 @@ jobs:
           mkdir verify
           gh release download "$tag" --dir verify --pattern '*'
           (cd verify && sha256sum -c SHA256SUMS)
-          [[ "$(find verify -maxdepth 1 -type f | wc -l)" -eq 5 ]]
+          [[ "$(find verify -maxdepth 1 -type f | wc -l)" -eq 6 ]]
           gh release edit "$tag" --draft=false --prerelease=false --latest --title "Miku Gate $tag" --notes-file scripts/release-notes.md

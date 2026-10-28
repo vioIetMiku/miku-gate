@@ -1,28 +1,24 @@
-# Docker 安装
+# Docker 安装（v0.2.6）
+
+当前默认独立前端 + 后端，端口冲突自动避让。完整同机 / 跨服务器 / HTTPS 操作以 [README](../README.md) 和 [前后端分离指南](FRONTEND.md) 为准。
+
+后端默认优先 8899，前端默认优先 8900，保存并输出真实端口，不再要求用户手改冲突端口。公开静态资源与后端数据完全分开；前端非特权，后端仍需 host 网络、privileged 和 TUN。
+
+
+Docker 默认启动独立 Nginx 前端与 Go 后端，前端和后端端口冲突均会自动避让。浏览器访问最后打印的独立前端地址。详细说明见 [前后端分离](FRONTEND.md)。
 
 此目录新增 Docker 部署方式，原来的 systemd / OpenRC 安装流程继续保留。Docker 不需要在宿主机安装 Go、OpenVPN 或 systemd 服务；运行依赖位于镜像中。
 
 ## 环境要求
 
 - Linux amd64 / arm64 VPS，安装 [Docker Engine](https://docs.docker.com/engine/install/) 和 [Docker Compose v2 插件](https://docs.docker.com/compose/install/linux/)，构建使用 BuildKit。
+- 宿主机 Python **3.10+**，用于安装、自动选端口和生成前端配置。以下管理命令在 root 终端运行，普通用户请加 `sudo`。
 - 使用 rootful Docker，当前账号能够运行 `docker info`；通常在 VPS 上使用 root 或 `sudo bash install-docker.sh`。
 - 宿主机提供字符设备 `/dev/net/tun`。缺少时先在服务商面板开启 TUN；支持的 VPS 上可尝试 `sudo modprobe tun`。
 - 可以访问 Docker 镜像仓库及 `CORE_ASSETS.json` 中固定版本的官方 Xray / sing-box 下载源；源码构建还需要 Go 模块下载源。镜像构建时校验核心的大小和 SHA256，失败会停止构建。
 - 在防火墙和 VPS 安全组放行管理端口，以及之后实际创建的入口 / 代理端口。
 
-Compose 使用 `network_mode: host` 和 `privileged: true`：程序需要创建 netns、挂载命名空间、调用 setns、配置 TUN、iptables 与 IPv4 转发。容器共享宿主机网络，不需要配置 `ports`。这些权限适用于自己管理的 VPS；rootless Docker、普通受限容器及 Docker Desktop 不作为支持环境。相关行为见 [Docker host 网络说明](https://docs.docker.com/engine/network/drivers/host/) 和 [Compose 服务配置](https://docs.docker.com/reference/compose-file/services/)。
-
-## 官方安装链接与 main 加速补充
-
-- [Docker Engine 总览](https://docs.docker.com/engine/install/)
-- [Ubuntu](https://docs.docker.com/engine/install/ubuntu/) / [Debian](https://docs.docker.com/engine/install/debian/)
-- [Compose v2 插件](https://docs.docker.com/compose/install/linux/)
-
-本次仅推送 main，仍为 0.2.5，不新建或替换任何 Release / 标签。旧附件和短入口下载的旧安装器不变；使用 main 源码或将新部署文件合并到已有项目后才应用以下优化。
-
-固定核心层前移；默认去掉强制基础镜像拉取，构建层和依赖缓存可复用。构建输入指纹相同的已标记本地镜像会直接复用，`up` / `start` / `update` 无需再运行镜像构建。启动使用 `--no-build --pull never`。首次仍需要联网安装依赖 / 构建，不提供预构建镜像。
-
-强制刷新基础镜像与 apt 依赖：`sudo env MIKU_DOCKER_REFRESH=1 bash install-docker.sh update`。此操作忽略缓存，更慢；建议管理员按安全更新需求执行。
+后端 Compose 使用 `network_mode: host` 和 `privileged: true`：程序需要创建 netns、挂载命名空间、调用 setns、配置 TUN、iptables 与 IPv4 转发。容器共享宿主机网络，不需要配置 `ports`。这些权限适用于自己管理的 VPS；rootless Docker、普通受限容器及 Docker Desktop 不作为支持环境。前端也使用 host 网络，但以非特权用户运行，移除所有 capabilities，只读挂载静态文件和生成配置，不挂载后端数据与 TUN。相关行为见 [Docker host 网络说明](https://docs.docker.com/engine/network/drivers/host/) 和 [Compose 服务配置](https://docs.docker.com/reference/compose-file/services/)。
 
 ## 新安装
 
@@ -47,9 +43,11 @@ cp -n .env.example .env
 bash install-docker.sh
 ```
 
-默认命令为 `up`：校验 Compose 配置，复用输入指纹相同的镜像或构建缺失镜像，再后台启动并等待健康检查。首次默认管理端口为 **8899**；被其他服务占用时会明确报错，请在 `.env` 中指定其他端口后重新运行。
+默认命令为 `up`：校验配置、构建镜像、启动后端并等待健康，再按后端实际参数启动前端，打印完整地址和口令。后端首次优先 **8899**，前端首次优先 **8900**；优先端口占用时自动选择可用端口并保存，后续留空优先沿用实际端口。显式端口也是优先值，冲突仍自动避让。请按最终输出放行防火墙及安全组。
 
-Docker 支持自 v0.2.5 正式发布。此前 v0.2.4 的旧附件不含 Docker 文件或 `--docker`，请使用 v0.2.5 及以后完整包，或当前 main 的短入口。
+仅后端部署使用 `sudo bash install.sh --docker --backend-only`，或当前目录运行 `bash install-docker.sh backend up`。后端仍提供兼容页面；这不会停止已存在的前端。
+
+此 Docker 补充为本地改进，尚未发布远程 Release；当前应使用随包文件，不能假定远程 Latest 已包含 `--docker`。
 
 附件的完整安装包包含 amd64 / arm64 预编译主程序，Dockerfile 按目标架构验证 `BUILD.json` 的 SHA256 后选取，不需要在 VPS 编译 Go。纯 Git 源码目录缺少 `bin/` 时，安装脚本自动选择镜像内源码构建；完整源码 ZIP 或 Git 目录也可显式执行以下命令（仅含预编译文件的 VPS tar.gz 不支持源码构建）：
 
@@ -57,11 +55,12 @@ Docker 支持自 v0.2.5 正式发布。此前 v0.2.4 的旧附件不含 Docker �
 MIKU_BINARY_SOURCE=source bash install-docker.sh up
 ```
 
-手动使用 Compose 时，源码目录需要设置 `MIKU_BINARY_SOURCE=source`；完整安装包直接执行：
+手动使用下面的 Compose 命令只管理后端，前端要额外运行启动器。源码目录需设置 `MIKU_BINARY_SOURCE=source`；完整安装包可执行：
 
 ```bash
 docker compose up -d --build --wait --wait-timeout 180
 docker compose exec miku miku info
+bash install-docker.sh frontend start
 ```
 
 镜像自带 tini 接收停止信号并回收子进程，服务直接运行；Compose 允许 90 秒清理 VPN / netns。默认 `unless-stopped` 重启策略使 Docker 守护进程重启后恢复服务，手动停止的容器继续保持停止状态。
@@ -72,12 +71,13 @@ docker compose exec miku miku info
 
 | 变量 | 默认行为 |
 | --- | --- |
-| `WEB_PORT` | 留空：首次 8899，后续沿用已保存的网页设置；填写 1024–65535：每次启动以此端口为准 |
+| `WEB_PORT` | 留空：优先已保存端口，首次尝试 8899；填写 1024–65535：优先尝试该端口；冲突自动避让并保存结果 |
+| `MIKU_FRONTEND_PORT` | 留空：优先已保存的实际端口，首次尝试 8900；填写值也是优先值，冲突自动避让 |
 | `MIKU_PUBLIC_IP` | 留空自动探测；指定时须为 VPS 公网 IPv4，用于节点分享地址 |
 | `MIKU_MAX_SLOTS` | `0`，不设置软件隧道数量上限；正整数设置上限 |
 | `MIKU_BINARY_SOURCE` | 完整包默认 `prebuilt`；可设 `source` 在镜像内编译 |
 
-修改 `.env` 后执行 `bash install-docker.sh start`，由 Compose 按配置重建容器。`restart` 只重启已有容器，不会读取变更后的环境变量。
+修改 `.env` 后执行 `bash install-docker.sh start`，由 Compose 按配置重建容器。`restart` 重启已有后端容器，再重新同步前端；不会给后端读取变更后的环境变量。前端独立变量可执行 `frontend restart` 应用。更多变量和 HTTPS 见 [FRONTEND.md](FRONTEND.md)。
 
 默认使用容器内自建 Xray / sing-box。宿主机上 3x-ui / S-UI / xray-cf-lite 的文件不挂入容器，不会自动接管宿主机面板。原生安装与 Docker 模式应分开部署：默认工作目录相同会生成相同的 netns 名，不要在同一 VPS 同时运行两种模式，也不要直接挂载原生 `/var/lib/miku` 来做迁移。
 
@@ -93,10 +93,15 @@ bash install-docker.sh sub
 bash install-docker.sh password
 bash install-docker.sh status
 bash install-docker.sh logs
+bash install-docker.sh frontend logs
+bash install-docker.sh frontend info
+bash install-docker.sh frontend restart
 bash install-docker.sh stop
 bash install-docker.sh start
 bash install-docker.sh restart
 ```
+
+`start` / `restart` / `update` 会在后端就绪后同步前端；`stop` / `down` 默认处理两端。加 `backend` 只操作后端，例如 `bash install-docker.sh backend stop`。前端单独停止不会影响运行中的节点。
 
 容器内 CLI 支持 `info`、`quick`、`sub`、`password`、`status`。进程启停、更新、日志与备份由宿主机脚本管理；原生安装的 `miku update / backup / domain` 维护命令不在容器内使用。管理域名和证书改用网页设置；签发证书仍需要公网 TCP 80。
 
@@ -112,12 +117,15 @@ bash install-docker.sh restart
 | `docker-certs/etc/` | `/etc/letsencrypt` | Certbot 账号、签发记录、证书与续期配置 |
 | `docker-certs/lib/` | `/var/lib/letsencrypt` | Certbot 工作数据 |
 | `docker-backups/` | `/backups` | 停机一致性备份 |
+| `frontend/.runtime/` | 前端 `/etc/miku` | 实际前端端口、访问地址和生成配置 |
 
 ```bash
 bash install-docker.sh backup
 ```
 
 备份先停止服务，归档数据和两个 Certbot 目录，完成或失败后恢复备份前的运行状态；备份前已停止则继续停止。生成的 `docker-backups/miku-docker-时间-进程号.tar.gz` 权限为 `600`，包含私钥和口令，请另存到安全位置。
+
+备份不包含 `.env` 和自定义前端文件，请另外保留。前端 `.runtime` 可以由启动器重新生成，无需跨服务器复制。
 
 恢复时在相同版本的完整安装包目录中停止服务，先将现有数据移到其他位置，再恢复三个归档目录。以下命令需要 root，`/安全位置/备份.tar.gz` 必须是自己生成且可信的备份：
 
@@ -147,14 +155,20 @@ bash install-docker.sh update
 bash install-docker.sh down
 ```
 
-`update` 根据当前目录的运行文件指纹复用或构建镜像并重建容器，不会自动下载新版本。镜像更新保留数据目录里已有的 Xray / sing-box，避免覆盖已配置的核心。不要通过网页的主程序更新功能管理 Docker 镜像版本；请使用此更新流程。
+`update` 根据当前目录的程序重新构建后端并同步前端，不会自动下载新版本。新安装包可在其解压目录再次运行 `sudo bash install.sh --docker`，更新固定部署目录中的程序文件并保留配置和数据。镜像更新保留数据目录里已有的 Xray / sing-box，避免覆盖已配置的核心。不要通过网页的主程序更新功能管理 Docker 镜像版本；请使用此更新流程。
 
-## main 优化的验证状态
+## 常见问题
 
-已完成离线输入指纹、缓存派发、Shell / Python 语法和模拟打包验证；该补丁的 Linux / Docker CI 尚待推送后执行，不能把此前 v0.2.5 的实机结果当作本次优化已验证。
+| 现象 | 处理 |
+| --- | --- |
+| 根路径返回 404 | 使用 `info` 输出的完整随机路径 |
+| 前端显示 502 | 检查 `backend status` / `logs`；后端端口、路径、TLS 改过后执行 `frontend restart` |
+| 登录 POST 返回 403 | 检查实际浏览器源与 `MIKU_FRONTEND_ORIGIN`，不要带路径；更新后执行 `frontend restart` |
+| 自动换端口后公网访问不了 | 用 `frontend info` 获取实际端口，同步防火墙、安全组及外层反代上游 |
+| 查看前端端口与改 `.env` 后预期不同 | `frontend info` 显示上次成功运行记录，需 `frontend restart` 才应用新值 |
+| 资源校验失败 | 核对自己的前端修改后刷新 `ASSETS.json`，再重启前端；不要用校验刷新掩盖未知改动 |
+| 缺少 Docker / Compose / TUN | 按环境要求安装、启用，修复后重新运行；换端口不能解决这些依赖问题 |
 
-## v0.2.5 原有验证范围
+## 验证范围
 
-正式发布流程包含 Docker 离线生命周期测试、Linux amd64 镜像构建、Compose 健康启动、独立 netns 创建 / 删除、备份、容器重建后的凭据与节点配置保留、停止后清理及源码模式构建。主程序仍从源码生成 amd64 / arm64 两种架构，并对两种架构的预编译选择进行摘要回归验证。
-
-Docker 实机启动验收在 Linux amd64 CI 运行，arm64 镜像运行尚未独立验收；未在 CI 连接公共 VPN Gate 隧道或实际签发公网证书，真实节点、外部防火墙与证书签发需在部署 VPS 验收。
+本次实际检查与局限见 [VALIDATION.md](VALIDATION.md)。Docker Engine / TUN 容器验证由发布工作流执行；本地脚本回归和模拟后端代理检查不能证明真实 VPN Gate 节点可用。

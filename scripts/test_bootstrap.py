@@ -23,9 +23,9 @@ class BootstrapTests(unittest.TestCase):
         raw = b'fixture-release'
         checksum = hashlib.sha256(raw).hexdigest()
         with patch.object(b.sys, 'argv', ['install-online.sh', '--docker']), \
-             patch.object(b, 'stable_release', return_value={'tag_name': 'v0.2.5'}), \
+             patch.object(b, 'stable_release', return_value={'tag_name': 'v0.2.6'}), \
              patch.object(b, 'asset', side_effect=lambda release, name: name), \
-             patch.object(b, 'fetch', side_effect=lambda name, *args: ((checksum + '  miku-gate-vps-v0.2.5.tar.gz\n').encode() if name == 'SHA256SUMS' else raw)), \
+             patch.object(b, 'fetch', side_effect=lambda name, *args: ((checksum + '  miku-gate-vps-v0.2.6.tar.gz\n').encode() if name == 'SHA256SUMS' else raw)), \
              patch.object(b, 'unpack', return_value=Path('/fixture/verified/miku-gate')), \
              patch.object(b.subprocess, 'run') as run, contextlib.redirect_stdout(io.StringIO()):
             b.main()
@@ -39,7 +39,7 @@ class BootstrapTests(unittest.TestCase):
                 b.main()
             release.assert_not_called()
 
-    def package(self, root, extra=None, corrupt=False, version='0.2.5', bundle_root='miku-gate'):
+    def package(self, root, extra=None, corrupt=False, version='0.2.6', bundle_root='miku-gate'):
         path = root / 'package.tar.gz'
         files = {name: ('fixture:' + name).encode() for name in REQUIRED}
         meta = {'product': 'miku-fanout', 'format': 1, 'version': version, 'files': {name: hashlib.sha256(raw).hexdigest() for name, raw in files.items()}}
@@ -59,7 +59,7 @@ class BootstrapTests(unittest.TestCase):
     def test_unpack_valid_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            result = b.unpack(self.package(root), root / 'verified', 'v0.2.5')
+            result = b.unpack(self.package(root), root / 'verified', 'v0.2.6')
             self.assertEqual((result / 'install.sh').read_bytes(), b'fixture:install.sh')
 
     def test_pinned_previous_release_root_remains_supported(self):
@@ -74,7 +74,7 @@ class BootstrapTests(unittest.TestCase):
             with self.subTest(options=options), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 with self.assertRaises(RuntimeError):
-                    b.unpack(self.package(root, **options), root / 'verified', 'v0.2.5')
+                    b.unpack(self.package(root, **options), root / 'verified', 'v0.2.6')
 
     def test_traversal_symlink_duplicate_and_unsafe_permissions(self):
         for name, kind, mode in [('miku-gate/../../outside', tarfile.REGTYPE, 0o644), ('miku-gate/link', tarfile.SYMTYPE, 0o644), ('miku-gate/install.sh', tarfile.REGTYPE, 0o644), ('miku-gate/unsafe', tarfile.REGTYPE, 0o666)]:
@@ -84,18 +84,18 @@ class BootstrapTests(unittest.TestCase):
                 entry.type, entry.mode, entry.size = kind, mode, 1 if kind == tarfile.REGTYPE else 0
                 entry.linkname = '/etc/passwd' if kind == tarfile.SYMTYPE else ''
                 with self.assertRaises(RuntimeError):
-                    b.unpack(self.package(root, extra=entry), root / 'verified', 'v0.2.5')
+                    b.unpack(self.package(root, extra=entry), root / 'verified', 'v0.2.6')
                 self.assertFalse((root / 'outside').exists())
 
     def test_release_selection_rejects_drafts_prereleases_and_invalid_tags(self):
-        for value in ({'tag_name': 'v0.2.5', 'draft': True}, {'tag_name': 'v0.2.5', 'prerelease': True}, {'tag_name': 'v0.2.0-dev.41'}):
+        for value in ({'tag_name': 'v0.2.6', 'draft': True}, {'tag_name': 'v0.2.6', 'prerelease': True}, {'tag_name': 'v0.2.0-dev.41'}):
             with patch.object(b, 'fetch', return_value=json.dumps(value).encode()), self.assertRaises(RuntimeError):
                 b.stable_release('latest')
         with patch.object(b, 'fetch') as fetch, self.assertRaises(RuntimeError):
             b.stable_release('../unexpected')
         fetch.assert_not_called()
-        with patch.object(b, 'fetch', return_value=b'{"tag_name":"v0.2.5"}'):
-            self.assertEqual(b.stable_release('v0.2.5')['tag_name'], 'v0.2.5')
+        with patch.object(b, 'fetch', return_value=b'{"tag_name":"v0.2.6"}'):
+            self.assertEqual(b.stable_release('v0.2.6')['tag_name'], 'v0.2.6')
 
     def test_checksum_requires_unique_exact_asset(self):
         digest = 'a' * 64

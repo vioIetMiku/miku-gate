@@ -1,0 +1,37 @@
+name: miku-gate-frontend
+services:
+  frontend:
+    image: nginx:stable-alpine
+    entrypoint: [nginx]
+    command: [-c, /etc/miku/nginx.conf, -g, "daemon off;"]
+    user: "101:101"
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,mode=1777
+    environment:
+      # The launcher selects/persists a free port and injects the actual value.
+      MIKU_FRONTEND_PORT: ${MIKU_FRONTEND_PORT:-}
+      MIKU_FRONTEND_LISTEN: ${MIKU_FRONTEND_LISTEN:-0.0.0.0}
+      MIKU_FRONTEND_ORIGIN: ${MIKU_FRONTEND_ORIGIN:-}
+      MIKU_BACKEND_URL: ${MIKU_BACKEND_URL:-}
+      MIKU_BACKEND_BASE_PATH: ${MIKU_BACKEND_BASE_PATH:-}
+      MIKU_BACKEND_HOST: ${MIKU_BACKEND_HOST:-}
+    volumes:
+      - ./frontend/public:/usr/share/nginx/html:ro
+      # Directory mount keeps atomic config replacements visible to Nginx.
+      - ./frontend/.runtime:/etc/miku:ro
+    healthcheck:
+      test: [CMD-SHELL, 'host="$${MIKU_FRONTEND_LISTEN}"; [ "$$host" != 0.0.0.0 ] || host=127.0.0.1; wget -q -O /dev/null "http://$$host:$${MIKU_FRONTEND_PORT}/_miku_health"']
+      interval: 15s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"

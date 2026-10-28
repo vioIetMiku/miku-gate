@@ -61,8 +61,10 @@ def initialize():
         c.require(previous.get('installation_mode') == 'docker', '此目录属于原生安装；请使用独立的 Docker 数据目录')
     exists = (c.DATA / 'settings.json').exists()
     value = c.settings() if exists else {'port': 8899, 'listen_addr': '', 'residential_only': False}
-    port = requested or number('管理端口', value['port'], 1024, 65535)
-    c.require(c.port_available(port), '管理端口 ' + str(port) + ' 已占用；在 .env 设置 WEB_PORT 后重新启动')
+    preferred = requested or number('管理端口', value['port'], 1024, 65535)
+    port = c.select_port(preferred, c.reserved_ports(include_common=False))
+    if port != preferred:
+        print('后端端口 ' + str(preferred) + ' 不可用或已预留，自动改用 ' + str(port) + '。', flush=True)
     value['port'] = port
     if public_ip:
         value['public_ip'] = public_ip

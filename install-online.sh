@@ -4,7 +4,7 @@ set -euo pipefail
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   printf '%s\n' 'Miku Gate VPS installer (Linux amd64/arm64, root).' \
     'Usage: bash install-online.sh [--panel | --quick | --docker] [--domain HOST | --no-domain] [--background] [--download-only DIRECTORY]' \
-    'Environment: MIKU_VERSION=v0.2.5 (default: latest stable), GITHUB_TOKEN (private repository), WEB_PORT (default: 8899), MIKU_DOCKER_INSTALL_DIR (default: /opt/miku-gate-docker).'
+    'Environment: MIKU_VERSION=v0.2.6 (default: latest stable), GITHUB_TOKEN (private repository), WEB_PORT (default: 8899), MIKU_DOCKER_INSTALL_DIR (default: /opt/miku-gate-docker).'
   exit 0
 fi
 [[ "$(uname -s)" == Linux ]] || { echo '仅支持 Linux VPS。' >&2; exit 1; }
@@ -51,7 +51,7 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
 def fetch(url, limit, binary=False):
     if urllib.parse.urlsplit(url).scheme != 'https':
         raise RuntimeError('只允许 HTTPS 下载')
-    headers = {'User-Agent': 'MikuGateInstaller/0.2.4', 'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}
+    headers = {'User-Agent': 'MikuGateInstaller/0.2.6', 'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}
     token = os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN')
     if token and urllib.parse.urlsplit(url).hostname == 'api.github.com':
         headers['Authorization'] = 'Bearer ' + token
@@ -64,7 +64,7 @@ def fetch(url, limit, binary=False):
 
 def stable_release(version):
     if version != 'latest' and not re.fullmatch(r'v\d+\.\d+\.\d+', version):
-        raise RuntimeError('MIKU_VERSION 只能是 latest 或正式版本标签，例如 v0.2.5')
+        raise RuntimeError('MIKU_VERSION 只能是 latest 或正式版本标签，例如 v0.2.6')
     endpoint = '/releases/latest' if version == 'latest' else '/releases/tags/' + version
     release = json.loads(fetch(API + endpoint, 4 << 20))
     if release.get('draft') or release.get('prerelease') or not re.fullmatch(r'v\d+\.\d+\.\d+', release.get('tag_name', '')):
@@ -97,7 +97,7 @@ def expected_checksum(raw, name):
 def unpack(package, destination, version):
     with tarfile.open(package, 'r:gz') as archive:
         entries = archive.getmembers()
-        if not 5 <= len(entries) <= 100:
+        if not 5 <= len(entries) <= 4097:
             raise RuntimeError('安装包成员数量异常')
         bundle_root = entries[0].name.split('/')[0]
         if bundle_root not in ('miku-gate', 'miku-fanout'):
@@ -116,7 +116,7 @@ def unpack(package, destination, version):
         if total > MAX_UNPACKED or prefix + 'BUILD.json' not in names:
             raise RuntimeError('安装包超限或没有构建清单')
         manifest_entry = archive.getmember(prefix + 'BUILD.json')
-        if manifest_entry.size > 64 << 10:
+        if manifest_entry.size > 256 << 10:
             raise RuntimeError('构建清单过大')
         meta = json.loads(archive.extractfile(manifest_entry).read())
         files = meta.get('files', {})

@@ -229,7 +229,7 @@ def update(filename):
                 parts=Path(item.name).parts;c.require(parts and not item.name.startswith('/') and '..' not in parts and all(re.fullmatch(r'[A-Za-z0-9_.-]+',x) for x in parts),'安装包路径无效')
                 if directory is None:directory=parts[0]
                 c.require(parts[0]==directory and item.name not in members,'安装包重复或多根目录');members.add(item.name)
-                c.require(len(members)<=120 and (item.isdir() or item.isfile()) and not item.issym() and not item.islnk() and 0<=item.size<=160<<20,'安装包类型/大小异常')
+                c.require(len(members)<=4096 and (item.isdir() or item.isfile()) and not item.issym() and not item.islnk() and 0<=item.size<=160<<20,'安装包类型/大小异常')
                 total+=item.size;c.require(total<=320<<20,'安装包解压超限');target=root.joinpath(*parts)
                 if item.isdir():target.mkdir(mode=0o700,parents=True,exist_ok=True)
                 else:target.parent.mkdir(mode=0o700,parents=True,exist_ok=True);c.atomic(target,archive.extractfile(item).read(),0o600)

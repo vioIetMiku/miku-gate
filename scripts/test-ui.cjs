@@ -4,7 +4,10 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {JSDOM, VirtualConsole} = require(process.env.MIKU_JSDOM_MODULE || 'jsdom');
-const html = fs.readFileSync(process.argv[2] || 'qa/index.html','utf8');
+const path = require('node:path');
+const htmlFile = path.resolve(process.argv[2] || 'qa/index.html');
+const html = fs.readFileSync(htmlFile,'utf8').replace(/<script src="([^"]+)"><\/script>/g,
+  (_, src) => '<script>' + fs.readFileSync(path.resolve(path.dirname(htmlFile), src),'utf8') + '</script>');
 const pause=()=>new Promise(resolve=>setImmediate(resolve));
 const settle=async()=>{for(let i=0;i<12;i++) await pause();};
 const entryLink=(id)=>'vless://fixture-'+id+'@node.example.com:30001?type=tcp&security=tls&flow=xtls-rprx-vision&sni=node.example.com#Japan';
@@ -28,6 +31,8 @@ async function setup({savedMode,job=null,sessionSeen=''}={}){
    if(u.pathname.endsWith('/api/exits')) body={exits:state.exits,direct:[],public_ip:'203.0.113.10',backend:'native'};
    else if(u.pathname.endsWith('/api/jobs')) body=state.jobs;
    else if(u.pathname.endsWith('/api/xui/bind') && state.bindError){status=502;body={error:'切换失败，原落地保留'};}
+   else if(u.pathname.endsWith('/api/settings')) body=opts.method==='POST'?{ok:true}:{port:18899,base_path:'private-path',listen_addr:'',public_host:'203.0.113.10',version:'0.2.4'};
+   else if(u.pathname.endsWith('/api/panel/mode')) body={mode:'native',modes:[{mode:'native',available:true,label:'自建'}]};
    else if(u.pathname.endsWith('/api/ping'))status=204;
    else if(u.pathname.endsWith('/api/ipinfo')){
     if(state.ipError){status=502;body={error:'属性查询暂不可用'};}
@@ -227,5 +232,25 @@ async function setup({savedMode,job=null,sessionSeen=''}={}){
  a.w.confirm=()=>true;a.d.querySelector('#stopall').click();await settle();
  assert(a.state.requests.some(x=>x.url.pathname.endsWith('/api/stop-all')),'stop-all must cancel workers as well as visible exits');
  assert.equal(a.state.errors.length,0,a.state.errors.join('\n'));a.dom.window.close();
+ if(html.includes('后端监听端口')){
+  a=await setup();
+  a.d.querySelector('#settingsBtn').click();await settle();
+  assert(a.d.querySelector('#updCheck').hidden,'split frontend must not offer in-container binary replacement');
+  assert.match(a.d.querySelector('#updNotes').textContent,/install-docker.sh update/);
+  const originalAddress=a.w.location.href;
+  a.d.querySelector('#setPort').value='80';
+  a.d.querySelector('#setSave').click();await settle();
+  assert(!a.state.requests.some(x=>x.url.pathname.endsWith('/api/settings') && x.opts.method==='POST'),'invalid backend port must not be submitted');
+  assert(!a.d.querySelector('#setSave').disabled);
+  a.d.querySelector('#setPort').value='19999';
+  a.d.querySelector('#setPath').value='changed-path';
+  a.d.querySelector('#setSave').click();await settle();
+  const saved=a.state.requests.find(x=>x.url.pathname.endsWith('/api/settings') && x.opts.method==='POST');
+  assert.equal(JSON.parse(saved.opts.body).port,19999);
+  assert.equal(JSON.parse(saved.opts.body).base_path,'changed-path');
+  assert.equal(a.w.location.href,originalAddress,'backend settings must not navigate the frontend to a guessed address');
+  assert.match(a.d.querySelector('#setPortHint').textContent,/frontend.py restart/);
+  assert.equal(a.state.errors.length,0,a.state.errors.join('\n'));a.dom.window.close();
+ }
  console.log('PASS: panel flows, partial results, ordinary provisioning cancellation, stop-all, IP queries, escaped metadata, stale response isolation, dialog focus, counts and themes.');
 })().catch(e=>{console.error(e);process.exitCode=1;setTimeout(()=>process.exit(1),100)});

@@ -113,9 +113,9 @@ def arch():
 
 def verify_distribution(directory):
     directory=Path(directory).resolve(strict=True)
-    meta=json.loads(trusted(directory/'BUILD.json',max_bytes=64<<10))
+    meta=json.loads(trusted(directory/'BUILD.json',max_bytes=256<<10))
     require(meta.get('product')=='miku-fanout' and meta.get('format')==1,'不是此Miku版安装包')
-    files=meta.get('files',{});require(isinstance(files,dict) and 5<=len(files)<=100,'安装包清单无效')
+    files=meta.get('files',{});require(isinstance(files,dict) and 5<=len(files)<=4096,'安装包清单无效')
     for name,expected in files.items():
         require(re.fullmatch(r'[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*',name) and '..' not in name.split('/'),'安装包路径无效')
         raw=trusted(directory/name);require(hashlib.sha256(raw).hexdigest()==expected,'安装包校验失败：'+name)
@@ -163,8 +163,9 @@ def port_available(port):
             return False
     return True
 
-def reserved_ports():
-    ports={8899}  # Widely used by existing 3x-ui panels.
+def reserved_ports(data=None,include_common=True):
+    data=Path(data) if data is not None else DATA
+    ports={8899} if include_common else set()  # Native installer compatibility.
     binary=Path('/usr/local/x-ui/x-ui')
     if binary.is_file() and os.access(binary,os.X_OK):
         try:
@@ -172,13 +173,27 @@ def reserved_ports():
             clean=re.sub(r'\x1b\[[0-9;]*m','',result.stdout.decode(errors='replace'))
             ports.update(int(p) for p in re.findall(r'(?m)^port:[^\S\r\n]*(\d+)',clean))
         except (OSError,RuntimeError,subprocess.TimeoutExpired):pass
-    for path,field in ((DATA/'native.json','inbounds'),(DATA/'xray.json','inbounds'),(DATA/'state.json','tunnels'),(Path('/usr/local/x-ui/bin/config.json'),'inbounds')):
+    for path,field in ((data/'native.json','inbounds'),(data/'xray.json','inbounds'),(data/'state.json','tunnels'),(Path('/usr/local/x-ui/bin/config.json'),'inbounds')):
         if not path.exists():continue
         try:
             value=json.loads(trusted(path,max_bytes=8<<20))
-            ports.update(int(i['port']) for i in value.get(field,[]) if str(i.get('port','')).isdigit())
+            ports.update(int(i['port']) for i in value.get(field,[]) if isinstance(i,dict) and str(i.get('port','')).isdigit())
         except (ValueError,KeyError,RuntimeError):pass
     return ports
+
+def select_port(preferred,reserved=(),owned=None):
+    """Prefer the saved/requested port, then scan and wrap without duplicates.
+
+    owned is accepted only after the caller verifies a running service's actual
+    health/configuration; it must never be inferred from a saved file alone.
+    """
+    require(isinstance(preferred,int) and 1024<=preferred<=65535,'端口需1024至65535')
+    reserved=set(reserved)
+    for offset in range(65536-1024):
+        port=1024+(preferred-1024+offset)%(65536-1024)
+        if port not in reserved and (port==owned or port_available(port)):
+            return port
+    raise RuntimeError('未找到可用端口（1024–65535），请检查监听服务和预留入口')
 
 def choose_port(requested=None):
     import secrets

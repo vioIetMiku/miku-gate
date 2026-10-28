@@ -14,7 +14,7 @@ services:
     devices:
       - /dev/net/tun:/dev/net/tun
     environment:
-      # Empty preserves a saved port; a fresh installation defaults to 8899.
+      # Empty prefers the saved port, then 8899; conflicts auto-select and persist.
       WEB_PORT: ${WEB_PORT:-}
       MIKU_PUBLIC_IP: ${MIKU_PUBLIC_IP:-}
       MIKU_MAX_SLOTS: ${MIKU_MAX_SLOTS:-0}

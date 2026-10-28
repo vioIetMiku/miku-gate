@@ -16,6 +16,14 @@ MIKU_PACKAGE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 if [[ "${1:-}" == --docker ]]; then
   shift
   MIKU_DOCKER_PROJECT_DIR="${MIKU_DOCKER_INSTALL_DIR:-/opt/miku-gate-docker}"
+  # Validate options before staging files into an existing deployment.
+  if [[ "${1:-}" == --split ]]; then
+    shift
+    [[ $# -eq 0 ]] || { echo '--split 不接受其他参数' >&2; exit 2; }
+  elif [[ "${1:-}" == --backend-only ]]; then
+    shift
+    set -- backend "${@}"
+  fi
   python3 -B "${MIKU_PACKAGE_DIR}/docker/stage.py" "${MIKU_PACKAGE_DIR}" "${MIKU_DOCKER_PROJECT_DIR}"
   exec bash "${MIKU_DOCKER_PROJECT_DIR}/install-docker.sh" "$@"
 fi

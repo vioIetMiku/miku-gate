@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101a1c">
+<meta name="description" content="Miku Gate 连接工作台，集中管理出口、节点与订阅。">
+<link rel="icon" href="assets/miku-mark.svg" type="image/svg+xml">
+<title>Miku Gate · 连接工作台</title>
+<script src="static/index-1.js"></script>
+<link rel="stylesheet" href="static/index-1.css">
+</head>
+<body>
+<a class="skip-link" href="#workspace">跳到工作台</a>
+<header>
+ <div class="header-inner">
+  <img class="brand-avatar" src="assets/miku-hero-v1.png" alt="Miku"><div class="brand-name"><h1>MIKU <span>GATE</span></h1><small>你的连接，你的节奏</small></div>
+  <span class="count" id="panel" hidden></span>
+  <span class="spacer"></span><div class="header-actions"><button id="domainBtn">域名 / 证书</button><button id="ipBtn">IP 查询</button><button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false" aria-label="切换到白天模式" title="切换到白天模式"><svg class="theme-icon-sun" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg><svg class="theme-icon-moon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"/></svg><span data-theme-label>白天模式</span></button>
+  <button id="settingsBtn" title="设置">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    设置
+  </button>
+  </div>
+ </div>
+</header>
+
+<main id="workspace">
+  <div id="managementMoved" class="domain-result" role="status" aria-live="polite" hidden></div>
+  <div class="workspace-heading"><h2>连接工作台</h2><span class="workspace-live" id="workspaceLive"><i aria-hidden="true"></i><span id="workspaceSync">正在同步</span></span></div>
+  <section class="miku-welcome" aria-labelledby="welcomeTitle"><div class="hero-copy"><span class="eyebrow">你的连接，你的节奏</span><h2 id="welcomeTitle">世界很大，即刻连接。</h2><p>选好下一站，剩下的交给 Miku。<br>出口、节点与订阅，在这里一目了然。</p><div class="hero-actions"><button class="primary" id="heroSubBtn">获取订阅<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><a class="hero-link" href="#connections">查看我的节点 ↓</a></div></div><div class="hero-art" aria-hidden="true"><img src="assets/miku-hero-v1.png" alt="" width="320" height="345" fetchpriority="high"></div></section>
+  <div class="workspace-overview" aria-label="连接概览"><div class="workspace-metric"><strong id="onlineCount">—</strong><span>在线出口</span></div><div class="workspace-metric"><strong id="regionCount">—</strong><span>覆盖地区</span></div><div class="workspace-metric"><strong id="entryCount">—</strong><span>可用入口</span></div></div>
+<section id="quickStatus" class="quick-status" aria-label="一键配置进度" hidden>
+ <div class="miku-stage" aria-hidden="true"><span class="miku-note one">♪</span><span class="miku-note two">♫</span><img src="assets/miku-hero-v1.png" alt=""></div>
+ <div><div class="quick-status-top"><span class="quick-eyebrow">MIKU IS CONNECTING</span><button id="quickHide" hidden>收起</button></div><h3 id="quickTitle">Miku 正在为你点亮下一站</h3><p id="quickDetail" role="status" aria-live="polite">请稍等一下，正在准备连接…</p><progress class="quick-progress" id="quickProgress" max="16" value="0" aria-label="配置进度"></progress><small id="quickCount">多路并行连接，优先保留各地区先连通的节点。</small><div class="quick-status-actions"><button id="quickStop" hidden>停止补齐</button><button id="quickResultBtn" hidden>订阅与全部节点链接</button></div></div>
+</section>
+<div class="jobs" id="jobs"></div>
+
+  <section class="bar" id="entranceBar"><h2>入口节点</h2><span class="count">自动检测面板；同页管理入口与落地</span><span class="spacer"></span><button onclick="document.querySelector('#newnode').click()">新建入口</button><button onclick="document.querySelector('#settingsBtn').click()">核心 / 面板 / 域名</button></section>
+  <div id="orphans"></div>
+  <div class="bar exit-toolbar" id="connections">
+    <div class="toolbar-title"><h2>出口与节点</h2><span class="count" id="ecount"></span></div>
+    <div class="toolbar-actions">
+    <button class="primary quick-launch" id="quickSetupBtn">一键配置</button>
+    <select id="exitSort" class="exit-sort" aria-label="节点排序"><option value="fast">最快优先</option><option value="order">创建顺序</option></select>
+    <button class="view-switch" id="displayModeBtn" aria-pressed="false">展示模式</button>
+    <button id="subBtn" title="拿订阅地址">
+      <svg viewBox="0 0 24 24"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
+      订阅
+    </button>
+    <button id="exportAll" title="导出全部节点链接">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      导出链接
+    </button>
+    <button id="stopall" title="停止所有出口">
+      <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+      全部停止
+    </button>
+    <button id="newnode" title="新建一个节点（协议与端口）">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>
+      新建节点
+    </button>
+    <button class="primary" id="newexit">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      新建出口
+    </button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+  <footer class="workspace-footer"><span>MIKU GATE</span><span>每一站，都有新的可能。</span></footer>
+</main>
+
+<div class="modal" id="wizard">
+  <div class="sheet">
+    <div class="head">
+      <h2>新建出口</h2>
+      <span class="spacer"></span>
+      <button class="icon" data-close="wizard" title="关闭">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="body">
+      <label class="f">
+        <span>地区</span>
+        <input type="search" id="rgfilter" placeholder="筛选地区">
+        <div class="regions" id="regions" style="margin-top:6px"></div>
+      </label>
+      <label class="f">
+        <span id="countlabel">数量</span>
+        <div class="stepper">
+          <button id="minus" title="减少">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+          </button>
+          <input id="count" type="text" inputmode="numeric" value="3">
+          <button id="plus" title="增加">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          </button>
+        </div>
+        <div class="hint" id="availhint"></div>
+		<div class="hint">按数量的 3 倍并行尝试同地区候选，候选不足时只连接实际可用数量。先连通并验证的出口立即显示，凑齐后断开多余候选；可在任务中停止补齐。</div>
+      </label>
+      <details style="margin-top:12px"><summary>添加 VPN Gate 来源链接</summary><label class="f"><span>OpenVPN 节点清单（CSV）</span><input type="text" id="sourceQuickURL" placeholder="粘贴公网 CSV 链接"></label><button id="sourceQuickAdd">确认加入</button><div class="hint" id="sourceQuickHint"></div></details>
+      <label class="f" id="tplwrap">
+        <span>节点链接</span>
+        <select id="tpl"></select>
+        <div class="hint" id="tplhint"></div>
+      </label>
+    </div>
+    <div class="foot">
+      <span class="count" id="wzhint"></span>
+      <span class="spacer"></span>
+      <button data-close="wizard">取消</button>
+      <button class="primary" id="go">开始</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="newnodebox">
+  <div class="sheet">
+    <div class="head">
+      <h2>新建节点</h2>
+      <span class="spacer"></span>
+      <button class="icon" data-close="newnodebox" title="关闭">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="body">
+      <details style="margin-bottom:16px"><summary>粘贴本 VPS 已生成的节点链接</summary><label class="f"><span>分享链接（每行一个）</span><textarea id="nimport" rows="3" placeholder="vless://… 或 vmess://…、trojan://…、socks5://…、http://…"></textarea></label><div class="hint">核对本 VPS 的发布地址、监听端口和凭据；识别现有入口后可用于批量创建出口。</div><button id="nimportConfirm">确认识别</button><div class="hint" id="nimportHint"></div></details>
+
+      <label class="f">
+        <span>协议</span>
+        <select id="nproto">
+          <option value="vless">VLESS</option>
+          <option value="vmess">VMess</option>
+          <option value="trojan">Trojan</option>
+        </select>
+      </label>
+      <label class="f">
+        <span>传输</span>
+        <select id="nnet">
+          <option value="tcp">TCP</option>
+          <option value="ws">WebSocket</option>
+          <option value="grpc">gRPC</option>
+          <option value="httpupgrade">HTTPUpgrade</option>
+          <option value="xhttp">XHTTP</option>
+        </select>
+      </label>
+      <label class="f">
+        <span>安全</span>
+        <select id="nsec">
+          <option value="none">无</option>
+          <option value="tls">TLS</option>
+          <option value="reality">REALITY</option>
+        </select>
+        <div class="hint" id="nsechint"></div>
+      </label>
+      <label class="f" id="nvisionwrap" hidden>
+        <span>流控</span>
+        <label class="chk"><input type="checkbox" id="nvision"> xtls-rprx-vision</label>
+      </label>
+      <label class="f" id="ncertificatewrap" hidden><span>TLS 域名与证书</span><select id="ncertificate"><option value="auto">自动读取服务器证书</option></select><div class="hint" id="ncertificatehint"></div><button type="button" onclick="openDomains()">绑定 / 管理域名</button></label><label class="f" id="nsniwrap" hidden>
+        <span>域名 SNI</span>
+        <input id="nsni" type="text" placeholder="留空用 localhost，将生成自签证书">
+      </label>
+      <label class="f" id="ncertwrap" hidden>
+        <span>证书路径</span>
+        <input id="ncert" type="text" placeholder="留空生成自签证书，如 /etc/ssl/x.crt">
+      </label>
+      <label class="f" id="nkeywrap" hidden>
+        <span>私钥路径</span>
+        <input id="nkey" type="text" placeholder="与证书成对填写，如 /etc/ssl/x.key">
+      </label>
+      <label class="f" id="ndestwrap" hidden>
+        <span>借用站点</span>
+        <input id="ndest" type="text" placeholder="留空用 www.tesla.com:443">
+      </label>
+      <label class="f" id="npathwrap" hidden>
+        <span id="npathlabel">路径</span>
+        <input id="npath" type="text" placeholder="留空自动生成">
+      </label>
+      <label class="f">
+        <span>端口</span>
+        <input id="nport" type="text" inputmode="numeric" placeholder="留空随机分配">
+      </label>
+      <label class="f">
+        <span>备注</span>
+        <input id="nremark" type="text" placeholder="留空自动命名">
+      </label>
+    </div>
+    <div class="foot">
+      <span class="count" id="nnhint"></span>
+      <span class="spacer"></span>
+      <button data-close="newnodebox">取消</button>
+      <button class="primary" id="ncreate">创建</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="detail">
+  <div class="sheet">
+    <div class="head">
+      <h2 id="dtitle">节点</h2>
+      <span class="spacer"></span>
+      <button class="icon danger" id="ddel" title="删除这个入站">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+      <button class="icon" data-close="detail" title="关闭">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="body" id="dbody"></div>
+  </div>
+</div>
+
+<div class="modal" id="credbox">
+  <div class="sheet">
+    <div class="head">
+      <h2>SOCKS5 / HTTP 访问凭据</h2>
+      <span class="count" id="crtitle"></span>
+      <span class="spacer"></span>
+      <button class="icon" data-close="credbox" title="关闭">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="body">
+      <div class="share" id="crurl"></div><div class="share" id="crhttpurl"></div><button id="crhttpcopy">复制 HTTP</button>
+      <div class="credrow">
+        <label class="ef"><span>用户名</span>
+          <input id="cruser" type="text" spellcheck="false"></label>
+        <label class="ef"><span>口令</span>
+          <input id="crpass" type="text" spellcheck="false"></label>
+        <button id="crrand" title="随机生成一套">
+          <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+          随机
+        </button>
+      </div>
+      <div class="hint">修改后请先保存。复制按钮使用已保存的凭据，并为你提供对应的入口节点。保存后新连接使用新凭据，已连接的会话不受影响。</div>
+    </div>
+    <div class="foot">
+      <button id="crcopy">
+        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        复制 SOCKS5
+      </button>
+      <span class="spacer"></span>
+      <button data-close="credbox">取消</button>
+      <button class="primary" id="crsave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="export">
+  <div class="sheet">
+    <div class="head">
+      <h2>节点链接</h2>
+      <span class="count" id="excount"></span>
+      <span class="spacer"></span>
+      <button id="copyall">
+        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        全部复制
+      </button>
+      <button class="icon" data-close="export" title="关闭">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="body"><textarea id="exbox" spellcheck="false" readonly></textarea></div>
+  </div>
+</div>
+
+<div class="modal" id="subbox">
+  <div class="sheet">
+    <div class="head">
+      <h2>订阅</h2>
+      <span class="count" id="subcount"></span>
+      <span class="spacer"></span>
+      <button class="icon" data-close="subbox" title="关闭">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="body">
+      <label class="f"><span>客户端格式</span><select id="subformat"><option value="base64">通用（Base64）</option><option value="v2ray">V2Ray / v2rayN（Base64）</option><option value="clash">Clash / Mihomo（YAML）</option><option value="singbox">sing-box（JSON）</option><option value="links">明文分享链接</option></select></label>
+      <label class="f"><span>订阅地址</span>
+        <input id="suburl" type="text" spellcheck="false" readonly></label>
+      <div class="hint">客户端里新建订阅填这条。以后加出口、删出口都会自己跟上，不用重新配。</div>
+      <div class="hint bad">地址最后那串口令等于密码，别发群里。</div>
+      <div class="hint" id="subFormatHint">选择客户端格式后复制地址即可。REALITY 需支持它的客户端；sing-box 自签证书指纹需 1.15+。</div>
+    </div>
+    <div class="foot">
+      <span class="spacer"></span>
+      <button id="subreset">换一串口令</button>
+      <button class="primary" id="subcopy">复制地址</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="settings">
+  <div class="sheet">
+    <div class="head">
+      <h2>设置</h2>
+      <span class="spacer"></span>
+      <button class="icon" data-close="settings" title="关闭">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="body">
+      <div class="hint">当前使用独立前端。这里的端口、路径和域名属于后端；修改连接参数后需在前端服务器重新同步配置。前端端口在部署目录的 .env 中设置。</div>
+      <label class="f"><span>访问口令</span>
+        <input id="setPw" type="password" spellcheck="false" autocomplete="new-password" placeholder="留空则不改"></label>
+      <div class="hint">改完只影响新登录，当前这个浏览器不会被踢下线。</div>
+
+      <label class="f" style="margin-top:16px"><span>后端访问路径</span>
+        <input id="setPath" type="text" spellcheck="false" placeholder="留空则去掉路径前缀"></label>
+      <div class="hint" id="setPathHint">界面挂在这个路径下，扫端口的探不到。只能用字母数字和 - _。</div>
+
+      <label class="f" style="margin-top:16px"><span>节点后端</span>
+        <select id="setBackend"></select></label>
+      <div class="hint" id="setBackendHint">节点从哪来。装了 3x-ui 或 xray-cf-lite 就能直接接管，都没有就用自建。</div>
+
+      <label class="chk" style="margin-top:16px"><input type="checkbox" id="setResi"> 排除 VPN Gate 自营公共服务器</label>
+      <div class="hint" id="setResiHint">默认包含全部来源；此选项只按主机名及已知网段过滤自营节点，不能证明其他节点是住宅IP。</div>
+
+      <div class="setrow">
+        <label class="f" style="margin:0"><span>后端监听端口</span>
+          <input id="setPort" type="text" inputmode="numeric" spellcheck="false"></label>
+        <label class="f" style="margin:0"><span>后端监听地址</span>
+          <select id="setListen">
+            <option value="0.0.0.0">所有网卡（0.0.0.0）</option>
+            <option value="127.0.0.1">仅本机（127.0.0.1）</option>
+          </select></label>
+      </div>
+      <div class="hint bad" id="setPortHint">修改后端连接参数后，请运行 python3 -B scripts/frontend.py restart 同步前端配置。</div>
+
+      <label class="f"><span>添加 VPN Gate 来源</span><input type="text" id="sourceAddURL" placeholder="粘贴公网 OpenVPN CSV 链接"></label><button id="sourceAddConfirm">确认加入</button><div class="hint" id="sourceAddHint"></div><textarea id="setSources" hidden></textarea><div class="hint">用 ↑ ↓ 调整优先顺序，立即保存并用于选节点。默认优先近期检测与开源快照，官方在最后兜底。</div><div class="source-list" id="sourceStatus"></div><label class="f"><span>ipapi.is API Key（可选，仅保存在服务器）</span><input id="setIPKey" type="password" autocomplete="off" placeholder="留空保持现有设置"></label><div class="hint" id="ipKeyHint">不填也能检测住宅 / 机房 / 移动类型；优先IP-API，必要时使用ipapi.is和ipwho.is复核。填Key可获得更完整的类型字段。</div><label class="f"><span>节点发布地址（可后改）</span><input id="setPublicHost" placeholder="留空用VPS IP，或填已解析的域名"></label><div class="hint"><button type="button" onclick="openDomains()">在网页绑定域名与证书</button> 没有域名先HTTP+IP；忘记口令可运行 <code>bash install-docker.sh password</code>。</div>
+      <div class="updsec">
+        <div class="updrow">
+          <div class="updver">版本 <b id="updCur">-</b><span id="updLatest"></span></div>
+          <span class="spacer"></span>
+          <button id="updCheck">检查更新</button>
+          <button class="primary" id="updApply" hidden>更新到 <span id="updApplyVer"></span></button>
+        </div>
+        <div class="updnotes" id="updNotes" hidden></div>
+      </div>
+    </div>
+    <div class="foot">
+      <span class="spacer"></span>
+      <button data-close="settings">取消</button>
+      <button class="primary" id="setSave">保存</button>
+    </div>
+  </div>
+</div>
+
+
+
+<div class="modal" id="quickbox" role="dialog" aria-modal="true" aria-labelledby="quickboxTitle"><div class="sheet"><div class="head"><h2 id="quickboxTitle">一键配置 · 让 Miku 帮你准备好</h2><span class="spacer"></span><button class="icon" data-close="quickbox" aria-label="关闭一键配置">关闭</button></div><div class="body">
+ <p class="quick-intro">想为节点绑定一个域名吗？<br><span class="dim">有域名就交给 Miku 准备证书；暂时没有，也可以直接开始。</span></p>
+ <label class="f"><span>节点域名（可选）</span><input id="quickDomain" type="text" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="node.example.com" aria-describedby="quickHint"></label>
+ <div class="quick-regions"><span><img class="country-flag" src="assets/flags/jp.svg" alt="JP">日本 × 5</span><span><img class="country-flag" src="assets/flags/kr.svg" alt="KR">韩国 × 3</span><span><img class="country-flag" src="assets/flags/us.svg" alt="US">美国 × 3</span></div>
+ <div class="quick-note"><strong>自动筛选，连通即保留</strong><br>后台最多 33 路候选并行竞速，优先凑齐日本 5、韩国 3、美国 3 个可用节点。失败或超时自动换下一个，来源先到先用；各地区达标后停止多余连接。已就绪节点立即显示，可提前复制订阅；需要更多可到「出口与节点 → 新建出口」添加。<br><br><strong>绑定域名</strong>：VLESS + TCP + TLS + Vision，自动复用或申请证书。请先将域名解析到本机，并放行公网 80 端口。<br><strong>暂不绑定</strong>：VLESS + TCP + Reality + Vision，密钥自动生成。<br>再次执行可更换一键节点域名或改回 Reality，自动沿用现有出口、端口和 UUID，只补齐缺少的数量；更换后请在客户端更新订阅。后台补齐时已连通节点即可使用，也可随时停止补齐。节点域名与面板登录地址可分别设置。</div>
+ <div id="quickHint" class="hint" role="status" aria-live="polite"></div>
+ </div><div class="foot"><button id="quickSkip">暂不绑定，直接开始</button><span class="spacer"></span><button class="primary" id="quickBind">绑定域名并开始</button></div></div></div>
+<div class="modal" id="proxyguide" role="dialog" aria-modal="true" aria-labelledby="proxyguideTitle"><div class="sheet"><div class="head"><h2 id="proxyguideTitle">代理使用指南</h2><span class="spacer"></span><button class="icon" data-close="proxyguide" aria-label="关闭代理使用说明">关闭</button></div><div class="body">
+ <div class="proxy-highlight"><strong>链式代理 / 指纹浏览器</strong><p>先连接入口，再填写代理信息。两步完成这个出口的配置。</p></div><p class="proxy-guide-status" id="proxyguideIntro"></p>
+ <section class="guide-step"><div class="guide-step-heading"><b aria-hidden="true">1</b><h3>连接对应的入口节点</h3><button class="primary" id="proxyguideCopyEntry" disabled>复制入口节点</button></div><p>将下方节点链接导入代理客户端，并连接成功。</p><label class="f"><span>此出口对应的入口节点链接</span><textarea id="proxyguideLinks" class="proxy-guide-links" readonly spellcheck="false" aria-label="此出口对应的入口节点链接"></textarea></label><p class="proxy-guide-status" id="proxyguideStatus" role="status" aria-live="polite"></p><button id="proxyguideRetry" hidden>重新读取入口</button></section>
+ <section class="guide-step"><div class="guide-step-heading"><b aria-hidden="true">2</b><h3>填写应用代理设置</h3><button id="proxyguideCopyProxy">复制代理地址</button></div><p>在链式代理或指纹浏览器中选择对应协议，填写代理地址、端口、用户名和密码。</p><div class="proxy-guide-state" id="proxyguideProxy"></div></section>
+ <p class="proxy-guide-status">SOCKS5 / HTTP 地址用于应用的代理设置；VLESS 节点链接用于代理客户端。当前网络能直达代理端口时，也可直接配置应用。</p>
+ </div><div class="foot"><span class="spacer"></span><button data-close="proxyguide">知道了</button></div></div></div>
+<div class="modal" id="quickresult" role="dialog" aria-modal="true" aria-labelledby="quickresultTitle"><div class="sheet"><div class="head"><h2 id="quickresultTitle">订阅与全部节点链接</h2><span class="spacer"></span><button class="icon" data-close="quickresult" aria-label="关闭配置结果">关闭</button></div><div class="body">
+ <div class="quick-result-hero"><span class="quick-result-mark" aria-hidden="true">✓</span><div><h3 id="quickresultHeading">节点已就绪</h3><p id="quickresultIntro"></p></div></div><div class="quick-regions" id="quickresultRegions"></div>
+ <section class="quick-result-section"><div class="quick-result-heading"><h3>订阅地址</h3><span class="spacer"></span><button class="primary" id="quickresultCopySub" disabled>复制订阅地址</button></div><label class="f"><span>客户端格式</span><select id="quickresultFormat"><option value="base64">通用（Base64）</option><option value="v2ray">V2Ray / v2rayN（Base64）</option><option value="clash">Clash / Mihomo（YAML）</option><option value="singbox">sing-box（JSON）</option><option value="links">明文分享链接</option></select></label><label class="f"><span>在客户端中新建订阅，粘贴此地址</span><input id="quickresultSub" type="text" readonly spellcheck="false"></label><p class="hint">出口增删后，更新订阅即可同步。订阅地址包含访问口令，请妥善保管。</p><p class="quick-result-error" id="quickresultSubError" role="status" aria-live="polite"></p></section>
+ <section class="quick-result-section"><div class="quick-result-heading"><h3>全部节点链接</h3><span class="count" id="quickresultLinkCount"></span><span class="spacer"></span><button id="quickresultCopyLinks" disabled>全部复制</button></div><label class="f"><span>也可复制以下链接，批量导入客户端</span><textarea id="quickresultLinks" class="quick-result-links" readonly spellcheck="false"></textarea></label><p class="quick-result-error" id="quickresultLinksError" role="status" aria-live="polite"></p></section>
+ <aside class="quick-add-note"><div><strong>需要更多或其他地区的节点？</strong><p>到「出口与节点 → 新建出口」继续添加，再更新订阅即可。</p></div><button id="quickresultAdd">去添加出口</button></aside>
+ </div><div class="foot"><button id="quickresultRetry" hidden>重新读取</button><span class="spacer"></span><button data-close="quickresult">完成</button></div></div></div>
+<div class="modal" id="domainbox"><div class="sheet"><div class="head"><h2>域名与证书</h2><span class="spacer"></span><button class="icon" data-close="domainbox">关闭</button></div><div class="body"><div class="domain-current" id="domainCurrent"></div><div class="domain-result" id="domainResult" role="status" aria-live="polite" hidden></div><div id="domainList"></div><label class="f"><span>绑定域名</span><input id="domainName" placeholder="node.example.com" autocomplete="off"></label><label class="f"><span>绑定方式 / 已有证书</span><select id="domainCert"><option value="">申请新的证书</option></select></label><label class="chk"><input id="domainManagement" type="checkbox" checked> 同时更新管理登录地址</label><div class="hint">填写域名即可自动复用或申请证书，无需邮箱。申请 HTTPS 证书前请解析到 VPS 并放行 80 端口；取消勾选时仅供 TLS 入口使用。</div><div class="hint" id="domainHint"></div></div><div class="foot"><button id="domainUnbind">管理地址解绑回IP</button><button id="domainRefresh">重新扫描证书</button><span class="spacer"></span><button class="primary" id="domainSubmit">绑定域名</button></div></div></div>
+<div class="modal" id="ipbox" role="dialog" aria-modal="true" aria-labelledby="ipTitle"><div class="sheet"><div class="head"><h2 id="ipTitle">IP 与网络信息<span>位置、归属与网络属性</span></h2><span class="spacer"></span><button class="icon" data-close="ipbox" aria-label="关闭 IP 信息">关闭</button></div><div class="body"><form class="ip-search" id="ipSearch"><label class="f"><span>查询公网 IP</span><input id="ipAddress" type="text" placeholder="输入 IPv4 或 IPv6 地址" autocomplete="off" autocapitalize="none" spellcheck="false" required></label><button class="primary" id="ipLookup" type="submit">查询</button></form><div id="ipDetails" class="ip-result"><div class="ip-result-toolbar"><a class="ip-details-link" href="https://ping0.cc/" target="_blank" rel="noopener noreferrer">在 Ping0 检测 IP <span aria-hidden="true">↗</span></a></div><div class="ip-state"><h3>了解你的出口</h3><p>输入 IP 地址，或点击节点卡片上的 IP 查看详情。</p></div></div></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="static/index-2.js"></script>
+</body>
+</html>

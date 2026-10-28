@@ -42,7 +42,7 @@ class DockerDataTests(unittest.TestCase):
         patches = [patch.object(c, 'DATA', self.data), patch.object(c, 'LIB', self.lib),
                    patch.object(d, 'SEED', self.seed), patch.object(c, 'port_available', return_value=True),
                    patch.object(c, 'public_ip', return_value='8.8.8.8'),
-                   patch.object(c, 'run', return_value=subprocess.CompletedProcess([], 0, b'Miku Gate 0.2.5\n', b'')),
+                   patch.object(c, 'run', return_value=subprocess.CompletedProcess([], 0, b'Miku Gate 0.2.4\n', b'')),
                    patch.dict(os.environ, {'WEB_PORT': '', 'MIKU_MAX_SLOTS': '0', 'MIKU_PUBLIC_IP': ''})]
         for p in patches:
             p.start()
@@ -84,14 +84,33 @@ class DockerDataTests(unittest.TestCase):
         for environment in ({'WEB_PORT': '80'}, {'WEB_PORT': '65536'}, {'MIKU_MAX_SLOTS': '-1'}, {'MIKU_PUBLIC_IP': '127.0.0.1'}):
             with self.subTest(environment=environment), patch.dict(os.environ, environment), self.assertRaises((RuntimeError, ValueError)):
                 d.initialize()
-        with patch.object(c, 'port_available', return_value=False), self.assertRaisesRegex(RuntimeError, '已占用'):
+        with patch.object(c, 'select_port', side_effect=RuntimeError('未找到可用端口')), self.assertRaisesRegex(RuntimeError, '未找到可用端口'):
             d.initialize()
         self.assertEqual((self.data / 'password').read_bytes(), before)
         self.assertEqual((self.data / 'settings.json').read_bytes(), settings)
 
+    def test_busy_saved_port_falls_back_and_persists_without_changing_identity(self):
+        d.initialize()
+        identities = {name: (self.data / name).read_bytes() for name in ('password', 'basepath')}
+        value = c.settings()
+        value.update(port=19900, tls_cert='/fixture/cert.pem', tls_key='/fixture/key.pem', sub_token='keep')
+        c.write_json(self.data / 'settings.json', value)
+        c.write_json(self.data / 'native.json', {'inbounds': [{'port': 19901}]})
+        with patch.object(c, 'port_available', side_effect=lambda port: port != 19900):
+            d.initialize()
+        self.assertEqual(c.settings(), {**value, 'port': 19902})
+        self.assertEqual(identities, {name: (self.data / name).read_bytes() for name in identities})
+        d.initialize()
+        self.assertEqual(c.settings()['port'], 19902)
+
+    def test_explicit_busy_port_is_a_preference_and_not_a_fatal_error(self):
+        with patch.dict(os.environ, {'WEB_PORT': '19910'}), patch.object(c, 'port_available', side_effect=lambda p: p != 19910):
+            d.initialize()
+        self.assertEqual(c.settings()['port'], 19911)
+
     def test_native_install_is_rejected_without_modification(self):
         c.private_dir(self.data)
-        c.write_json(self.data / 'install.json', {'product': 'miku-fanout', 'version': '0.2.5'})
+        c.write_json(self.data / 'install.json', {'product': 'miku-fanout', 'version': '0.2.4'})
         with self.assertRaisesRegex(RuntimeError, '原生安装'):
             d.initialize()
         self.assertFalse((self.data / 'password').exists())
@@ -198,7 +217,9 @@ if 'run' in args and os.environ.get('DOCKER_FIXTURE_BACKUP_FAIL') == '1':
     def test_failed_backup_restores_running_service_and_propagates_failure(self):
         result = self.run_script('backup', DOCKER_FIXTURE_RUNNING='1', DOCKER_FIXTURE_BACKUP_FAIL='1')
         self.assertEqual(result.returncode, 23, result.stderr)
-        self.assertEqual(self.calls()[-1][-2:], ['start', 'miku'])
+        calls = self.calls()
+        self.assertTrue(any(call[-2:] == ['start', 'miku'] for call in calls))
+        self.assertIn('common.wait_ready()', calls[-1][-1])
         self.assertNotIn('备份完成', result.stdout)
 
     def test_backup_keeps_previously_stopped_service_stopped(self):
@@ -206,6 +227,40 @@ if 'run' in args and os.environ.get('DOCKER_FIXTURE_BACKUP_FAIL') == '1':
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(any('start' in call for call in self.calls()))
         self.assertIn('备份完成', result.stdout)
+
+    def test_stop_manages_both_services_while_backend_scope_is_independent(self):
+        (self.root / 'frontend/.runtime').mkdir(parents=True)
+        (self.root / 'frontend/.runtime/state.json').write_text('{}')
+        (self.root / 'scripts').mkdir()
+        (self.root / 'scripts/frontend.py').write_text(
+            'import json, os, sys\n'
+            'with open(os.environ["DOCKER_FIXTURE_LOG"], "a") as f: f.write(json.dumps(["frontend", *sys.argv[1:]]) + "\\n")\n')
+        result = self.run_script('stop')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls()
+        self.assertEqual(calls[-2], ['frontend', 'stop'])
+        self.assertEqual(calls[-1][-1], 'stop')
+        self.log.unlink()
+        result = self.run_script('backend', 'down')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(any(call[:1] == ['frontend'] for call in self.calls()))
+
+    def test_default_up_starts_frontend_after_backend_but_backend_scope_does_not(self):
+        script = self.root / 'install-docker.sh'
+        script.write_text(script.read_text().replace('[[ -c /dev/net/tun ]]', 'true'))
+        (self.root / 'scripts').mkdir()
+        (self.root / 'scripts/frontend.py').write_text(
+            'import json, os, sys\n'
+            'with open(os.environ["DOCKER_FIXTURE_LOG"], "a") as f: f.write(json.dumps(["frontend", *sys.argv[1:]]) + "\\n")\n')
+        result = self.run_script('up')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls()
+        backend_start = next(i for i, call in enumerate(calls) if 'up' in call)
+        self.assertGreater(calls.index(['frontend', 'start']), backend_start)
+        self.log.unlink()
+        result = self.run_script('backend', 'up')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(any(call[:1] == ['frontend'] for call in self.calls()))
 
 
 class DockerStageTests(unittest.TestCase):

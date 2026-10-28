@@ -1,323 +1,304 @@
 # Miku Gate
 
-**当前正式版：`v0.2.5`**。新增 Linux Docker / Compose 部署，保留原生 VPS 安装、终端一键配置和 v0.2.4 的连接恢复策略。
-
 ## VPN Gate 是什么？
 
-[VPN Gate](https://www.vpngate.net/) 是日本筑波大学开展的学术实验项目，汇集世界各地志愿者提供的公共 VPN 中继。你可以从它的[服务器列表](https://www.vpngate.net/en/)获取公开连接配置；Miku Gate 使用其中的 **OpenVPN** 节点，为自己的 Linux VPS 配置和管理多个出口。
+[VPN Gate](https://www.vpngate.net/) 是日本筑波大学开展的学术实验项目，由世界各地志愿者提供公共 VPN 中继。Miku Gate 使用其公开的 OpenVPN 配置，为自己的 Linux VPS 管理多个出口。
 
-VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的数量、国家、在线时间和连通性随时变化，**不能保证住宅 IP、固定出口或持续可用，也不是无日志服务**。请先阅读[项目介绍](https://www.vpngate.net/en/about_overview.aspx)与[日志及反滥用政策](https://www.vpngate.net/en/about_abuse.aspx)，遵守当地法律与服务商规则，不用于滥用行为或需要严格保密的通信。
+VPN Gate 不属于 Miku Gate。节点数量、国家、在线时间随时变化，**不保证住宅 IP、固定出口、在线率或严格隐私，也不是无日志服务**。请阅读[官方介绍](https://www.vpngate.net/en/about_overview.aspx)与[日志和反滥用政策](https://www.vpngate.net/en/about_abuse.aspx)，遵守当地法律与服务商规则。
 
-## 致谢 fanout
+## 感谢 fanout
 
-特别感谢 **[byJoey/fanout](https://github.com/byJoey/fanout)**。Miku Gate 的当前单页版本直接基于该项目，保留按国家批量创建出口、网络命名空间隔离、自动重连及节点管理的基础能力，再加入 Miku 界面、自建核心、多格式订阅、快捷域名证书绑定、延迟测试、vpngate自定义源、扩充ip数量、ASN归属地检测展示、 ip属性展示、断线重连次数展示提醒与 VPS 维护流程。
+特别感谢 **[byJoey/fanout](https://github.com/byJoey/fanout)**。Miku Gate 基于其按国家批量出口、网络命名空间隔离和自动重连能力，再加入 Miku 界面、多格式订阅、终端一键配置、Docker 与前后端分离。
 
-原始基线提交为 `d7ce5224caf3469b19876982abdf8d1be16c4a8b`；原作者署名与 MIT 许可证完整保留。详见 [LICENSE](LICENSE)、[上游 README](README.fanout.md) 和 [源码来源](PROVENANCE.md)。
+基线提交：`d7ce5224caf3469b19876982abdf8d1be16c4a8b`。原 MIT 许可证和作者署名保留，见 [LICENSE](LICENSE)、[上游说明](README.fanout.md) 与 [源码来源](PROVENANCE.md)。
 
----
+<p align="center"><img src="src/assets/miku-hero-v1.png" alt="Miku Gate 插画" width="260"></p>
+<h2 align="center">世界，等你连接。</h2>
 
-<p align="center">
-  <img src="src/assets/miku-hero-v1.png" alt="Miku Gate 插画" width="300">
-</p>
+**代码版本：v0.2.6**，正式状态以 [Releases](https://github.com/vioIetMiku/miku-gate/releases/latest) 为准。支持 Linux amd64 / arm64；完整安装包已编译，VPS 无需安装 Go。
 
-<h1 align="center">世界，等你连接。</h1>
-<p align="center">把 VPN Gate 出口、代理入口和日常维护，放进一个自己的控制台。</p>
+## v0.2.6 变化
 
-<p align="center">
-  <a href="https://github.com/vioIetMiku/miku-gate/releases/latest">下载正式版</a> ·
-  <a href="#docker-部署">Docker 部署</a> ·
-  <a href="#第一次使用">第一次使用</a> ·
-  <a href="CHANGELOG.md">更新记录</a>
-</p>
+- Docker 默认两个独立 Compose 项目：非特权 Nginx 静态前端 + Go 后端。浏览器通过前端同源访问登录、API 和订阅，不是开放任意跨域后台接口。
+- 后端负责认证、VPN、入口、节点与数据；前端仅提供静态文件和代理，重启 / 停止前端不会重启后端或节点。
+- 后端优先 8899、前端优先 8900，冲突自动避让，实际端口持久化；已健康运行的前端重复启动不会被自己的端口占用逼走。
+- 原生和仅后端模式继续支持内嵌页面。保留镜像构建指纹缓存、显式基础镜像刷新、quick/sub 和 v0.2.4 连接恢复策略。
+- 新增前端专用包，支持前端放另一台服务器；主程序和兼容助手从源码重建为 0.2.6，不复用输入包中的旧二进制。
 
-支持 Linux **amd64 / arm64**，管理界面支持白天 / 夜间主题、移动端布局和展示 / 管理模式，新增终端一键配置。安装包已经编译，**VPS 不需要 Go**。
+## 先准备 Docker、Compose 与 Python
 
-> 升级提醒：`v0.2.5` 使用基于 fanout 的单页架构。旧版任务、远程 Agent、多账号和高级记录不会完整迁移；安装器仅迁移已识别旧安装的可用入口、普通 OpenVPN 出口及相关凭据，升级前请备份。不要将“正式 Release”理解为对所有 VPS、面板与 VPN Gate 节点均已完成实机验证。
+官方安装链接：
 
-## v0.2.5 更新重点
-
-- 新增 Dockerfile、Compose、独立容器启动与维护工具，支持完整包的预编译程序和源码构建两种方式。
-- 原短入口增加 `--docker`，部署文件保存到 `/opt/miku-gate-docker`，不依赖安装器临时目录，也不安装原生 systemd 服务。
-- 容器直接在 tini 下运行主程序，持久化登录口令、随机路径、节点、核心、证书及 Certbot 数据，提供健康检查和停机一致性备份。
-- 保留 amd64 / arm64 原生 VPS 安装及 `miku quick` / `miku sub`；Docker 模式用独立维护命令管理生命周期。
-- Docker 使用 **host 网络 + privileged + TUN**，不是普通低权限容器；仅用于自己控制的 Linux VPS。Docker 模式暂不提供后台自动续证，请按下文管理证书。
-
-
-## 主要功能
-
-| 功能 | 说明 |
-| --- | --- |
-| 批量出口 | 按国家及数量创建 OpenVPN 出口，自动选线、重连与补位；换线尽量保持端口、凭据、UUID 和分享链接 |
-| 多来源节点池 | 官方接口、公开 CSV、开源快照、近期 TCP 检测记录与 Worker 镜像；可添加公开来源并调整顺序 |
-| 自建或已有面板 | 自建 Xray / sing-box；检测并适配 3x-ui、S-UI、xray-cf-lite，不会安装这些外部面板 |
-| 入口与客户端 | 自建模式下同一监听端口可按客户端绑定不同出口；面板模式按出口复制入口 |
-| 认证代理 | 同一端口支持认证 SOCKS5 / HTTP，HTTP 支持 CONNECT；不是开放代理 |
-| 节点与订阅 | 通用 Base64、V2Ray/v2rayN、Clash/Mihomo YAML、sing-box JSON；仅导出有效的本机节点 |
-| 出口信息 | 国家、地区、ASN、归属商、IP 类型与来源说明；住宅属性是规则推断，不是认证 |
-| 连通与延迟 | 有界并发健康检查、同国家换线与地域 / ASN 偏好；30 秒刷新限频和断线稳定性提示 |
-| 一键配置与 CLI | `miku quick` 后台持续补齐日本 5 / 韩国 3 / 美国 3；`miku sub` 输出五种订阅与明文节点 |
-| Docker / Compose | Linux host 网络、特权与 TUN；持久化、健康检查、备份和重建更新，见 [部署指南](docs/DOCKER.md) |
-| 日常运维 | 随机管理路径、登录口令、域名 / 证书管理、备份、更新、修复与旧版回滚 |
-
-## VPS一键安装：`mikugate.sh`（推荐）
+- [Docker Engine 总览](https://docs.docker.com/engine/install/)
+- [Ubuntu](https://docs.docker.com/engine/install/ubuntu/) / [Debian](https://docs.docker.com/engine/install/debian/)
+- [Compose 插件安装（docker compose）](https://docs.docker.com/compose/install/linux/)，不是旧独立命令 docker-compose。
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)
+docker info
+docker compose version
+python3 --version   # 前端启动器要求 3.10+
 ```
 
-短入口下载当前 Latest 正式版安装器；正式安装器继续负责 Release 选择、SHA256、BUILD 清单、权限和路径校验。也可传入 `--quick`、`--panel`、`--domain`、`--no-domain` 和 `--background` 参数。
+后端需要 Linux、rootful Docker、TUN、netns 与 iptables，使用 **host 网络 + privileged**，能够影响宿主网络；不支持 rootless / Docker Desktop。前端不需要 TUN 或 privileged，但当前 Compose 也使用 Linux host 网络。
 
-## Docker 部署
+**不要与同机原生 Miku 服务同时运行，不直接挂载原生 /var/lib/miku 做迁移。** 前后端同机默认需要两个管理端口，节点监听端口仍是独立配置。
 
-### Docker Engine 与 Compose v2 官方安装链接
+## 快速安装
 
-- **[Docker Engine 安装总览](https://docs.docker.com/engine/install/)**
-- **[Ubuntu 安装 Docker](https://docs.docker.com/engine/install/ubuntu/)**
-- **[Debian 安装 Docker](https://docs.docker.com/engine/install/debian/)**
-- **[Compose v2 插件安装说明](https://docs.docker.com/compose/install/linux/)**：使用 `docker compose`，不是旧版独立的 `docker-compose`。
+### Docker 默认前后端分离
 
-官方 Docker 仓库安装方案可安装 `docker-compose-plugin`。已经安装则无需重装，先运行 `docker info` 和 `docker compose version` 检查。
-
-### 一键安装与权限
-
-在 Linux VPS 的 root Bash 中运行：
+在 VPS 的 root Bash 中执行：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh) --docker
 ```
 
-要求 rootful Docker、Compose 与 `/dev/net/tun`。项目使用 **host 网络 + privileged**，可以影响宿主网络；不要与同机原生 Miku 服务混跑，不支持 rootless / Desktop。项目保存在 `/opt/miku-gate-docker`。
+新正式 Release 生效后，入口下载并校验最新包，部署到 `/opt/miku-gate-docker`，启动后端和独立前端。不会自动安装 Docker。复制打印的**前端完整地址，包括随机路径**，用后端生成的口令登录。
 
-### 本次 main 安装速度优化（仍为 0.2.5，不发新版）
-
-- Dockerfile 将固定核心准备层放到主程序复制之前，程序版本变化时不必无谓重新下载核心。
-- 默认构建不再每次强制 `--pull`；依赖和基础镜像可复用 Docker 本地层缓存。
-- 输入指纹相同且已存在已标记镜像时，`up` / `start` / `update` 直接复用，跳过镜像构建和基础镜像网络检查。指纹验证架构、程序 SHA256 和镜像运行文件，不把密码、节点数据、`.env` 或 README 纳入镜像。
-- 启动使用 `--no-build --pull never`，避免 Compose 再次构建 / 拉取。健康检查间隔从 30 秒改为 10 秒，减少启动等待。
-- **首次仍需下载依赖和构建镜像，速度取决于网络及 VPS 性能，不承诺固定秒数。** 本次不发布预构建镜像，也不新增 Release 附件。
-
-**适用范围：**这些优化随 `main` 源码更新；现有 v0.2.5 Release 附件及短入口所下载的旧附件保持不变，不会被悄悄替换。要立即使用 main 优化，可在新目录获取源码：
+手动下载 [v0.2.6 完整包](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.6) 与 SHA256SUMS：
 
 ```bash
-git clone --depth 1 https://github.com/vioIetMiku/miku-gate.git miku-gate-main
-cd miku-gate-main
+grep '  miku-gate-vps-v0.2.6.tar.gz$' SHA256SUMS | sha256sum -c -
+sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.6.tar.gz
+cd miku-gate
+sudo bash install.sh --docker
+cd /opt/miku-gate-docker
+sudo bash install-docker.sh frontend info
+```
+
+完整 ZIP 也包含二进制；GitHub 自动生成的纯源码压缩包不含 bin，需要在容器内源码构建。独立自解压文件 `miku` 可运行 `sudo bash miku --docker`。
+
+### 原生安装 / 仅后端
+
+```bash
+sudo bash install.sh                         # 原生 systemd / OpenRC
+sudo bash install.sh --docker --backend-only # Docker 只启动后端
+```
+
+`--docker --split` 是兼容别名，默认 `--docker` 已经分离。在线入口使用 `--docker` 即可，无需附加 `--split`。原生安装与仅后端仍有内嵌页面，但不要同机运行两套后端。
+
+## 同机前后端分离：怎么用？
+
+```text
+浏览器 -> 独立 Nginx 前端（HTML/CSS/JS + 同源代理）
+                      -> Go 后端（认证/API/订阅/VPN/节点）
+                                      -> VPN Gate 出口
+```
+
+| 服务 | 配置 | 优先端口 | 权限 / 挂载 |
+| --- | --- | --- | --- |
+| 后端 miku | compose.yaml | 8899 | privileged / TUN；读写后端数据与证书 |
+| 前端 frontend | compose.frontend.yaml | 8900 | UID 101、只读、cap_drop ALL；仅公开资源和生成配置 |
+
+同机前端不必手填后端 URL / 路径；保持对应变量为空，启动器读取真实配置：
+
+```bash
+cd /opt/miku-gate-docker
 sudo bash install-docker.sh up
+sudo bash install-docker.sh frontend info
+sudo bash install-docker.sh backend info
 ```
 
-首次源码构建会在容器内编译 Go；已有 Docker 部署升级请先备份，将 main 的部署文件与源码更新到原项目目录，保留 `.env`、`docker-data`、`docker-certs`、`docker-backups`，不要另开第二套服务。
+登录口令由后端维护，不需要在前端注册账号；前端不存后台密码，也不挂载后端私钥。根路径 404 属于随机路径保护，使用 info 打印的完整入口。
 
-### 运维、备份和强制刷新
+### 独立启停与管理
 
 ```bash
-cd /opt/miku-gate-docker  # 或你实际使用的源码部署目录
-sudo bash install-docker.sh info
-sudo bash install-docker.sh quick --no-domain --background
-sudo bash install-docker.sh sub
-sudo bash install-docker.sh backup
-sudo bash install-docker.sh update
-sudo bash install-docker.sh stop
-sudo bash install-docker.sh start
+sudo bash install-docker.sh frontend start
+sudo bash install-docker.sh frontend restart # 不重启后端 / 节点
+sudo bash install-docker.sh frontend check   # 只校验候选 Nginx 配置及资源
+sudo bash install-docker.sh frontend info
+sudo bash install-docker.sh frontend status
+sudo bash install-docker.sh frontend logs
+sudo bash install-docker.sh frontend stop
+sudo bash install-docker.sh frontend down
+sudo bash install-docker.sh backend status
+sudo bash install-docker.sh backend logs
+sudo bash install-docker.sh backend stop
+sudo bash install-docker.sh backend start
 ```
 
-需要获取基础镜像和依赖的安全更新时，显式忽略缓存重新构建（较慢）：
+顶层 `stop` / `down` 处理两端；只停后端请带 backend，只停前端请带 frontend。quick/sub/password 仍操作后端，顶层 logs 默认看后端。
+
+## 自动端口与防火墙
+
+- 后端首次优先 8899，前端优先 8900；重启时优先保存的实际端口。
+- WEB_PORT / MIKU_FRONTEND_PORT 是优先值，冲突会选择后续空闲端口，并避开已登记节点端口；IPv4 / IPv6 都检查。
+- 合法范围 1024–65535；80、非整数、65536 等配置直接报错，不伪装为端口冲突。
+- 后端保存到 `docker-data/settings.json`；前端保存到 `frontend/.runtime/state.json`，不用手改生成文件。
+- 以 info 打印的实际地址为准。自动选端口**不修改**云安全组、防火墙和外层反代上游。
+- 网页订阅走前端同源；终端 sub 使用后端发布地址，如需客户端可达，还要放行后端端口。节点入口 / 代理端口分别放行。
+
+## 前端 HTTPS 与外层反向代理
+
+前端容器只提供 HTTP，由已有 Nginx / Caddy 终止公网 HTTPS；前端内部监听 loopback：
+
+```dotenv
+MIKU_FRONTEND_LISTEN=127.0.0.1
+MIKU_FRONTEND_PORT=
+MIKU_FRONTEND_ORIGIN=https://panel.example.com
+```
+
+```bash
+sudo bash install-docker.sh frontend restart
+sudo bash install-docker.sh frontend info
+```
+
+外层 Nginx 配置示例，**将 ACTUAL_FRONTEND_PORT 替换为上一步输出的实际端口**，并使用自己的有效证书：
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name panel.example.com;
+    ssl_certificate /etc/letsencrypt/live/panel.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/panel.example.com/privkey.pem;
+    location / {
+        proxy_pass http://127.0.0.1:ACTUAL_FRONTEND_PORT;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+```
+
+必须转发完整请求路径，不删除随机前缀。最终入口为 `https://panel.example.com/真实随机路径/`。Origin 只填源地址、不含随机路径；它决定浏览器来源校验和 Cookie Secure 标志，不要改成通配符。
+
+网页“管理域名 / 证书”操作的是后端或节点，不是外层前端 TLS。前端 HTTPS 证书由外层反代维护。内部端口自动改变时，外层代理的上游也要手动同步。
+
+## 前端部署到另一台服务器
+
+### 第一步：后端 VPS
+
+后端需要 TUN、rootful Docker 和实际节点端口。只安装后端：
+
+```bash
+sudo bash install.sh --docker --backend-only
+cd /opt/miku-gate-docker
+sudo bash install-docker.sh backend info
+```
+
+记录真实后端源地址和随机路径。例如 `https://api.example.com:9443/abc123/` 只是格式示例，端口和路径必须换成 info 的结果。跨机建议使用 HTTPS，证书应被前端信任；自己的 CA 要加入前端镜像信任库，不能关闭 TLS 校验。
+
+### 第二步：前端服务器
+
+前端机只需 Linux、Docker/Compose 和 Python 3.10+；不需要 TUN、Go、后端程序或后端私钥。下载前端专用包和 SHA256SUMS：
+
+```bash
+grep '  miku-gate-frontend-v0.2.6.tar.gz$' SHA256SUMS | sha256sum -c -
+tar --no-same-owner -xzf miku-gate-frontend-v0.2.6.tar.gz
+cd miku-gate
+cp -n .env.example .env
+```
+
+编辑前端机 .env，将后端源地址与随机路径分开填写：
+
+```dotenv
+MIKU_FRONTEND_LISTEN=127.0.0.1
+MIKU_FRONTEND_PORT=
+MIKU_FRONTEND_ORIGIN=https://panel.example.com
+MIKU_BACKEND_URL=https://api.example.com:9443
+MIKU_BACKEND_BASE_PATH=/abc123
+MIKU_BACKEND_HOST=api.example.com:9443
+```
+
+```bash
+python3 -B scripts/frontend.py start
+python3 -B scripts/frontend.py info
+```
+
+按前一节给前端配置外层 HTTPS 代理。用户打开 `https://panel.example.com/abc123/`，输入后端生成的口令。服务器间只需要前端能访问后端管理接口，VPN 隧道和节点监听仍在后端 VPS。
+
+| 参数 | 填写方式 |
+| --- | --- |
+| MIKU_FRONTEND_ORIGIN | 浏览器访问的公网源，含协议和非标准公网端口，不含随机路径 |
+| MIKU_BACKEND_URL | 前端连接后端的源地址，不含随机路径 |
+| MIKU_BACKEND_BASE_PATH | 后端真实随机路径；确实无前缀时填 / |
+| MIKU_BACKEND_HOST | 后端 Host / TLS 校验域名，可带端口；通常与证书域名一致 |
+| MIKU_FRONTEND_PORT | 内部优先端口，留空记住实际端口、首次尝试 8900 |
+| MIKU_FRONTEND_LISTEN | IPv4 监听地址；有同机外层反代时建议 127.0.0.1 |
+
+不要把后端 .env、docker-data、证书私钥或另一台机器的 `.runtime` 整包复制到前端机。通过前端反代访问的用户会共享部分后端基于来源的登录冷却计数，避免反复尝试错误口令。
+
+### 后端改端口 / 路径 / 域名后怎么办？
+
+顶层 start/restart/update 会在后端就绪后同步同机前端。网页直接改后端配置、只操作 backend、或 Docker 自动重启后换了端口，需执行：
+
+```bash
+sudo bash install-docker.sh frontend restart
+sudo bash install-docker.sh frontend info
+```
+
+远程前端先更新本机 .env，再运行 `python3 -B scripts/frontend.py restart`。本版没有后台配置监听器，不会自动发现远端路径改变。设置页的后端端口与路径不是前端监听设置，不要混淆。
+
+## 独立更新前端
+
+直接编辑 `frontend/public/` 的 HTML/CSS/JS，无需重编译 Go。修改后：
+
+```bash
+python3 -B scripts/export-frontend.py --refresh-manifest
+python3 -B scripts/export-frontend.py
+sudo bash install-docker.sh frontend restart
+```
+
+默认 exporter **只校验、不覆盖**；`--from-backend` 才会用 Go 内嵌兼容页重新导入，可能覆盖分离版提示，使用前另存改动。前端没有 Node.js 运行依赖，国旗资源本地提供。
+
+启动器先校验资源与 Nginx 候选配置，通过后替换运行配置；失败保留旧配置，重建失败会恢复旧配置并尝试恢复旧实例。前端重启不会主动重启后端或已运行的节点。
+
+## 升级、备份与数据
+
+### 从 Docker v0.2.5 升级
+
+1. 先在旧项目执行 `sudo bash install-docker.sh backup`，另存 .env、反代配置和自定义前端文件。
+2. 下载并校验 v0.2.6 完整包，把新程序和部署文件更新到原项目目录；保留 docker-data、docker-certs、docker-backups 和 .env。
+3. 运行 `sudo bash install-docker.sh update`。新版默认启动独立前端，用 frontend info 获取实际入口；只后端部署请用 backend update。
+
+不需要删除数据或 --reinstall。旧原生维护工具的 miku update 有包内文件数限制，**从旧原生版升级推荐解压新包后执行 `sudo bash install.sh --update`**，不要用旧维护工具硬导入大包。新维护工具已提高有界清单上限，但仍做路径、权限和摘要验证。
+
+| 目录 | 用途 |
+| --- | --- |
+| docker-data/ | 口令、节点、订阅、核心与证书，敏感 |
+| docker-certs/ | Certbot 账户和私钥，敏感 |
+| docker-backups/ | 停机一致性备份，权限 600，敏感 |
+| frontend/public/ | 独立静态资源，可自行发布 |
+| frontend/.runtime/ | 实际端口、路径和生成配置，不公开、不打包 |
+| .env | 部署设置，需要备份但不要公开 |
+
+```bash
+sudo bash install-docker.sh backup
+sudo bash install-docker.sh stop   # 两端停止
+sudo bash install-docker.sh start
+sudo bash install-docker.sh down   # 两端移除容器，保留数据
+```
+
+后端备份不等于完整前端站点备份，.env、自定义静态资源和外层 TLS 配置应另外保存。Docker 不运行 systemd 证书续期 timer，仍需网页重新签发或宿主机续期流程；自动端口不替你更新安全组或外层反代。
+
+## 安装速度与首次构建
+
+保留 0.2.5 main 的构建输入指纹缓存。运行文件相同且已有标记镜像时可复用；密码、节点、.env 和 README 不参与镜像指纹，首次仍需依赖和核心下载，不提供预构建项目镜像。前端首次还需拉取 Nginx 镜像。
+
+需要主动刷新基础镜像与依赖安全更新时（较慢）：
 
 ```bash
 sudo env MIKU_DOCKER_REFRESH=1 bash install-docker.sh update
 ```
 
-更新代码不等于自动下载依赖安全更新；默认缓存复用是为了速度，定期刷新由管理员决定。Docker 暂无后台自动续证，证书需网页重新签发或由宿主机续期流程更新后应用。完整流程见 **[Docker 指南](docs/DOCKER.md)**。
-
-##  一般安装
-
-### 安装要求
-
-- Linux VPS，amd64（x86_64）或 arm64（aarch64），使用 **systemd 或 OpenRC**。
-- root 权限，可用的 `/dev/net/tun`，以及创建网络命名空间和修改 iptables 的权限。权限不足的容器不适用。
-- 可连接 GitHub、官方核心下载源和 VPN Gate。准备 Bash、curl、CA 证书；缺少 Python、OpenVPN 等运行依赖时安装器会通过包管理器补齐。
-- 在服务商安全组和防火墙放行管理端口及实际创建的入口 / 代理端口。优先从 `8899` 附近选择管理端口；会避让已有面板、已登记入口和 IPv4 / IPv6 监听，具体以安装结束打印的地址为准。
-
-### 独立文件安装
-
-从 [正式 Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.5) 下载 **`miku`** 和 `SHA256SUMS`，上传到 VPS 同一目录：
-
-```bash
-grep '  miku$' SHA256SUMS | sha256sum -c -
-bash miku --verify
-sudo bash miku
-```
-
-安装后默认引导选择终端一键搭建或网页面板；已有安装默认保留配置更新，不需要清除重装。可显式选择：
-
-```bash
-sudo bash miku --panel
-sudo bash miku --quick --no-domain --background
-sudo bash miku --quick --domain node.example.com
-```
-
-`--domain` 是**节点域名**，需要解析到 VPS；`--no-domain` 使用 REALITY。自动申请证书需要公网 TCP 80，失败不会用自签证书冒充成功。已有安装请先 `miku backup`。`--reinstall` 会清除本服务数据，除非明确需要，请不要使用。
-
-### 公开仓库的一行安装
-
-在 VPS 的 **root Bash 终端**运行。脚本读取最新正式 Release，拒绝草稿和预发布版本，校验下载包 SHA256、内部清单、权限与文件路径后安装：
-
-```bash
-bash -c 'set -e; d=$(mktemp -d); trap '\''rm -rf -- "$d"'\'' EXIT; curl --proto "=https" --tlsv1.2 -fsSL https://github.com/vioIetMiku/miku-gate/releases/latest/download/install-online.sh -o "$d/install-online.sh"; bash "$d/install-online.sh"'
-```
-
-脚本是仓库中的 [install-online.sh](install-online.sh)，也作为 Release 附件提供。执行前可先下载审阅。不要把安装脚本交给来源不明的镜像站，也不要用关闭 TLS 校验的方式解决下载错误。
-
-### 私有仓库安装（仅在仓库改为私有时）
-
-如果仓库仍为私有，上面的公开链接会返回 404。准备一个有本仓库 **Contents: Read** 权限的 GitHub fine-grained personal access token，在 VPS 的 root Bash 终端运行下面整段；令牌通过隐藏输入读取，不会作为明文命令写入历史，也不会传给实际服务安装器：
-
-```bash
-(
-  set -e
-  read -rsp 'GitHub token: ' GITHUB_TOKEN; printf '\n'
-  export GITHUB_TOKEN
-  d=$(mktemp -d)
-  trap 'rm -rf -- "$d"; unset GITHUB_TOKEN' EXIT
-  curl --proto '=https' --tlsv1.2 -fsSL \
-    -H "Authorization: Bearer $GITHUB_TOKEN" \
-    -H 'Accept: application/vnd.github.raw+json' \
-    'https://api.github.com/repos/vioIetMiku/miku-gate/contents/install-online.sh?ref=v0.2.5' \
-    -o "$d/install-online.sh"
-  bash "$d/install-online.sh"
-)
-```
-
-访问令牌仅用于读取当前仓库的 Release。自定义管理端口时，在执行脚本前设置 `export WEB_PORT=9900`；锁定版本使用 `export MIKU_VERSION=v0.2.5`。已经下载脚本时，也可先运行 `bash install-online.sh --download-only /root/miku-packages`，只下载并校验，不安装服务。
-
-### 手动安装 / 离线传包
-
-在 [Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.5) 下载以下文件。私有仓库需要先登录 GitHub：
-
-| 文件 | 用途 |
-| --- | --- |
-| `miku` | 自解压安装文件，含双架构程序；`sudo bash miku` 即可安装，`bash miku --verify` 只校验 |
-| `miku-gate-vps-v0.2.5.tar.gz` | VPS 通用安装包，包含两种架构的主程序、旧版导出程序与维护工具 |
-| `miku-gate-v0.2.5.zip` | 完整源码 + 两种架构安装二进制；不是 GitHub 自动生成的纯源码压缩包 |
-| `install-online.sh` | 最新正式版在线安装入口 |
-| `SHA256SUMS` | 上述四个附件的 SHA256 校验清单 |
-
-将 VPS 包和校验文件放到同一目录后运行：
-
-```bash
-grep '  miku-gate-vps-v0.2.5.tar.gz$' SHA256SUMS | sha256sum -c -
-sudo tar --no-same-owner -xzf miku-gate-vps-v0.2.5.tar.gz
-sudo bash miku-gate/install.sh
-```
-
-本版安装包和完整 ZIP 的内部目录统一为 `miku-gate/`；直接运行其中的 `install.sh` 即可。已有安装仍沿用 `miku` 命令、服务名和数据路径，无需手动改名。手动解包时请使用 root 所有、不可被其他用户写入的文件，不要跳过校验。
-
-## 第一次使用
-
-1. 安装完成后记下打印的 **管理地址和访问口令**；也可以运行 `miku info` 再查看。
-2. 浏览器打开 `http://VPS_IP:端口/随机路径/`。建议尽快使用 `miku domain` 绑定域名并启用 HTTPS；随机路径不能代替 TLS。
-3. 在界面前部确认入口：检测已有面板，或使用自建 Xray。没有模板时可选 **自动创建 VLESS REALITY 入口**。
-4. 点击 **添加出口**，选择国家、数量与入口模板。程序获取 OpenVPN 配置、创建隧道、分配端口并绑定出口。
-5. 连通后复制节点或认证 SOCKS5 / HTTP 地址，或打开订阅弹窗选择客户端格式。
-6. 需要换线时使用切换 / 重连；VPN 已通但入口失败时查看原因并使用 **修复入口**。
-
-自建核心可在设置中切换 Xray / sing-box，切换前会校验配置。**XHTTP 使用 Xray**；不要假定所有客户端和订阅格式支持全部传输协议。本机链接识别会校验发布地址、端口、凭据和传输参数，不支持把任意外部代理作为入口导入。
-
-### 终端一键配置与订阅
-
-```bash
-miku quick                         # 询问节点域名；回车跳过使用 REALITY
-miku quick --no-domain --background # 立即输出当前结果，服务端继续补齐
-miku quick --domain node.example.com
-miku quick --stop                  # 停止补齐，保留已成功出口
-miku sub                           # 输出所有订阅及当前可用节点
-```
-
-一键配置使用 Xray；提供域名时创建 VLESS + TCP + TLS + VISION，跳过时创建 VLESS + TCP + REALITY + VISION。重复执行补齐同配置的缺口并复用凭据，不是固定创建 33 个出口：**33 是候选并发上限，5 / 3 / 3 是成功目标**。节点不足时持续重试，不会用其他国家冒充目标。
-
-Ctrl+C 只退出终端等待并输出当前结果，不取消服务器后台任务。网页刷新或关闭也不会停止补齐；服务重启后恢复已保存出口，但未完成的瞬时任务需重新执行 `miku quick`。更多或其他国家节点可从网页添加。
-
-### 域名与证书
-
-- 在 DNS 设置域名 A 记录指向 VPS，然后执行 `miku domain`，或在网页右上角管理域名与证书。
-- 优先复用匹配域名且有效的已登记 / 面板 / Certbot 证书，校验私钥权限、证书匹配与剩余有效期。没有证书时可自动签发，需要公网可访问 TCP 80。
-- TCP 80 被已有网站占用时，可使用该站点 Webroot 的 `/.well-known/acme-challenge/` 验证；也可选择只绑定 HTTP 域名，不会强行停止其他网站。
-- 域名操作成功后会返回包含实际端口和随机路径的完整登录地址；外部证书保留续期来源。旧页面提示切换地址并暂停轮询，随后请用新地址重新登录。
-- 网页不再要求输入邮箱或网站目录；邮件提醒未配置时使用 Certbot 无邮箱注册。命令行域名流程及旧 API 仍兼容可选邮箱 / Webroot 参数。
-- 可更换域名，输入 `none` 解绑。REALITY 使用自己的握手目标，不需要管理域名证书。
-- 改密码、核心、域名或维护服务可能重启入口与 VPN，客户端需要重新连接。
-
-### 客户端格式限制
-
-- **Clash / Mihomo**：使用支持 VLESS / REALITY 的 Mihomo 内核。
-- **V2Ray / v2rayN**：REALITY 使用 Xray 内核；VMess 使用标准 Base64 JSON 分享格式。
-- **XHTTP**：当前请使用通用 / V2Ray 格式；不支持的订阅格式会返回明确错误，而不是丢掉传输参数。
-- **sing-box JSON**：包含本地 `127.0.0.1:7890` 混合代理入口与节点选择器。使用整张证书 SHA256 固定指纹时需要 sing-box 1.15+ 客户端，不会通过禁用证书校验伪装兼容。
-
-## 维护、备份与更新
-
-```bash
-miku                 # 快捷菜单
-miku quick           # 一键配置节点
-miku sub             # 输出全部订阅 / 当前节点
-miku info            # 管理地址与当前口令
-miku status          # 服务状态
-miku password        # 本机 root 重置口令，无需旧口令
-miku domain          # 绑定 / 更换 / 解绑域名
-miku repair          # 补齐依赖与核心，重启服务
-miku port            # 修改管理端口
-miku start
-miku stop
-miku restart
-miku logs
-miku backup          # 停机一致性备份；完成后恢复原运行状态
-miku update /root/miku-gate-vps-v0.2.5.tar.gz
-miku rollback        # 仅用于已登记的旧架构迁移，恢复切换前配套快照
-miku uninstall       # 停止并取消自启，保留程序、数据与备份
-# 以下为破坏性操作，先将备份复制到 /var/lib/miku 之外：
-miku uninstall --purge  # 完整卸载并清除本服务数据与备份
-```
-
-- 数据：`/var/lib/miku`；程序与维护脚本：`/usr/local/lib/miku`；服务名：`miku`；快捷菜单：`/usr/local/bin/miku`。
-- 更新前先运行 `miku backup`；下载校验后的新 VPS 包，再执行 `miku update /绝对路径/安装包.tar.gz`。也可重新运行一键脚本，由已有安装识别流程执行更新。
-- 备份含登录口令、节点身份、订阅凭据和证书私钥，权限为 `600`；不要提交到 Git，也不要把管理地址 / 订阅地址发到公开渠道。
-- `miku rollback` **不是任意版本回滚器**，只适用于从已识别旧 Miku 架构切换时创建的配套快照。
-
-### 从旧 Miku 升级
-
-安装器识别已有登记信息，先停旧服务并快照数据库、密钥、证书、程序与菜单，再用原普通账号导出兼容数据。自建入口、普通 OpenVPN 出口和代理凭据可迁移，入口端口、UUID / 密码与 REALITY 密钥尽量保留；外部面板通过重新检测继续管理。
-
-空出口、带前置代理的出口和旧高级记录不会自动转换为新配置，留在旧版快照中。切换失败会尝试恢复配套旧服务；成功后仍可 `miku rollback`。回滚后新版数据保留，请勿混跑两套服务。
-
 ## 常见问题
 
-| 情况 | 处理建议 |
+| 情况 | 检查 |
 | --- | --- |
-| GitHub 返回 404 | 检查仓库是否私有、令牌是否有本仓库 Contents 读取权限、标签与附件是否存在 |
-| SHA256 / 清单校验失败 | 停止安装，重新从原 Release 下载；不要手动改清单绕过检查 |
-| 没有 TUN / 无法创建 netns | 检查 VPS 内核、虚拟化权限与容器限制；安装器不能凭空提供宿主机权限 |
-| 管理页面无法打开 | 运行 `miku info` / `miku status` / `miku logs`，核对实际端口、随机路径、防火墙和安全组 |
-| 有节点但 OpenVPN 不通 | 公开清单及 TCP 预检不等于 OpenVPN 可用；换候选、查 VPS 出站限制与日志 |
-| IP 类型与预期不同 | 类型由查询来源和规则推断，可能过期或误判；查看来源 / 置信度，不保证住宅 IP |
-| 总延迟与客户端测速不同 | 面板显示浏览器到 VPS 的 HTTP RTT + VPS 到当前 VPN Gate 的测量 / 参考值，不是完整客户端链路测速 |
+| 根目录 404 | 使用 frontend info 的完整随机路径入口 |
+| 登录 403 | 浏览器源与 MIKU_FRONTEND_ORIGIN 是否一致，别把路径填进 Origin |
+| 登录后 API 502/504 | 实际后端地址、路径、Host/TLS、跨机防火墙；同步后重启前端 |
+| 后端不是 8899 | 默认只是优先值，冲突自动避让，以 backend info 为准 |
+| 端口改后旧入口失效 | 重新获取实际地址；后端改配置后执行 frontend restart |
+| Nginx 无权读资源 | 使用新版 staging / 启动器整理公开资源权限，不要把后端私钥整体改为公开 |
+| 资源清单校验失败 | 是否漏文件；有意修改后 refresh-manifest，不要关闭校验 |
+| 网页主程序更新返回 409 | Docker 应用通过宿主部署脚本 update，不在运行容器里替换二进制 |
+| 停前端后节点是否断？ | 前端 stop/down 不主动停止后端；顶层 stop/down 处理两端 |
 
-## 从源码构建
+## 构建与验证
 
-构建环境使用 Linux、Go **1.26+**、Python **3.9+**。安装包本身不要求 VPS 上有 Go；主程序依赖 Linux 网络能力，不是 Windows 桌面客户端。
+源码构建需要 Go 1.26+。原生依赖与固定核心见 [CORE_ASSETS.json](CORE_ASSETS.json)。发布要求 Go race/vet、Python 维护/端口/前端回归、真实 Nginx 代理、两种页面 DOM、双架构源码构建、Docker 端口冲突/登录/持久化，以及所有附件和资源摘要验证通过。
 
-```bash
-go test -race -c -o /tmp/miku-gate-tests ./src
-sudo /tmp/miku-gate-tests -test.count=1 -test.timeout=5m
-go vet ./...
-(cd compat/miku-export && go test ./... && go vet ./...)
-(cd scripts && sudo python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_docker test_build_key)
-python3 scripts/build-release.py --version 0.2.0 --label v0.2.5 --output dist
-```
+Windows 本地静态检查不等于 Linux 容器、真实 VPN Gate 隧道或证书签发验收。完整细节见 [前后端分离指南](docs/FRONTEND.md)、[Docker 指南](docs/DOCKER.md)、[连接策略](docs/CONNECTION_POLICY.md)、[变更记录](CHANGELOG.md) 与 [验证记录](docs/VALIDATION.md)。
 
-构建脚本从源码重新编译两种架构的主程序和兼容导出程序，生成 VPS 包、完整 ZIP、在线安装脚本、`BUILD.json`、自解压 `miku` 与 `SHA256SUMS`。Git 标签 `vX.Y.Z` 触发自动检查、构建及正式发布；检查失败不会发布正式 Release。
-
-## 许可证与来源
-
-- 基于 [byJoey/fanout](https://github.com/byJoey/fanout)，原始 MIT 许可证与 `Joey (byJoey)` 署名保留。
-- Xray、sing-box 在安装时从各自官方发布下载，版本和 SHA256 固定于 [CORE_ASSETS.json](CORE_ASSETS.json)，分别适用其自身许可证。
-- 国旗 SVG 来自 lipis/flag-icons 7.2.3，内置于源码与程序，适用 [FLAG_ICONS_LICENSE](FLAG_ICONS_LICENSE) 中的 MIT 许可证，不依赖外部图片 CDN。
-- 视觉素材说明：[ARTWORK.md](ARTWORK.md)；界面设计说明：[UI_DESIGN.md](UI_DESIGN.md)。插画为生成素材，不代表与角色权利人存在授权、合作或背书。
-- 完整来源与迭代说明：[PROVENANCE.md](PROVENANCE.md)、[开发历史](docs/DEV_HISTORY.md)、[更新记录](CHANGELOG.md)。
+国旗许可证见 [FLAG_ICONS_LICENSE](FLAG_ICONS_LICENSE)，插画与字标见 [ARTWORK.md](ARTWORK.md)。项目不代表与角色权利人存在官方合作或背书。

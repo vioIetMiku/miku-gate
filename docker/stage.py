@@ -6,12 +6,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import common as c
 
 FILES = (
-    'Dockerfile', 'compose.yaml', '.dockerignore', '.env.example',
+    'Dockerfile', 'compose.yaml', 'compose.frontend.yaml', '.dockerignore', '.env.example',
     'install-docker.sh', 'CORE_ASSETS.json', 'LICENSE', 'FLAG_ICONS_LICENSE',
     'VERSION', 'go.mod', 'go.sum', 'BUILD.json', 'README.md', 'CHANGELOG.md',
-    'scripts/common.py', 'scripts/quick.py',
+    'scripts/common.py', 'scripts/quick.py', 'scripts/frontend.py', 'scripts/export-frontend.py',
     'docker/container.py', 'docker/build-key.py', 'docker/entrypoint.sh', 'docker/miku.sh',
-    'docs/DOCKER.md', 'bin/miku-linux-amd64', 'bin/miku-linux-arm64',
+    'docs/DOCKER.md', 'docs/FRONTEND.md', 'docs/VALIDATION.md', 'bin/miku-linux-amd64', 'bin/miku-linux-arm64',
 )
 
 
@@ -25,6 +25,9 @@ def stage(source, destination):
         c.verify_distribution(source)
     c.private_dir(destination)
     names = [name for name in FILES if (source / name).is_file()]
+    if (source / 'frontend').is_dir():
+        names.extend(path.relative_to(source).as_posix() for path in sorted((source / 'frontend').rglob('*'))
+                     if path.is_file() and '.runtime' not in path.parts)
     # Source checkouts can build in Docker; no source data or credentials are copied.
     if (source / 'src').is_dir():
         names.extend(path.relative_to(source).as_posix() for path in sorted((source / 'src').rglob('*')) if path.is_file() and '__pycache__' not in path.parts)
@@ -33,6 +36,13 @@ def stage(source, destination):
         c.private_dir(target.parent)
         mode = 0o755 if name.startswith('bin/') or name.endswith('.sh') else 0o644
         c.atomic(target, c.trusted(source / name), mode)
+    # Nginx is unprivileged and receives only these public static files.
+    public = destination / 'frontend/public'
+    if public.is_dir():
+        public.chmod(0o755)
+        for directory in public.rglob('*'):
+            if directory.is_dir():
+                directory.chmod(0o755)
     print('Docker 部署目录：' + str(destination), flush=True)
     return destination
 

@@ -168,4 +168,17 @@ class MaintenanceTests(unittest.TestCase):
             response.getheader.return_value='1'
             self.real_wait_ready(seconds=.1)
 
+    def test_split_package_with_more_than_120_members_is_accepted_after_manifest_check(self):
+        import tarfile
+        package=self.root/'split.tar.gz'
+        with tarfile.open(package,'w:gz') as archive:
+            for i in range(150):
+                item=tarfile.TarInfo('miku-gate/frontend/public/fixture-'+str(i)+'.txt')
+                item.size=1;item.mode=0o644
+                archive.addfile(item,io.BytesIO(b'x'))
+        with patch.object(c,'verify_distribution',side_effect=lambda directory:(directory,{})) as verify,patch.object(install,'install') as upgrade:
+            maintain.update(str(package))
+        self.assertEqual(verify.call_count,1)
+        self.assertTrue(upgrade.call_args.kwargs['update'])
+
 if __name__=='__main__':unittest.main()

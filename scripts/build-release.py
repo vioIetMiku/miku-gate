@@ -19,17 +19,20 @@ UPSTREAM='d7ce5224caf3469b19876982abdf8d1be16c4a8b'
 
 def source_file(path):
     relative=path.relative_to(ROOT)
-    excluded=('.git','bin','dist','__pycache__','docker-data','docker-certs','docker-backups')
+    excluded=('.git','bin','dist','__pycache__','.runtime','tmph5eepphq','docker-data','docker-certs','docker-backups')
     return (path.is_file() and not any(part in excluded for part in relative.parts)
             and path.suffix not in ('.zip','.gz','.pyc')
             and relative.as_posix()!='BUILD.json'
             and not (path.name.startswith('.env') and path.name!='.env.example'))
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.5');parser.add_argument('--label',default='v0.2.5');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.6');parser.add_argument('--label',default='v0.2.6');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',args.version) or not re.fullmatch(r'[A-Za-z0-9_.-]+',args.label):raise ValueError('invalid version/label')
     args.output=args.output.resolve()
     args.output.mkdir(parents=True,exist_ok=True)
+    # Standalone UI is maintained independently; releases must not overwrite it
+    # with the backend's legacy embedded pages.
+    subprocess.run([__import__('sys').executable,'-B',str(ROOT/'scripts/export-frontend.py')],check=True)
     revision=subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,text=True,capture_output=True)
     if revision.returncode==0:
         source=revision.stdout.strip()
@@ -43,14 +46,17 @@ def main():
         source='archive-sha256:'+digest.hexdigest()
     with tempfile.TemporaryDirectory(prefix='miku-release-',dir=args.output) as temporary:
         stage=Path(temporary)/'miku-gate';(stage/'bin').mkdir(parents=True);(stage/'scripts').mkdir()
-        for name in ('install.sh','install-online.sh','mikugate.sh','install-docker.sh','Dockerfile','compose.yaml','.dockerignore','.env.example','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','FLAG_ICONS_LICENSE','CORE_ASSETS.json'):
+        for name in ('install.sh','install-online.sh','install-docker.sh','Dockerfile','compose.yaml','compose.frontend.yaml','.dockerignore','.env.example','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','FLAG_ICONS_LICENSE','CORE_ASSETS.json'):
             shutil.copy2(ROOT/name,stage/name)
-        for name in ('common.py','install.py','maintain.py','quick.py','miku.sh'):
+        for name in ('common.py','install.py','maintain.py','quick.py','miku.sh','frontend.py','export-frontend.py'):
             shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
         (stage/'docs').mkdir()
         shutil.copyfile(ROOT/'docs/DEV_HISTORY.md',stage/'docs/DEV_HISTORY.md')
         if (ROOT/'docs/CONNECTION_POLICY.md').exists():shutil.copyfile(ROOT/'docs/CONNECTION_POLICY.md',stage/'docs/CONNECTION_POLICY.md')
         shutil.copyfile(ROOT/'docs/DOCKER.md',stage/'docs/DOCKER.md')
+        shutil.copyfile(ROOT/'docs/FRONTEND.md',stage/'docs/FRONTEND.md')
+        if (ROOT/'docs/VALIDATION.md').exists():shutil.copyfile(ROOT/'docs/VALIDATION.md',stage/'docs/VALIDATION.md')
+        shutil.copytree(ROOT/'frontend',stage/'frontend',ignore=shutil.ignore_patterns('.runtime'))
         (stage/'docker').mkdir()
         for name in ('container.py','build-key.py','stage.py','entrypoint.sh','miku.sh'):
             shutil.copyfile(ROOT/'docker'/name,stage/'docker'/name)
@@ -127,6 +133,23 @@ exit 0
 __MIKU_ARCHIVE_BELOW__
 '''.replace('__SHA256__',payload_sha256)
         standalone.write_bytes(bootstrap.encode()+target.read_bytes());standalone.chmod(0o755)
+        # A frontend-only distribution can be copied to a separate, unprivileged host.
+        front=Path(temporary)/'frontend-only'/'miku-gate'
+        front.mkdir(parents=True)
+        front_files={}
+        names=['compose.frontend.yaml','.env.example','VERSION','README.md','LICENSE','FLAG_ICONS_LICENSE','ARTWORK.md','scripts/common.py','scripts/frontend.py','scripts/export-frontend.py','docs/FRONTEND.md','docs/DOCKER.md']
+        names += [path.relative_to(ROOT).as_posix() for path in sorted((ROOT/'frontend').rglob('*')) if source_file(path)]
+        for name in names:
+            raw=(ROOT/name).read_bytes();target_path=front/name;target_path.parent.mkdir(parents=True,exist_ok=True);target_path.write_bytes(raw)
+            front_files[name]=hashlib.sha256(raw).hexdigest()
+        front_meta={**meta,'distribution':'frontend','files':front_files}
+        (front/'BUILD.json').write_text(json.dumps(front_meta,indent=2)+'\n',encoding='utf-8')
+        frontend_archive=args.output/('miku-gate-frontend-'+args.label+'.tar.gz')
+        with tarfile.open(frontend_archive,'w:gz') as archive:
+            for name in sorted(set(names)|{'BUILD.json'}):
+                path=front/name;info=archive.gettarinfo(str(path),arcname='miku-gate/'+name)
+                info.uid=info.gid=0;info.uname=info.gname='';info.mode=0o755 if name.endswith('.sh') else 0o644
+                with path.open('rb') as contents:archive.addfile(info,contents)
         sources=args.output/('miku-gate-'+args.label+'.zip')
         source_stage=Path(temporary)/'source'/'miku-gate'
         source_stage.mkdir(parents=True)
@@ -156,7 +179,7 @@ __MIKU_ARCHIVE_BELOW__
         bootstrap=args.output/'install-online.sh'
         shutil.copyfile(ROOT/'install-online.sh',bootstrap)
         checksums=args.output/'SHA256SUMS'
-        checksums.write_text(''.join(hashlib.sha256(path.read_bytes()).hexdigest()+'  '+path.name+'\n' for path in (standalone,target,sources,bootstrap)))
+        checksums.write_text(''.join(hashlib.sha256(path.read_bytes()).hexdigest()+'  '+path.name+'\n' for path in (standalone,target,sources,bootstrap,frontend_archive)))
         print(target);print(sources)
 
 if __name__=='__main__':main()

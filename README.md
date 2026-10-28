@@ -60,7 +60,7 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
 | Docker / Compose | Linux host 网络、特权与 TUN；持久化、健康检查、备份和重建更新，见 [部署指南](docs/DOCKER.md) |
 | 日常运维 | 随机管理路径、登录口令、域名 / 证书管理、备份、更新、修复与旧版回滚 |
 
-## 一行安装：`mikugate.sh`
+## 一键安装：`mikugate.sh`（推荐）
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)
@@ -129,7 +129,7 @@ sudo bash install-docker.sh down   # 移除容器，保留数据目录
 - 可连接 GitHub、官方核心下载源和 VPN Gate。准备 Bash、curl、CA 证书；缺少 Python、OpenVPN 等运行依赖时安装器会通过包管理器补齐。
 - 在服务商安全组和防火墙放行管理端口及实际创建的入口 / 代理端口。优先从 `8899` 附近选择管理端口；会避让已有面板、已登记入口和 IPv4 / IPv6 监听，具体以安装结束打印的地址为准。
 
-### 独立文件安装（推荐）
+### 独立文件安装
 
 从 [正式 Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.5) 下载 **`miku`** 和 `SHA256SUMS`，上传到 VPS 同一目录：
 

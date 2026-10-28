@@ -108,6 +108,21 @@ class DockerDataTests(unittest.TestCase):
             d.initialize()
         self.assertEqual(c.settings()['port'], 19911)
 
+    @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0,
+                         'Linux root ownership integration fixture')
+    def test_foreign_owned_data_is_rejected_without_changing_credentials(self):
+        self.data.mkdir(mode=0o700)
+        marker=self.data/'password'
+        marker.write_bytes(b'preserve-fixture-password')
+        os.chown(self.data,65534,65534)
+        try:
+            with self.assertRaisesRegex(RuntimeError,'私有目录异常'):
+                d.initialize()
+            self.assertEqual(self.data.stat().st_uid,65534)
+            self.assertEqual(marker.read_bytes(),b'preserve-fixture-password')
+        finally:
+            os.chown(self.data,0,0)
+
     def test_native_install_is_rejected_without_modification(self):
         c.private_dir(self.data)
         c.write_json(self.data / 'install.json', {'product': 'miku-fanout', 'version': '0.2.4'})

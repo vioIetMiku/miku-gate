@@ -85,9 +85,13 @@ jobs:
           busy_ports_pid=$!
           sleep 1
           kill -0 "$busy_ports_pid"
-          backend_info=$(bash install-docker.sh backend up)
+          # Backend bootstrap creates root-owned private bind directories; do
+          # not create them as the ordinary GitHub runner user.
+          backend_info=$(sudo bash install-docker.sh backend up)
           [[ "$backend_info" == *'复用本地镜像'* ]]
           unset backend_info
+          [[ "$(stat -c %u docker-data)" == 0 ]]
+          [[ "$(stat -c %a docker-data)" == 700 ]]
           docker compose exec -T miku miku status
           before=$(docker compose exec -T miku sha256sum /var/lib/miku/password /var/lib/miku/basepath)
           docker compose stop miku

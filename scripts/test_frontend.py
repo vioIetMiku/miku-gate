@@ -7,7 +7,7 @@ import importlib.util
 import io
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import socket
@@ -34,12 +34,32 @@ def fixture(root):
     shutil.copytree(ROOT / 'frontend', root / 'frontend', ignore=shutil.ignore_patterns('.runtime'))
 
 
+def nginx_fixture_config(config, root):
+    # Rewrite original template scratch paths before inserting /tmp fixture paths.
+    config = config.replace('/tmp/', str(root) + '/')
+    config = config.replace('/usr/share/nginx/html', str(root / 'frontend/public'))
+    config = config.replace('/etc/nginx/mime.types', str(root / 'mime.types'))
+    config = config.replace('worker_processes auto;', 'worker_processes 1;')
+    return config.replace('/dev/stderr', str(root / 'runtime-error.log'))
+
+
 class FrontendConfigTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         fixture(self.root)
+
+    def test_nginx_fixture_does_not_duplicate_tmp_paths(self):
+        root = PurePosixPath('/tmp/miku-fixture')
+        template = (ROOT / 'frontend/nginx.conf.template').read_text()
+        config = nginx_fixture_config(template, root)
+        self.assertIn('include /tmp/miku-fixture/mime.types;', config)
+        self.assertIn('root /tmp/miku-fixture/frontend/public;', config)
+        self.assertIn('pid /tmp/miku-fixture/miku-nginx.pid;', config)
+        self.assertIn('error_log /tmp/miku-fixture/runtime-error.log warn;', config)
+        self.assertNotIn('/tmp/miku-fixture/miku-fixture/', config)
+        self.assertNotIn('/usr/share/nginx/html', config)
 
     def test_auto_config_uses_saved_backend_and_validates_browser_origin(self):
         config, address = f.configuration(self.root, {})
@@ -195,10 +215,7 @@ class FrontendProxyTests(unittest.TestCase):
         config, cls.address = f.configuration(cls.root, {'MIKU_FRONTEND_PORT': str(cls.port)})
         mime = cls.root / 'mime.types'
         mime.write_text('types { text/html html; text/css css; application/javascript js; image/png png; image/svg+xml svg; }')
-        config = config.replace('/usr/share/nginx/html', str(cls.root / 'frontend/public'))
-        config = config.replace('/etc/nginx/mime.types', str(mime)).replace('worker_processes auto;', 'worker_processes 1;')
-        config = config.replace('/tmp/', str(cls.root) + '/')
-        config = config.replace('/dev/stderr', str(cls.root / 'runtime-error.log'))
+        config = nginx_fixture_config(config, cls.root)
         if os.geteuid() == 0:
             # The test fixture directory is private to this root-owned test;
             # production runs the entire container as unprivileged UID 101.

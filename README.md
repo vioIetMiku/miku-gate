@@ -120,7 +120,7 @@ sudo bash install-docker.sh down   # 移除容器，保留数据目录
 
 完整参数、证书、备份恢复和限制见 **[Docker 部署指南](docs/DOCKER.md)**。
 
-## VPS 一键安装
+##  一般安装
 
 ### 安装要求
 

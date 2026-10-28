@@ -26,7 +26,6 @@ VPN Gate 不属于 Miku Gate，我们不运营这些中继。志愿者节点的�
 <p align="center">
   <a href="https://github.com/vioIetMiku/miku-gate/releases/latest">下载正式版</a> ·
   <a href="#docker-部署">Docker 部署</a> ·
-  <a href="#vps-一键安装">VPS 原生安装</a> ·
   <a href="#第一次使用">第一次使用</a> ·
   <a href="CHANGELOG.md">更新记录</a>
 </p>

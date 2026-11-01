@@ -500,7 +500,7 @@ MIKU_DOCKER_REFRESH=1 bash install-docker.sh update
 
 <table>
   <tr>
-    <td align="center" width="220">
+    <td align="center" width="420">
       <a href="https://sponsorship.forztn.com/github.com/vioIetMiku/miku-gate">
         <strong>ForZTN</strong>
       </a>
@@ -509,19 +509,6 @@ MIKU_DOCKER_REFRESH=1 bash install-docker.sh update
     </td>
   </tr>
 </table>
-## 常见问题
-
-| 情况 | 检查 |
-| --- | --- |
-| 根目录 404 | 使用 frontend info 的完整随机路径入口 |
-| 登录 403 | 浏览器源与 MIKU_FRONTEND_ORIGIN 是否一致，别把路径填进 Origin |
-| 登录后 API 502/504 | 实际后端地址、路径、Host/TLS、跨机防火墙；同步后重启前端 |
-| 后端不是 8899 | 默认只是优先值，冲突自动避让，以 backend info 为准 |
-| 端口改后旧入口失效 | 重新获取实际地址；后端改配置后执行 frontend restart |
-| Nginx 无权读资源 | 使用新版 staging / 启动器整理公开资源权限，不要把后端私钥整体改为公开 |
-| 资源清单校验失败 | 是否漏文件；有意修改后 refresh-manifest，不要关闭校验 |
-| 网页主程序更新返回 409 | Docker 应用通过宿主部署脚本 update，不在运行容器里替换二进制 |
-| 停前端后节点是否断？ | 前端 stop/down 不主动停止后端；顶层 stop/down 处理两端 |
 
 ## 构建与验证
 

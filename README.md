@@ -494,7 +494,21 @@ bash install-docker.sh down   # 两端移除容器，保留数据
 ```bash
 MIKU_DOCKER_REFRESH=1 bash install-docker.sh update
 ```
+## 赞助商
 
+感谢以下赞助商对 **Miku Gate** 开源项目的支持：
+
+<table>
+  <tr>
+    <td align="center" width="220">
+      <a href="https://sponsorship.forztn.com/github.com/vioIetMiku/miku-gate">
+        <strong>ForZTN</strong>
+      </a>
+      <br>
+      <sub>服务器资源赞助 · 开源项目支持</sub>
+    </td>
+  </tr>
+</table>
 ## 常见问题
 
 | 情况 | 检查 |

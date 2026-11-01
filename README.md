@@ -459,57 +459,6 @@ miku info
 原生数据位于 `/var/lib/miku`、程序位于 `/usr/local/lib/miku`；Docker 数据位于其项目目录中的持久化子目录。两者不能混用备份命令或直接交换数据目录。
 
 
-### 从 Docker v0.2.5 升级
-
-1. 先在旧项目执行 `bash install-docker.sh backup`，另存 .env、反代配置和自定义前端文件。
-2. 下载并校验 v0.2.6 完整包，把新程序和部署文件更新到原项目目录；保留 docker-data、docker-certs、docker-backups 和 .env。
-3. 运行 `bash install-docker.sh update`。新版默认启动独立前端，用 frontend info 获取实际入口；只后端部署请用 backend update。
-
-不需要删除数据或 --reinstall。旧原生维护工具的 miku update 有包内文件数限制，**从旧原生版升级推荐解压新包后执行 `bash install.sh --update`**，不要用旧维护工具硬导入大包。新维护工具已提高有界清单上限，但仍做路径、权限和摘要验证。
-
-| 目录 | 用途 |
-| --- | --- |
-| docker-data/ | 口令、节点、订阅、核心与证书，敏感 |
-| docker-certs/ | Certbot 账户和私钥，敏感 |
-| docker-backups/ | 停机一致性备份，权限 600，敏感 |
-| frontend/public/ | 独立静态资源，可自行发布 |
-| frontend/.runtime/ | 实际端口、路径和生成配置，不公开、不打包 |
-| .env | 部署设置，需要备份但不要公开 |
-
-```bash
-bash install-docker.sh backup
-bash install-docker.sh stop   # 两端停止
-bash install-docker.sh start
-bash install-docker.sh down   # 两端移除容器，保留数据
-```
-
-后端备份不等于完整前端站点备份，.env、自定义静态资源和外层 TLS 配置应另外保存。Docker 不运行 systemd 证书续期 timer，仍需网页重新签发或宿主机续期流程；自动端口不替你更新安全组或外层反代。
-
-## Docker 安装速度与首次构建
-
-保留 0.2.5 main 的构建输入指纹缓存。运行文件相同且已有标记镜像时可复用；密码、节点、.env 和 README 不参与镜像指纹，首次仍需依赖和核心下载，不提供预构建项目镜像。前端首次还需拉取 Nginx 镜像。
-
-需要主动刷新基础镜像与依赖安全更新时（较慢）：
-
-```bash
-MIKU_DOCKER_REFRESH=1 bash install-docker.sh update
-```
-## 赞助商
-
-感谢以下赞助商对 **Miku Gate** 开源项目的支持：
-
-<table>
-  <tr>
-    <td align="center" width="420">
-      <a href="https://sponsorship.forztn.com/github.com/vioIetMiku/miku-gate">
-        <strong>ForZTN</strong>
-      </a>
-      <br>
-      <sub>服务器资源赞助 · 开源项目支持</sub>
-    </td>
-  </tr>
-</table>
-
 ## 构建与验证
 
 源码构建需要 Go 1.26+。原生依赖与固定核心见 [CORE_ASSETS.json](CORE_ASSETS.json)。发布要求 Go race/vet、Python 维护/端口/前端回归、真实 Nginx 代理、两种页面 DOM、双架构源码构建、Docker 端口冲突/登录/持久化，以及所有附件和资源摘要验证通过。
@@ -525,3 +474,40 @@ Windows 本地静态检查不等于 Linux 容器、真实 VPN Gate 隧道或证�
 - 后端优先 8899、前端优先 8900，冲突自动避让，实际端口持久化；已健康运行的前端重复启动不会被自己的端口占用逼走。
 - 原生和仅后端模式继续支持内嵌页面。保留镜像构建指纹缓存、显式基础镜像刷新、quick/sub 和 v0.2.4 连接恢复策略。
 - 新增前端专用包，支持前端放另一台服务器；主程序和兼容助手从源码重建为 0.2.6，不复用输入包中的旧二进制。
+
+## 💖 Sponsors
+
+<div align="center">
+
+<p>
+  感谢以下赞助商对 <strong>Miku Gate</strong> 开源项目的支持。
+</p>
+
+<table>
+  <tr>
+    <td align="center" width="560">
+      <br>
+      
+      <h2>☁️ ForZTN</h2>
+
+      <strong>Infrastructure Sponsor</strong>
+      
+      <br><br>
+
+      为 Miku Gate 提供服务器资源<br>
+      支持项目开发、测试与持续运行
+
+      <br><br>
+
+      <a href="https://sponsorship.forztn.com/github.com/vioIetMiku/miku-gate">
+        <strong>🌐 ForZTN Open Source Sponsorship</strong>
+      </a>
+
+      <br><br>
+      <sub>Supporting Open Source · Powering Miku Gate</sub>
+      <br><br>
+    </td>
+  </tr>
+</table>
+
+</div>

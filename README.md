@@ -475,36 +475,27 @@ Windows 本地静态检查不等于 Linux 容器、真实 VPN Gate 隧道或证�
 - 原生和仅后端模式继续支持内嵌页面。保留镜像构建指纹缓存、显式基础镜像刷新、quick/sub 和 v0.2.4 连接恢复策略。
 - 新增前端专用包，支持前端放另一台服务器；主程序和兼容助手从源码重建为 0.2.6，不复用输入包中的旧二进制。
 
-## 💖 Sponsors
+## 💖 赞助商
+
+感谢以下赞助商为 **Miku Gate** 的持续开发、测试与运行提供支持。
 
 <div align="center">
 
-<p>
-  感谢以下赞助商对 <strong>Miku Gate</strong> 开源项目的支持。
-</p>
-
 <table>
   <tr>
-    <td align="center" width="560">
+    <td align="center" width="520">
       <br>
-      
-      <h2>☁️ ForZTN</h2>
-
-      <strong>Infrastructure Sponsor</strong>
-      
-      <br><br>
-
-      为 Miku Gate 提供服务器资源<br>
-      支持项目开发、测试与持续运行
-
-      <br><br>
-
       <a href="https://sponsorship.forztn.com/github.com/vioIetMiku/miku-gate">
-        <strong>🌐 ForZTN Open Source Sponsorship</strong>
+        <strong>☁️ ForZTN</strong>
       </a>
-
       <br><br>
-      <sub>Supporting Open Source · Powering Miku Gate</sub>
+      <strong>Open Source Infrastructure Sponsor</strong>
+      <br>
+      <sub>为 Miku Gate 提供服务器资源与开源项目基础设施支持</sub>
+      <br><br>
+      <a href="https://sponsorship.forztn.com/github.com/vioIetMiku/miku-gate">
+        🔗 查看 ForZTN Sponsorship
+      </a>
       <br><br>
     </td>
   </tr>

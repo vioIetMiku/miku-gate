@@ -12,7 +12,8 @@ import common as c
 
 
 class LocalPanel:
-    def __init__(self):
+    def __init__(self, timeout=12):
+        self.timeout = timeout
         self.value = c.settings()
         self.path = '/' + c.trusted(c.DATA/'basepath', 0o600, 1024).decode().strip().strip('/') + '/'
         self.host = self.value.get('public_host') or self.value.get('public_ip') or '127.0.0.1'
@@ -22,14 +23,14 @@ class LocalPanel:
 
     def connection(self):
         if not self.value.get('tls_cert'):
-            return http.client.HTTPConnection('127.0.0.1', self.value['port'], timeout=12)
+            return http.client.HTTPConnection('127.0.0.1', self.value['port'], timeout=self.timeout)
         context = ssl.create_default_context(cafile=self.value['tls_cert'])
         class LocalTLS(http.client.HTTPSConnection):
             def connect(conn):
                 import socket
-                conn.sock = socket.create_connection(('127.0.0.1', conn.port), timeout=12)
+                conn.sock = socket.create_connection(('127.0.0.1', conn.port), timeout=self.timeout)
                 conn.sock = conn._context.wrap_socket(conn.sock, server_hostname=conn.host)
-        return LocalTLS(self.host, self.value['port'], context=context, timeout=12)
+        return LocalTLS(self.host, self.value['port'], context=context, timeout=self.timeout)
 
     def request(self, method, path, body=None, content_type='application/json'):
         if isinstance(body, dict):

@@ -23,6 +23,7 @@ if ! command -v python3 >/dev/null 2>&1; then
   rm -f -- "$python_log"
 fi
 MIKU_PACKAGE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+source "$MIKU_PACKAGE_DIR/scripts/banner.sh"
 if [[ "${1:-}" == --docker ]]; then
   shift
   python3 -B "$MIKU_PACKAGE_DIR/scripts/progress.py" '正在准备 Docker 运行环境' bash "$MIKU_PACKAGE_DIR/scripts/setup-docker.sh"

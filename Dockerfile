@@ -21,7 +21,7 @@ RUN chmod 600 CORE_ASSETS.json \
 # Seed pinned cores before the application binary: version-only updates reuse this layer.
 RUN --mount=type=cache,target=/opt/miku/core-cache,sharing=locked \
     MIKU_CORE_CACHE=/opt/miku/core-cache python3 -B container.py seed-cores
-COPY scripts/quick.py scripts/console.py ./
+COPY scripts/quick.py scripts/console.py scripts/inbound_wizard.py ./
 
 # Release ZIP/tar bundles already contain both architectures; no Go is needed.
 FROM runtime AS prebuilt

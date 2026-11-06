@@ -18,10 +18,14 @@ case "$action" in
     echo '仅操作后端：bash install-docker.sh backend [up|start|restart|update|info|status|logs|stop|down]'
     echo '默认 up：复用或构建后端镜像并启动后端及独立前端，端口冲突自动避让。要求 Linux、Docker Engine、Compose v2、Python 3.10+ 和 TUN。'
     exit 0 ;;
-  up|build|info|quick|sub|password|status|logs|start|stop|restart|backup|update|down|frontend|menu|list|countries|swap|jobs|remove|ip|country) ;;
+  up|build|info|quick|sub|password|status|logs|start|stop|restart|backup|update|down|frontend|menu|list|countries|swap|jobs|remove|ip|country|new|node-link|quick-menu) ;;
   *) echo "未知命令：$action" >&2; exit 2 ;;
 esac
-if [[ "$action" != quick && "$action" != frontend && $# -ne 0 ]]; then echo '此命令不接受额外参数' >&2; exit 2; fi
+if [[ "$action" == up || "$action" == build || "$action" == update ]]; then
+  if [[ -f "$MIKU_DOCKER_DIR/scripts/banner.sh" ]]; then source "$MIKU_DOCKER_DIR/scripts/banner.sh"; fi
+fi
+if [[ "$action" != quick && "$action" != frontend && "$action" != node-link && $# -ne 0 ]]; then echo '此命令不接受额外参数' >&2; exit 2; fi
+if [[ "$action" == node-link && $# -ne 1 ]]; then echo '用法：miku node-link 入口ID' >&2; exit 2; fi
 [[ "$(uname -s)" == Linux ]] || { echo 'Docker 模式需要 Linux VPS。' >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo '请先安装 Python 3.10+。' >&2; exit 1; }
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else "需要 Python 3.10+")'
@@ -118,7 +122,7 @@ case "$action" in
   stop|down)
     if [[ "$scope" == all ]] && frontend_exists; then frontend "$action"; fi
     "${compose[@]}" "$action" ;;
-  quick|password|list|countries|swap|jobs|remove|ip|country)
+  quick|password|list|countries|swap|jobs|remove|ip|country|new|node-link|quick-menu)
     terminal=(-T); if [[ -t 0 && -t 1 ]]; then terminal=(); fi
     "${compose[@]}" exec "${terminal[@]}" miku /usr/local/bin/miku "$action" "$@" ;;
   sub) "${compose[@]}" exec -T miku /usr/local/bin/miku sub ;;

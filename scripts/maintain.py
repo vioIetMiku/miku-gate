@@ -278,10 +278,9 @@ def menu():
 
 def main():
     c.root();args=sys.argv[1:];command=args[0] if args else 'menu'
-    if command in ('list','countries','swap','jobs','remove','ip','country'):
-        c.require(len(args)==1,'该命令通过交互菜单选择参数')
+    if command in ('list','countries','swap','jobs','remove','ip','country','new','node-link','quick-menu'):
         from console import node_command
-        return node_command({'ip':'swap','country':'countries'}.get(command,command))
+        return node_command({'ip':'swap','country':'countries'}.get(command,command),args[1:])
     if command in ('quick','node','nodes'):
         from quick import command as quick_command
         return quick_command(args[1:])

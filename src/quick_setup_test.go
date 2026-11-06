@@ -186,6 +186,9 @@ func TestQuickSetupReusesCertificateWithoutChangingManagementOrigin(t *testing.T
 
 func TestQuickSetupRealityNeedsNoCertificate(t *testing.T) {
 	spec := quickInboundSpec("", RegisteredDomain{})
+	if spec.Dest != "www.amd.com:443" || spec.ServerNames != "www.amd.com" {
+		t.Fatal("unexpected default REALITY preset", spec)
+	}
 	ns, err := normalizeInboundSpec(spec, nil)
 	if err != nil || ns.Security != "reality" || ns.Protocol != "vless" || ns.Network != "tcp" || ns.Flow != "xtls-rprx-vision" || spec.CertFile != "" || spec.ServerName != "" {
 		t.Fatal("wrong domain-free setup", spec, ns, err)
@@ -196,6 +199,36 @@ func TestQuickSetupRealityNeedsNoCertificate(t *testing.T) {
 		if err != nil || id != 1 || len(n.store.Inbounds) != 1 {
 			t.Fatal("repeat recreated a matching template", id, err)
 		}
+	}
+}
+
+func TestQuickSetupPreservesSelectedSingBoxCore(t *testing.T) {
+	if os.PathSeparator != '/' {
+		t.Skip("requires a POSIX shell")
+	}
+	root := t.TempDir()
+	bin := filepath.Join(root, "sing-box")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	n := &Native{dir: root, store: &nativeStore{NextID: 1}, proc: &xrayProc{bin: bin, dir: root, core: "sing-box"}}
+	panelState.mu.Lock()
+	previous, workDir, forced := panelState.current, panelState.workDir, panelState.forced
+	panelState.current, panelState.workDir, panelState.forced = n, root, "sing-box"
+	panelState.mu.Unlock()
+	defer func() {
+		panelState.mu.Lock()
+		panelState.current, panelState.workDir, panelState.forced = previous, workDir, forced
+		panelState.mu.Unlock()
+	}()
+	m := &Manager{}
+	selected, err := m.quickNative()
+	if err != nil || selected != n || currentPanelMode() != "sing-box" {
+		t.Fatal("quick setup changed the selected core", err)
+	}
+	data, err := os.ReadFile(panelModeFile(root))
+	if err != nil || string(data) != "sing-box" {
+		t.Fatal("selected core was not persisted", string(data), err)
 	}
 }
 

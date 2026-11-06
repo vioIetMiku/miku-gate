@@ -33,11 +33,11 @@ def execute(args):
 
 def menu():
     from console import menu as ui
-    actions = {str(i): (lambda cmd=cmd: execute([cmd])) for i,cmd in enumerate(('list','countries','swap','quick','remove','jobs','sub','info','password'), 1)}
+    actions = {str(i): (lambda cmd=cmd: execute([cmd])) for i,cmd in enumerate(('quick-menu','new','swap','countries','list','remove','sub','info','password'), 1)}
     actions.update({'10':lambda:execute(['status']), '11':lambda:execute(['start']),
                     '12':lambda:execute(['restart']), '13':lambda:execute(['stop']),
                     '14':lambda:execute(['logs']), '15':lambda:execute(['backup']),
-                    '16':more})
+                    '16':more,'17':lambda:execute(['jobs'])})
     version=(ROOT/'VERSION').read_text().strip()
     ui('Docker / v'+version, actions, status)
 

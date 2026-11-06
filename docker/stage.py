@@ -11,6 +11,7 @@ FILES = (
     'VERSION', 'go.mod', 'go.sum', 'BUILD.json', 'README.md', 'CHANGELOG.md',
     'scripts/common.py', 'scripts/quick.py', 'scripts/frontend.py', 'scripts/export-frontend.py',
     'scripts/console.py', 'scripts/docker_console.py', 'scripts/progress.py', 'scripts/setup-docker.sh',
+    'scripts/inbound_wizard.py', 'scripts/banner.sh',
     'docker/container.py', 'docker/build-key.py', 'docker/entrypoint.sh', 'docker/miku.sh',
     'docs/DOCKER.md', 'docs/FRONTEND.md', 'docs/VALIDATION.md', 'bin/miku-linux-amd64', 'bin/miku-linux-arm64',
 )

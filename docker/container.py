@@ -161,11 +161,11 @@ def main(args=None):
         return
     c.root()
     command = args[0] if args else 'menu'
-    if command in ('menu','list','countries','swap','jobs','remove','ip','country'):
-        c.require(len(args)<=1,'交互命令不接受额外参数')
+    if command in ('menu','list','countries','swap','jobs','remove','ip','country','new','node-link','quick-menu'):
+        c.require(command!='menu' or len(args)<=1,'菜单不接受额外参数')
         c.active=lambda:True
         from console import menu, node_command
-        if command!='menu':return node_command({'ip':'swap','country':'countries'}.get(command,command))
+        if command!='menu':return node_command({'ip':'swap','country':'countries'}.get(command,command),args[1:])
         return menu('Docker 容器',{'8':info,'9':password,'10':lambda:print('运行中'),
                                   '16':lambda:print('服务启停、日志与备份，请在宿主机运行 miku。')})
     if command == 'select-binary':

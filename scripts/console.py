@@ -78,7 +78,20 @@ def jobs(panel=None):
         print(clean(job.get('id', '')), clean(job.get('title', '')), clean(job.get('status', '')))
 
 
-def node_command(command):
+def node_command(command, args=()):
+    if command=='new':
+        c.require(not args,'用法：miku new')
+        from inbound_wizard import create
+        return create()
+    if command=='quick-menu':
+        c.require(not args,'一键配置菜单不接受额外参数')
+        from inbound_wizard import quick_menu
+        return quick_menu()
+    if command=='node-link':
+        c.require(len(args)==1,'用法：miku node-link 入口ID')
+        from inbound_wizard import node_links
+        return node_links(args[0])
+    c.require(not args,'该命令不接受额外参数')
     return {'countries': provision, 'swap': swap, 'list': tunnels, 'jobs': jobs, 'remove': remove}[command]()
 
 
@@ -86,7 +99,7 @@ def menu(mode, actions, status=lambda: ''):
     """Return after actions until explicitly exited; tolerate EOF and failed services."""
     if not sys.stdin.isatty():
         header(mode)
-        print('交互菜单请在终端运行 miku；常用命令：miku info / miku sub / miku list / miku swap / miku countries')
+        print('交互菜单请在终端运行 miku；常用命令：miku info / miku new / miku sub / miku list / miku swap / miku countries')
         return
     while True:
         try:
@@ -95,23 +108,23 @@ def menu(mode, actions, status=lambda: ''):
             header(mode, state)
             print('''
 【出口与 IP】
-  [1] 查看出口 / IP       [2] 选择国家创建节点
-  [3] 切换出口 IP        [4] 一键配置常用国家
-  [5] 停止指定出口       [6] 查看后台任务
+  [1] 一键配置常用国家 ★  [2] 搭建新的入口节点
+  [3] 切换出口 IP        [4] 选择国家创建出口
+  [5] 查看出口 / IP      [6] 停止指定出口
 【订阅与面板】
-  [7] 查看全部订阅       [8] 面板地址 / 登录口令
+  [7] 查看全部订阅       [8] 面板地址 / 登录口令 ★
   [9] 修改登录口令
 【服务管理】
  [10] 查看运行状态      [11] 启动服务
  [12] 重启服务          [13] 停止服务
  [14] 查看日志          [15] 数据备份
- [16] 更多维护
+ [16] 更多维护          [17] 查看后台任务
   [0] 退出
 ''')
-            choice = input('请选择 [0–16]：').strip()
+            choice = input('请选择 [0–17]：').strip()
             if choice in ('0', 'q', 'exit'): return
-            shared = {'1': tunnels, '2': provision, '3': swap, '4': lambda: quick(background=True),
-                      '5': remove, '6': jobs, '7': subscriptions}
+            shared = {'1': lambda: node_command('quick-menu'), '2': lambda: node_command('new'),
+                      '3': swap, '4': provision, '5': tunnels, '6': remove, '7': subscriptions, '17': jobs}
             action = actions.get(choice) or shared.get(choice)
             if action: action()
             else: print('请输入菜单中的编号。')

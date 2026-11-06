@@ -77,7 +77,7 @@ func apiQuickSetup(m *Manager, domains *DomainRegistry) http.HandlerFunc {
 			writeJSON(w, 202, map[string]any{"job": id, "existing": true})
 			return
 		}
-		labels := []string{"准备 Xray", "域名与证书", "更新节点来源", "准备入口模板"}
+		labels := []string{"准备节点核心", "域名与证书", "更新节点来源", "准备入口模板"}
 		for _, region := range quickRegions {
 			for i := 1; i <= region.Count; i++ {
 				labels = append(labels, fmt.Sprintf("%s %d", region.Name, i))
@@ -129,7 +129,7 @@ func apiQuickSetupStop(m *Manager) http.HandlerFunc {
 func (m *Manager) quickNative() (*Native, error) {
 	previous := currentPanelMode()
 	panel, err := openPanel()
-	if err != nil || panel.Kind() != "native" {
+	if err != nil || panel.Kind() != "native" && panel.Kind() != "sing-box" {
 		panel, err = switchPanelMode("native")
 	}
 	if err == nil {
@@ -139,18 +139,18 @@ func (m *Manager) quickNative() (*Native, error) {
 		if restored, restoreErr := switchPanelMode(previous); restoreErr == nil {
 			_ = restored.OnTunnelsChanged(m.Tunnels())
 		}
-		return nil, fmt.Errorf("Xray 暂未启动成功，已尝试恢复原核心：%w", err)
+		return nil, fmt.Errorf("节点核心暂未启动成功，已尝试恢复原核心：%w", err)
 	}
 	native, ok := panel.(*Native)
 	if !ok {
-		return nil, fmt.Errorf("当前核心不是自建 Xray，请稍后再试。")
+		return nil, fmt.Errorf("当前核心不是自建 sing-box / Xray，请稍后再试。")
 	}
 	panelState.mu.Lock()
-	panelState.forced = "native"
+	panelState.forced = panel.Kind()
 	workDir := panelState.workDir
 	panelState.mu.Unlock()
-	if err := savePanelMode(workDir, "native"); err != nil {
-		return nil, fmt.Errorf("保存 Xray 选择失败：%w", err)
+	if err := savePanelMode(workDir, panel.Kind()); err != nil {
+		return nil, fmt.Errorf("保存核心选择失败：%w", err)
 	}
 	invalidateInbounds()
 	return native, nil
@@ -212,6 +212,9 @@ func (d *DomainRegistry) quickCertificateContext(parent context.Context, domain 
 
 func quickInboundSpec(domain string, cert RegisteredDomain) NewInboundSpec {
 	spec := NewInboundSpec{Protocol: "vless", Network: "tcp", Security: "reality", Vision: true, Remark: "Miku 一键 · Reality"}
+	if domain == "" {
+		spec.Dest, spec.ServerNames = "www.amd.com:443", "www.amd.com"
+	}
 	if domain != "" {
 		spec.Security, spec.ServerName = "tls", domain
 		spec.CertFile, spec.KeyFile = cert.CertFile, cert.KeyFile
@@ -321,7 +324,7 @@ func (m *Manager) runQuickSetupContext(ctx context.Context, job *Job, domains *D
 		job.Set(step, "failed", firstLine(err.Error()))
 		job.failUnfinished("前一步暂未完成，请处理提示后再试。")
 	}
-	job.Set(0, "running", "正在准备 Xray 核心…")
+	job.Set(0, "running", "正在准备节点核心…")
 	native, err := m.quickNative()
 	if err != nil {
 		fail(0, err)
@@ -330,7 +333,7 @@ func (m *Manager) runQuickSetupContext(ctx context.Context, job *Job, domains *D
 	if canceled() {
 		return
 	}
-	job.Set(0, "ok", "Xray 已就绪")
+	job.Set(0, "ok", native.proc.kind()+" 已就绪")
 	var cert RegisteredDomain
 	if domain == "" {
 		job.Set(1, "ok", "使用 Reality，无需域名和证书")

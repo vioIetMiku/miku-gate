@@ -89,7 +89,8 @@ jobs:
           [[ -c /dev/net/tun ]] || sudo modprobe tun
           docker compose config --quiet
           bash install-docker.sh build
-          trap 'if [[ -f compose.yaml ]]; then docker compose logs --tail=80 miku; docker compose -f compose.frontend.yaml down; docker compose down; fi; kill "$busy_ports_pid" 2>/dev/null || true' EXIT
+          project="$PWD"
+          trap 'if sudo test -f "$project/compose.yaml"; then sudo docker compose --project-directory "$project" -f "$project/compose.yaml" logs --tail=80 miku; sudo docker compose --project-directory "$project" -f "$project/compose.frontend.yaml" down; sudo docker compose --project-directory "$project" -f "$project/compose.yaml" down; fi; kill "$busy_ports_pid" 2>/dev/null || true' EXIT
           # Both default ports are intentionally busy: startup must auto-fallback.
           python3 -u -c 'import socket,time; holders=[]; [(holders.append(socket.socket()), holders[-1].bind(("0.0.0.0", port)), holders[-1].listen()) for port in (8899,8900)]; print("ports held",flush=True); time.sleep(900)' > "$RUNNER_TEMP/miku-busy-ports.log" 2>&1 &
           busy_ports_pid=$!
@@ -143,7 +144,6 @@ jobs:
           sudo python3 -B scripts/frontend.py info
           # Exercise both HOST menu uninstall modes on this disposable instance,
           # then restore from the same verified release bundle without new IDs.
-          project="$PWD"
           sudo chown -R root:root "$project"
           preserved=$(sudo sha256sum docker-data/password docker-data/basepath docker-data/settings.json)
           printf 'YES\n' | sudo miku uninstall
@@ -156,7 +156,7 @@ jobs:
           [[ "$restored_info" == *'访问口令：'* && "$restored_info" == *'快捷菜单：miku'* ]]
           unset restored_info
           [[ "$preserved" == "$(sudo sha256sum docker-data/password docker-data/basepath docker-data/settings.json)" ]]
-          docker compose exec -T miku miku status
+          sudo docker compose exec -T miku miku status
           printf 'DELETE\n' | sudo miku purge
           [[ ! -e "$project" && ! -e /usr/local/bin/miku && ! -e /usr/local/bin/miku-docker ]]
           cd "$GITHUB_WORKSPACE"

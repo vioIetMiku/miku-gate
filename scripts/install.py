@@ -187,8 +187,12 @@ def main():
     if install(args.directory,args.update,args.reinstall) is False:return
     use_quick=args.quick or args.domain is not None or args.no_domain
     if not args.panel and not use_quick and not args.update and os.isatty(0):
-        print('\n1 使用面板管理（增删节点、切换、域名管理）\n2 终端一键搭建，直接输出订阅（默认）')
-        answer=input('使用方式 [2]：').strip() or '2';c.require(answer in ('1','2'),'请选择 1 或 2');use_quick=answer=='2'
+        print('\n1 使用网页面板\n2 打开 miku 终端菜单（选国家 / 切换 IP，默认）\n3 默认国家一键配置')
+        answer=input('使用方式 [2]：').strip() or '2';c.require(answer in ('1','2','3'),'请选择 1、2 或 3')
+        if answer=='2':
+            from maintain import menu
+            return menu()
+        use_quick=answer=='3'
     if use_quick:
         sys.path.insert(0,str(c.LIB))
         from quick import quick

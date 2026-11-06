@@ -17,6 +17,13 @@ import common as c
 
 
 class ConsoleTests(unittest.TestCase):
+    def test_native_install_default_opens_menu_without_creating_default_nodes(self):
+        import install
+        import maintain
+        with patch.object(sys,'argv',['install.py']),patch.object(install,'install',return_value=True),patch('os.isatty',return_value=True),patch('builtins.input',return_value=''),patch.object(maintain,'menu') as menu,patch('quick.quick') as quick,contextlib.redirect_stdout(io.StringIO()):
+            install.main()
+        menu.assert_called_once();quick.assert_not_called()
+
     def test_country_input_builds_real_api_request_and_no_shell_command(self):
         panel=Mock()
         panel.request.side_effect=[[{'code':'JP','name':'日本','available':3}],{'job':'job-1'}]

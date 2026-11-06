@@ -91,4 +91,4 @@ dev41 独立实现简洁终端结果输出、共用居中内容框架、Miku 欢
 
 ## 2026-11-06：MikuGate 主许可证
 
-按维护者要求，MikuGate 新增与修改部分及组合作品自本次变更采用 GNU GPL v3（GPL-3.0-only），版权署名为 `Copyright (C) 2026 vioIetMiku`。LICENSE 使用 GNU 官方 GPL v3 完整原文；NOTICE 载明项目授权范围，并逐字保留原 byJoey/fanout MIT 许可证全文及 Joey 的版权声明。国旗及其他第三方组件继续适用各自许可证；此前按 MIT 发布版本的既有授权不变。本次不新建版本，也不替换既有 Release 附件。
+按维护者要求，MikuGate 新增与修改部分及组合作品自本次变更采用 GNU GPL v3（GPL-3.0-only），版权署名为 `Copyright (C) 2026 vioIetMiku`。LICENSE 为 MikuGate 的简短署名与 GPL-3.0-only 授权声明；GNU 官方 GPL v3 完整原文保存在 COPYING。NOTICE 逐字保留原 byJoey/fanout MIT 许可证全文及 Joey 的版权声明。国旗及其他第三方组件继续适用各自许可证；此前按 MIT 发布版本的既有授权不变。本次不新建版本，也不替换既有 Release 附件。

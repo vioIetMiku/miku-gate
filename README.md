@@ -54,7 +54,7 @@ VPN Gate 不属于 Miku Gate。节点数量、国家、在线时间随时变化�
 
 基线提交：`d7ce5224caf3469b19876982abdf8d1be16c4a8b`。原 MIT 许可证和作者署名完整保留在 [NOTICE](NOTICE)，另见[上游说明](README.fanout.md)与[源码来源](PROVENANCE.md)。
 
-MikuGate 的新增与修改部分及其组合作品采用 **GNU GPL v3（GPL-3.0-only）**，Copyright © 2026 **vioIetMiku**。完整协议见 [LICENSE](LICENSE)，项目版权与第三方声明见 [NOTICE](NOTICE)。上游 fanout 的原始部分继续保留 MIT 授权；国旗素材等第三方组件使用各自许可证。本次许可变更不追溯改变此前已发布版本的授权。
+**MikuGate · Copyright © 2026 vioIetMiku · GPL-3.0-only**。见[许可声明](LICENSE)、[完整协议](COPYING)和[第三方声明](NOTICE)。
 
 **代码版本：v0.2.7**，正式状态以 [Releases](https://github.com/vioIetMiku/miku-gate/releases/latest) 为准。支持 Linux amd64 / arm64；完整安装包已编译，VPS 无需安装 Go。
 

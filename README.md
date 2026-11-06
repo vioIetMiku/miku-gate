@@ -97,7 +97,7 @@ miku sub    # 查看当前可用订阅和节点链接
 
 <a id="install-docker"></a>
 
-## 方式二：Docker 同机安装（推荐的分离部署）
+## 方式二：Docker 同机安装（推荐的分离部署，第一次安装可能需要两分半）
 
 一台 VPS，三步完成：**装环境 → 运行安装命令 → 打开前端地址**。后端使用 rootful Docker、host 网络和 TUN；独立 Nginx 前端由安装器一并启动。
 

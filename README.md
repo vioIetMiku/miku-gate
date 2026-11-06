@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-<p align="center"><strong>一台 VPS，连接世界各地的 VPN Gate 出口。</strong></p>
+<p align="center"><strong>一台 VPS，连接世界各地的出口。</strong></p>
 
 <p align="center">
   <a href="https://github.com/vioIetMiku/miku-gate/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/vioIetMiku/miku-gate/release.yml?style=flat-square&amp;logo=github&amp;label=CI" alt="Release 工作流状态"></a>

@@ -323,7 +323,7 @@ def snapshot(label):
         for child in DATA.iterdir():
             if child.name in ('backups','bin','.maintenance.lock') or child.is_symlink():continue
             archive.add(child,arcname='data/'+child.name,recursive=True)
-        for name in ('miku','maintain.py','common.py','quick.py','install.py','console.py','inbound_wizard.py','CORE_ASSETS.json','FLAG_ICONS_LICENSE'):
+        for name in ('miku','maintain.py','common.py','quick.py','install.py','console.py','inbound_wizard.py','CORE_ASSETS.json','LICENSE','NOTICE','FLAG_ICONS_LICENSE'):
             file=LIB/name
             if file.exists():archive.add(file,arcname='lib/'+name)
         if MENU.exists():archive.add(MENU,arcname='menu/miku')

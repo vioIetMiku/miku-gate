@@ -108,6 +108,7 @@ class MaintenanceTests(unittest.TestCase):
         files={binary:b'new fixture binary','bin/miku-export-linux-'+architecture:b'fixture export helper','scripts/common.py':b'# fixture common','scripts/maintain.py':b'# fixture maintenance','scripts/quick.py':b'# fixture quick','scripts/install.py':b'# fixture install','scripts/miku.sh':b'#!/bin/sh\n','CORE_ASSETS.json':b'{}','LICENSE':b'fixture license','FLAG_ICONS_LICENSE':b'fixture flags license'}
         files['scripts/console.py']=b'# fixture console'
         files['scripts/inbound_wizard.py']=b'# fixture wizard'
+        files['NOTICE']=b'fixture upstream attribution'
         for name,raw in files.items():c.atomic(bundle/name,raw,0o755 if name.startswith('bin/') or name.endswith('.sh') else 0o644)
         c.atomic(c.LIB/'miku',b'old fixture binary',0o755);os.chmod(c.LIB,0o755)
         c.write_json(c.DATA/'install.json',{'product':'miku-fanout','version':'0.2.0-dev.34','binary_sha256':hashlib.sha256(b'old fixture binary').hexdigest()})

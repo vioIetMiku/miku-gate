@@ -8,9 +8,9 @@
 
 `d7ce5224caf3469b19876982abdf8d1be16c4a8b`
 
-原项目的 MIT LICENSE 和作者署名完整保留，原说明保存在 README.fanout.md。
+原项目的 MIT LICENSE 全文和作者署名完整保留在 NOTICE，原说明保存在 README.fanout.md。
 Miku 对安装、认证 HTTP 代理、sing-box、S-UI 接入、按客户端选出口和域名维护作了修改。
-界面沿用 fanout 单页流程；原项目链接和署名保留在源码说明与 MIT 许可证中。
+界面沿用 fanout 单页流程；原项目链接和署名保留在源码说明与 NOTICE 中的 MIT 许可证中。
 
 S-UI 接入使用其公开本机 API 协议，适配代码独立编写；未打包 S-UI 程序。
 安装时下载的 Xray 和 sing-box 来自各自官方发布，版本及 SHA256 固定在 CORE_ASSETS.json。
@@ -88,3 +88,7 @@ dev41 独立实现简洁终端结果输出、共用居中内容框架、Miku 欢
 ## v0.2.6 分离部署
 
 基于用户提供的 split-autoport 补充包，引入静态前端、Nginx 同源代理、自动端口、两端独立维护与验证。Go 源码保持既有版本，发布从源码重建版本字符串。保留既有缓存优化、MIT 署名、国旗许可证；排除输入包的临时文件与旧编译产物。
+
+## 2026-11-06：MikuGate 主许可证
+
+按维护者要求，MikuGate 新增与修改部分及组合作品自本次变更采用 GNU GPL v3（GPL-3.0-only），版权署名为 `Copyright (C) 2026 vioIetMiku`。LICENSE 使用 GNU 官方 GPL v3 完整原文；NOTICE 载明项目授权范围，并逐字保留原 byJoey/fanout MIT 许可证全文及 Joey 的版权声明。国旗及其他第三方组件继续适用各自许可证；此前按 MIT 发布版本的既有授权不变。本次不新建版本，也不替换既有 Release 附件。

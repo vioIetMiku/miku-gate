@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
        bash ca-certificates certbot curl iproute2 iptables iputils-ping \
        openvpn openssl procps python3 tar tini util-linux
 WORKDIR /usr/local/lib/miku
-COPY scripts/common.py CORE_ASSETS.json LICENSE FLAG_ICONS_LICENSE ./
+COPY scripts/common.py CORE_ASSETS.json LICENSE NOTICE FLAG_ICONS_LICENSE ./
 COPY docker/container.py ./container.py
 COPY docker/miku.sh /usr/local/bin/miku
 COPY docker/entrypoint.sh /usr/local/bin/miku-entrypoint

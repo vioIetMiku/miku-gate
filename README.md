@@ -9,7 +9,7 @@
   <a href="https://github.com/vioIetMiku/miku-gate/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/vioIetMiku/miku-gate/release.yml?style=flat-square&amp;logo=github&amp;label=CI" alt="Release 工作流状态"></a>
   <a href="https://github.com/vioIetMiku/miku-gate/releases/latest"><img src="https://img.shields.io/github/v/release/vioIetMiku/miku-gate?style=flat-square&amp;logo=github&amp;color=14b8a6" alt="最新正式版本"></a>
   <a href="https://github.com/vioIetMiku/miku-gate/stargazers"><img src="https://img.shields.io/github/stars/vioIetMiku/miku-gate?style=flat-square&amp;logo=github&amp;color=0ea5e9" alt="GitHub Stars"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/vioIetMiku/miku-gate?style=flat-square&amp;color=22c55e" alt="MIT 许可证"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-22c55e?style=flat-square" alt="GNU GPL v3 许可证"></a>
 </p>
 <p align="center">
   <a href="#install-native"><img src="https://img.shields.io/badge/platform-Linux-f0b429?style=flat-square&amp;logo=linux&amp;logoColor=white" alt="支持 Linux"></a>
@@ -52,7 +52,9 @@ VPN Gate 不属于 Miku Gate。节点数量、国家、在线时间随时变化�
 
 特别感谢 **[byJoey/fanout](https://github.com/byJoey/fanout)**。Miku Gate 基于其按国家批量出口、网络命名空间隔离和自动重连能力，再加入 Miku 界面、多格式订阅、终端一键配置、Docker 与前后端分离。
 
-基线提交：`d7ce5224caf3469b19876982abdf8d1be16c4a8b`。原 MIT 许可证和作者署名保留，见 [LICENSE](LICENSE)、[上游说明](README.fanout.md) 与 [源码来源](PROVENANCE.md)。
+基线提交：`d7ce5224caf3469b19876982abdf8d1be16c4a8b`。原 MIT 许可证和作者署名完整保留在 [NOTICE](NOTICE)，另见[上游说明](README.fanout.md)与[源码来源](PROVENANCE.md)。
+
+MikuGate 的新增与修改部分及其组合作品采用 **GNU GPL v3（GPL-3.0-only）**，Copyright © 2026 **vioIetMiku**。完整协议见 [LICENSE](LICENSE)，项目版权与第三方声明见 [NOTICE](NOTICE)。上游 fanout 的原始部分继续保留 MIT 授权；国旗素材等第三方组件使用各自许可证。本次许可变更不追溯改变此前已发布版本的授权。
 
 **代码版本：v0.2.7**，正式状态以 [Releases](https://github.com/vioIetMiku/miku-gate/releases/latest) 为准。支持 Linux amd64 / arm64；完整安装包已编译，VPS 无需安装 Go。
 

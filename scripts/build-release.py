@@ -46,7 +46,7 @@ def main():
         source='archive-sha256:'+digest.hexdigest()
     with tempfile.TemporaryDirectory(prefix='miku-release-',dir=args.output) as temporary:
         stage=Path(temporary)/'miku-gate';(stage/'bin').mkdir(parents=True);(stage/'scripts').mkdir()
-        for name in ('install.sh','install-online.sh','install-docker.sh','Dockerfile','compose.yaml','compose.frontend.yaml','.dockerignore','.env.example','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','FLAG_ICONS_LICENSE','CORE_ASSETS.json'):
+        for name in ('install.sh','install-online.sh','install-docker.sh','Dockerfile','compose.yaml','compose.frontend.yaml','.dockerignore','.env.example','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','NOTICE','FLAG_ICONS_LICENSE','CORE_ASSETS.json'):
             shutil.copy2(ROOT/name,stage/name)
         for name in ('common.py','install.py','maintain.py','quick.py','miku.sh','frontend.py','export-frontend.py','console.py','docker_console.py','progress.py','setup-docker.sh','inbound_wizard.py','banner.sh','install_mode.py'):
             shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
@@ -137,7 +137,7 @@ __MIKU_ARCHIVE_BELOW__
         front=Path(temporary)/'frontend-only'/'miku-gate'
         front.mkdir(parents=True)
         front_files={}
-        names=['compose.frontend.yaml','.env.example','VERSION','README.md','LICENSE','FLAG_ICONS_LICENSE','ARTWORK.md','scripts/common.py','scripts/frontend.py','scripts/export-frontend.py','docs/FRONTEND.md','docs/DOCKER.md']
+        names=['compose.frontend.yaml','.env.example','VERSION','README.md','LICENSE','NOTICE','FLAG_ICONS_LICENSE','ARTWORK.md','scripts/common.py','scripts/frontend.py','scripts/export-frontend.py','docs/FRONTEND.md','docs/DOCKER.md']
         names += [path.relative_to(ROOT).as_posix() for path in sorted((ROOT/'frontend').rglob('*')) if source_file(path)]
         for name in names:
             raw=(ROOT/name).read_bytes();target_path=front/name;target_path.parent.mkdir(parents=True,exist_ok=True);target_path.write_bytes(raw)

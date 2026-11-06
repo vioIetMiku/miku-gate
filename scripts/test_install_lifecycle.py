@@ -116,7 +116,7 @@ class InstallLifecycleTests(unittest.TestCase):
             self.assertFalse(lib.exists());self.assertFalse(menu.exists());self.assertTrue(data.exists())
             bundle=self.root/'bundle';bundle.mkdir()
             arch=c.arch();binary='bin/miku-linux-'+arch
-            names=[binary,'bin/miku-export-linux-'+arch,'CORE_ASSETS.json','LICENSE','FLAG_ICONS_LICENSE',
+            names=[binary,'bin/miku-export-linux-'+arch,'CORE_ASSETS.json','LICENSE','NOTICE','FLAG_ICONS_LICENSE',
                    *('scripts/'+name for name in ('common.py','maintain.py','quick.py','install.py','console.py','inbound_wizard.py','miku.sh'))]
             for name in names:
                 target=bundle/name;target.parent.mkdir(parents=True,exist_ok=True);c.atomic(target,b'fixture-new',0o755 if name.startswith('bin/') else 0o644)

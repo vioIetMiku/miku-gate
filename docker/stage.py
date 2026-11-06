@@ -7,7 +7,7 @@ import common as c
 
 FILES = (
     'Dockerfile', 'compose.yaml', 'compose.frontend.yaml', '.dockerignore', '.env.example',
-    'install-docker.sh', 'CORE_ASSETS.json', 'LICENSE', 'FLAG_ICONS_LICENSE',
+    'install-docker.sh', 'CORE_ASSETS.json', 'LICENSE', 'NOTICE', 'FLAG_ICONS_LICENSE',
     'VERSION', 'go.mod', 'go.sum', 'BUILD.json', 'README.md', 'CHANGELOG.md',
     'scripts/common.py', 'scripts/quick.py', 'scripts/frontend.py', 'scripts/export-frontend.py',
     'scripts/console.py', 'scripts/docker_console.py', 'scripts/progress.py', 'scripts/setup-docker.sh',

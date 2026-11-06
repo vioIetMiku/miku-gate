@@ -256,7 +256,7 @@ def menu_purge():
     print('将删除 Miku Gate 的配置、节点、凭据、程序和本服务备份。')
     if input('输入 DELETE 确认清除：').strip()=='DELETE':purge()
 
-def menu():
+def more_menu():
     c.banner()
     print('Miku Gate '+c.installed()['version']+'\n1 管理地址 / 查看口令\n2 修改口令\n3 域名：绑定 / 更换 / 解绑\n4 修复依赖与端口（含OpenVPN）\n5 启动\n6 停止\n7 重启\n8 日志\n9 修改管理端口 / 自动选择\n10 备份\n11 恢复切换前旧版\n12 停止并取消自启（保留数据）\n13 完整卸载并清除数据\n14 一键配置节点（日本5 / 韩国3 / 美国3）\n15 直接输出全部订阅 / 节点链接\n0 退出')
     choice=input('选择：').strip()
@@ -269,8 +269,19 @@ def menu():
         return subscriptions()
     if choice in commands:commands[choice]()
 
+def menu():
+    from console import menu as ui
+    actions={'8':c.info,'9':password,'10':lambda:print('运行中' if c.active() else '已停止'),
+             '11':lambda:(c.service('start'),c.wait_ready(),c.info()),'12':restart,
+             '13':lambda:c.service('stop'),'14':logs,'15':backup,'16':more_menu}
+    return ui('原生',actions,lambda:'运行中' if c.active() else '已停止')
+
 def main():
     c.root();args=sys.argv[1:];command=args[0] if args else 'menu'
+    if command in ('list','countries','swap','jobs','remove','ip','country'):
+        c.require(len(args)==1,'该命令通过交互菜单选择参数')
+        from console import node_command
+        return node_command({'ip':'swap','country':'countries'}.get(command,command))
     if command in ('quick','node','nodes'):
         from quick import command as quick_command
         return quick_command(args[1:])

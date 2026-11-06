@@ -4,13 +4,17 @@ set -euo pipefail
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   printf '%s\n' 'Miku Gate VPS installer (Linux amd64/arm64, root).' \
     'Usage: bash install-online.sh [--panel | --quick | --docker] [--domain HOST | --no-domain] [--background] [--download-only DIRECTORY]' \
-    'Environment: MIKU_VERSION=v0.2.6 (default: latest stable), GITHUB_TOKEN (private repository), WEB_PORT (default: 8899), MIKU_DOCKER_INSTALL_DIR (default: /opt/miku-gate-docker).'
+    'Environment: MIKU_VERSION=v0.2.7 (default: latest stable), GITHUB_TOKEN (private repository), WEB_PORT (default: 8899), MIKU_DOCKER_INSTALL_DIR (default: /opt/miku-gate-docker).'
   exit 0
 fi
 [[ "$(uname -s)" == Linux ]] || { echo '仅支持 Linux VPS。' >&2; exit 1; }
 [[ $EUID -eq 0 ]] || { echo '请以 root 运行；私有仓库请保留 GITHUB_TOKEN 环境变量。' >&2; exit 1; }
 [[ "$(uname -m)" == x86_64 || "$(uname -m)" == aarch64 || "$(uname -m)" == arm64 ]] || { echo '仅支持 amd64 / arm64。' >&2; exit 1; }
 if ! command -v python3 >/dev/null 2>&1; then
+  python_log=$(mktemp "${TMPDIR:-/tmp}/mikugate-python.XXXXXXXX")
+  chmod 600 "$python_log"
+  echo '正在准备 Python 运行环境，请稍候…'
+  if ! (
   if command -v apt-get >/dev/null 2>&1; then apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 ca-certificates
   elif command -v dnf >/dev/null 2>&1; then dnf install -y python3 ca-certificates
   elif command -v yum >/dev/null 2>&1; then yum install -y python3 ca-certificates
@@ -18,10 +22,17 @@ if ! command -v python3 >/dev/null 2>&1; then
   elif command -v pacman >/dev/null 2>&1; then pacman -Sy --noconfirm --needed python ca-certificates
   elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install -y python3 ca-certificates
   else echo '请先安装 Python 3 和 CA 证书。' >&2; exit 1; fi
+  ) >"$python_log" 2>&1; then
+    echo "Python 环境安装失败，日志：$python_log" >&2
+    tail -n 15 "$python_log" >&2
+    exit 1
+  fi
+  rm -f -- "$python_log"
 fi
 python3 - "$@" <<'MIKU_PYTHON'
 import argparse
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -31,6 +42,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -51,20 +63,26 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
 def fetch(url, limit, binary=False):
     if urllib.parse.urlsplit(url).scheme != 'https':
         raise RuntimeError('只允许 HTTPS 下载')
-    headers = {'User-Agent': 'MikuGateInstaller/0.2.6', 'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}
+    headers = {'User-Agent': 'MikuGateInstaller/0.2.7', 'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}
     token = os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN')
     if token and urllib.parse.urlsplit(url).hostname == 'api.github.com':
         headers['Authorization'] = 'Bearer ' + token
     opener = urllib.request.build_opener(SafeRedirect())
-    with opener.open(urllib.request.Request(url, headers=headers), timeout=120) as response:
-        raw = response.read(limit + 1)
+    for attempt in range(3):
+        try:
+            with opener.open(urllib.request.Request(url, headers=headers), timeout=120) as response:
+                raw = response.read(limit + 1)
+            break
+        except (OSError, http.client.HTTPException):
+            if attempt==2:raise
+            time.sleep(attempt+1)
     if len(raw) > limit:
         raise RuntimeError('下载文件超出大小限制')
     return raw
 
 def stable_release(version):
     if version != 'latest' and not re.fullmatch(r'v\d+\.\d+\.\d+', version):
-        raise RuntimeError('MIKU_VERSION 只能是 latest 或正式版本标签，例如 v0.2.6')
+        raise RuntimeError('MIKU_VERSION 只能是 latest 或正式版本标签，例如 v0.2.7')
     endpoint = '/releases/latest' if version == 'latest' else '/releases/tags/' + version
     release = json.loads(fetch(API + endpoint, 4 << 20))
     if release.get('draft') or release.get('prerelease') or not re.fullmatch(r'v\d+\.\d+\.\d+', release.get('tag_name', '')):

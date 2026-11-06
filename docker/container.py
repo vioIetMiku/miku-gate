@@ -156,11 +156,18 @@ def snapshot(name):
 
 def main(args=None):
     args = sys.argv[1:] if args is None else args
-    if not args or args in (['help'], ['--help'], ['-h']):
+    if args in (['help'], ['--help'], ['-h']):
         print('容器内：miku [info|quick [参数]|sub|password|status]\n宿主机：bash install-docker.sh [up|info|quick|sub|status|logs|start|stop|restart|backup|update|down]')
         return
     c.root()
-    command = args[0]
+    command = args[0] if args else 'menu'
+    if command in ('menu','list','countries','swap','jobs','remove','ip','country'):
+        c.require(len(args)<=1,'交互命令不接受额外参数')
+        c.active=lambda:True
+        from console import menu, node_command
+        if command!='menu':return node_command({'ip':'swap','country':'countries'}.get(command,command))
+        return menu('Docker 容器',{'8':info,'9':password,'10':lambda:print('运行中'),
+                                  '16':lambda:print('服务启停、日志与备份，请在宿主机运行 miku。')})
     if command == 'select-binary':
         c.require(len(args) == 5, 'select-binary 参数无效')
         return select_binary(*args[1:])

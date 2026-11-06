@@ -57,7 +57,7 @@ VPN Gate 不属于 Miku Gate。节点数量、国家、在线时间随时变化�
 
 基线提交：`d7ce5224caf3469b19876982abdf8d1be16c4a8b`。原 MIT 许可证和作者署名保留，见 [LICENSE](LICENSE)、[上游说明](README.fanout.md) 与 [源码来源](PROVENANCE.md)。
 
-**代码版本：v0.2.6**，正式状态以 [Releases](https://github.com/vioIetMiku/miku-gate/releases/latest) 为准。支持 Linux amd64 / arm64；完整安装包已编译，VPS 无需安装 Go。
+**代码版本：v0.2.7**，正式状态以 [Releases](https://github.com/vioIetMiku/miku-gate/releases/latest) 为准。支持 Linux amd64 / arm64；完整安装包已编译，VPS 无需安装 Go。
 
 <a id="quick-start"></a>
 
@@ -104,50 +104,36 @@ miku sub    # 查看当前可用订阅和节点链接
 
 一台 VPS，三步完成：**装环境 → 运行安装命令 → 打开前端地址**。后端使用 rootful Docker、host 网络和 TUN；独立 Nginx 前端由安装器一并启动。
 
+### 1. 准备终端
+
+使用 Debian 12 / 13 或 Ubuntu 22.04+，以 root 登录。如果没有 curl，先执行：
+
+```bash
+apt-get -qq update && apt-get -y -qq install curl ca-certificates
+```
+
+v0.2.7 的 Docker 一键安装会自动准备 Docker Engine、Compose v2、Python 及 TUN 检查；已经可用的 Docker 会复用。安装过程只显示阶段进度，每 15 秒提示仍在进行；失败会显示日志位置和错误摘要。其他发行版需要先装好 Docker / Compose / Python 3.10+。官方环境参考：[Docker Engine](https://docs.docker.com/engine/install/)、[Compose v2](https://docs.docker.com/compose/install/linux/)。
+
 <a id="docker-env"></a>
 
-### 1. 安装 Docker Engine、Compose v2 和 Python
+<details>
+<summary>只准备 Docker 环境（用于跨机 B，只装前端）</summary>
 
-以下整块用于上述 Debian / Ubuntu **新服务器**，自动识别发行版并使用 Docker 官方软件源。已经能正常运行 `docker info`、`docker compose version` 且 Python ≥ 3.10 的服务器，可跳过安装块。
+在 B 的 root Bash 执行，先装基础工具，再下载并运行本项目的环境安装脚本；`MIKU_FRONTEND_ONLY=1` 跳过后端才需要的 TUN 检查：
 
 ```bash
 (
-  set -eu
-  . /etc/os-release
-  case "$ID" in
-    debian|ubuntu) ;;
-    *) echo '此环境安装块仅适用于 Debian / Ubuntu'; exit 1 ;;
-  esac
-  apt-get update
-  apt-get install -y bash curl ca-certificates python3 tar kmod
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o /etc/apt/keyrings/docker.asc
-  chmod a+r /etc/apt/keyrings/docker.asc
-  cat > /etc/apt/sources.list.d/docker.sources <<EOF
-Types: deb
-URIs: https://download.docker.com/linux/$ID
-Suites: ${UBUNTU_CODENAME:-$VERSION_CODENAME}
-Components: stable
-Architectures: $(dpkg --print-architecture)
-Signed-By: /etc/apt/keyrings/docker.asc
-EOF
-  apt-get update
-  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  systemctl enable --now docker
-  docker info >/dev/null
-  docker compose version
-  python3 -c 'import sys; assert sys.version_info >= (3, 10), "需要 Python 3.10+"; print("Python 环境已就绪")'
+set -eu
+apt-get -qq update && apt-get -y -qq install curl ca-certificates python3
+setup_dir=$(mktemp -d)
+trap 'rm -rf -- "$setup_dir"' EXIT
+curl -fsSL --retry 3 https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/scripts/setup-docker.sh -o "$setup_dir/setup-docker.sh"
+curl -fsSL --retry 3 https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/scripts/progress.py -o "$setup_dir/progress.py"
+MIKU_FRONTEND_ONLY=1 python3 -B "$setup_dir/progress.py" '正在准备 Docker 环境' bash "$setup_dir/setup-docker.sh"
 )
 ```
 
-环境准备完成后，在**运行后端的服务器**检查 TUN（只运行前端的服务器不用做）：
-
-```bash
-modprobe tun
-test -c /dev/net/tun && echo 'TUN 已就绪'
-```
-
-环境安装块只在本机执行，不会操作其他服务器。如果已有 Docker 正常运行，直接复用；遇到发行版自带 `docker.io` / Podman 与官方包冲突时，先处理现有容器迁移，不要直接卸载正在使用的运行环境。官方依据：[Docker Engine](https://docs.docker.com/engine/install/)、[Ubuntu](https://docs.docker.com/engine/install/ubuntu/)、[Debian](https://docs.docker.com/engine/install/debian/)、[Compose v2 插件](https://docs.docker.com/compose/install/linux/)。
+</details>
 
 ### 2. 一条命令安装前端和后端
 
@@ -157,23 +143,22 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mi
 
 安装器验证正式包，把文件保存到 `/opt/miku-gate-docker`，构建或复用后端镜像，然后自动启动独立前端。**同机不需要再装前端，也不用填写后端 URL、随机路径或单独创建前端账号。**
 
-### 3. 查看地址并登录
+### 3. 输入 miku 打开菜单
+
+安装成功时直接显示 **前端完整地址、后端地址、登录口令**。以后在 VPS 的任意目录输入：
 
 ```bash
-cd /opt/miku-gate-docker
-bash install-docker.sh status         # 检查前端、后端是否运行
-bash install-docker.sh frontend info  # 浏览器应打开的完整地址
-bash install-docker.sh backend info   # 登录口令与后端信息
+miku           # 打开分组菜单，操作后可返回继续选择
+miku info      # 再次查看前端地址与登录口令
+miku countries # 选择国家与数量创建节点
+miku list      # 查看当前出口、IP 和状态
+miku swap      # 选择已有出口，切换同国家的其他节点
+miku sub       # 查看订阅与节点链接
 ```
 
-打开前端完整地址，输入后端生成的口令。前端优先使用 **8900**，后端优先使用 **8899**；被占用时会自动换端口，始终以 `info` 为准，并放行实际前端端口。
+菜单包含出口查看、选国家、切换 IP、一键配置、订阅、密码、服务启停、日志和备份。`miku quick` 仍保留默认的一键配置。若机器上已有其他原生 `miku` 命令，安装器会保留原命令，Docker 菜单用 `miku-docker`。
 
-登录后在网页创建节点，或在部署目录执行：
-
-```bash
-bash install-docker.sh quick --no-domain --background  # 使用 REALITY 后台创建节点
-bash install-docker.sh sub                            # 输出当前订阅
-```
+浏览器打开 `miku info` 显示的**前端完整地址**，保留随机路径，使用输出的登录口令。端口占用时会自动避让，不要固定照抄 8899 / 8900。
 
 同机 HTTP 地址可直接使用。要给前端绑定 HTTPS 域名，按[前端域名与 HTTPS](#frontend-https)操作。
 
@@ -183,22 +168,22 @@ bash install-docker.sh sub                            # 输出当前订阅
 
 这条路线针对**新安装**。先把域名 `api.你的域名` 的 DNS A 记录指向 A，把 `panel.你的域名` 指向 B；两台都放行 TCP **80 / 443**，不要保留指向错误服务器的 AAAA 记录。下面通过 Caddy 容器自动申请和续期 HTTPS 证书，不需要手动购买或上传证书。
 
-**先在 A、B 各执行一次[环境安装块](#docker-env)**；A 还需检查 TUN，B 无需 TUN。服务器若已有 Nginx / Caddy 占用 80 / 443，应在已有反代中添加站点，避免启动第二个占用相同端口的服务。
+**A 在后端安装时自动准备环境；B 先执行[前端环境安装块](#docker-env)**，B 无需 TUN。服务器若已有 Nginx / Caddy 占用 80 / 443，应在已有反代中添加站点，避免启动第二个占用相同端口的服务。
 
 ### A：只安装后端
 
-在 **服务器 A** 执行下面整块。命令下载 v0.2.6 完整包、校验 SHA256、解压，再只部署后端：
+在 **服务器 A** 执行下面整块。命令下载 v0.2.7 完整包、校验 SHA256、解压，再只部署后端：
 
 ```bash
 (
   set -eu
   package_dir=$(mktemp -d /tmp/mikugate-backend.XXXXXX)
   cd "$package_dir"
-  release_url='https://github.com/vioIetMiku/miku-gate/releases/download/v0.2.6'
-  curl -fL --retry 3 "$release_url/miku-gate-vps-v0.2.6.tar.gz" -o miku-gate-vps-v0.2.6.tar.gz
+  release_url='https://github.com/vioIetMiku/miku-gate/releases/download/v0.2.7'
+  curl -fL --retry 3 "$release_url/miku-gate-vps-v0.2.7.tar.gz" -o miku-gate-vps-v0.2.7.tar.gz
   curl -fL --retry 3 "$release_url/SHA256SUMS" -o SHA256SUMS
-  grep '  miku-gate-vps-v0.2.6.tar.gz$' SHA256SUMS | sha256sum -c -
-  tar --no-same-owner -xzf miku-gate-vps-v0.2.6.tar.gz
+  grep '  miku-gate-vps-v0.2.7.tar.gz$' SHA256SUMS | sha256sum -c -
+  tar --no-same-owner -xzf miku-gate-vps-v0.2.7.tar.gz
   cd miku-gate
   bash install.sh --docker --backend-only
 )
@@ -234,13 +219,13 @@ printf '\n给前端服务器 B 使用的完整后端地址：https://%s/%s/\n' "
   set -eu
   package_dir=$(mktemp -d /tmp/mikugate-frontend.XXXXXX)
   cd "$package_dir"
-  release_url='https://github.com/vioIetMiku/miku-gate/releases/download/v0.2.6'
-  curl -fL --retry 3 "$release_url/miku-gate-frontend-v0.2.6.tar.gz" -o miku-gate-frontend-v0.2.6.tar.gz
+  release_url='https://github.com/vioIetMiku/miku-gate/releases/download/v0.2.7'
+  curl -fL --retry 3 "$release_url/miku-gate-frontend-v0.2.7.tar.gz" -o miku-gate-frontend-v0.2.7.tar.gz
   curl -fL --retry 3 "$release_url/SHA256SUMS" -o SHA256SUMS
-  grep '  miku-gate-frontend-v0.2.6.tar.gz$' SHA256SUMS | sha256sum -c -
+  grep '  miku-gate-frontend-v0.2.7.tar.gz$' SHA256SUMS | sha256sum -c -
   test ! -e /opt/miku-gate-frontend || { echo '目录已存在，请按更新流程操作'; exit 1; }
   install -d -m 755 /opt/miku-gate-frontend
-  tar --no-same-owner -xzf miku-gate-frontend-v0.2.6.tar.gz --strip-components=1 -C /opt/miku-gate-frontend
+  tar --no-same-owner -xzf miku-gate-frontend-v0.2.7.tar.gz --strip-components=1 -C /opt/miku-gate-frontend
 )
 ```
 
@@ -415,14 +400,14 @@ python3 -B scripts/frontend.py restart
 
 ## 方式四：手动下载与安装
 
-从 [v0.2.6 Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.6) 下载对应附件及 `SHA256SUMS`；通过 SCP / SFTP 上传到 VPS 的同一目录，再运行以下命令。GitHub 自动生成的 Source code 包不含预编译程序，优先选表中的正式附件。
+从 [v0.2.7 Release](https://github.com/vioIetMiku/miku-gate/releases/tag/v0.2.7) 下载对应附件及 `SHA256SUMS`；通过 SCP / SFTP 上传到 VPS 的同一目录，再运行以下命令。GitHub 自动生成的 Source code 包不含预编译程序，优先选表中的正式附件。
 
 | 文件 | 用途 |
 | --- | --- |
 | `miku` | 含两种架构的单文件安装器 |
-| `miku-gate-vps-v0.2.6.tar.gz` | VPS 完整安装包 |
-| `miku-gate-v0.2.6.zip` | 源码及两种架构程序；解压 ZIP 可先运行 `apt-get install -y unzip` |
-| `miku-gate-frontend-v0.2.6.tar.gz` | 跨机 B 使用的前端专用包 |
+| `miku-gate-vps-v0.2.7.tar.gz` | VPS 完整安装包 |
+| `miku-gate-v0.2.7.zip` | 源码及两种架构程序；解压 ZIP 可先运行 `apt-get install -y unzip` |
+| `miku-gate-frontend-v0.2.7.tar.gz` | 跨机 B 使用的前端专用包 |
 | `install-online.sh` | 在线安装器 |
 | `SHA256SUMS` | 附件摘要清单 |
 
@@ -437,8 +422,8 @@ bash miku                    # 原生安装
 使用完整 tar.gz：
 
 ```bash
-grep '  miku-gate-vps-v0.2.6.tar.gz$' SHA256SUMS | sha256sum -c - && \
-tar --no-same-owner -xzf miku-gate-vps-v0.2.6.tar.gz
+grep '  miku-gate-vps-v0.2.7.tar.gz$' SHA256SUMS | sha256sum -c - && \
+tar --no-same-owner -xzf miku-gate-vps-v0.2.7.tar.gz
 cd miku-gate
 bash install.sh              # 原生安装
 # Docker 用户用 bash install.sh --docker 代替上一行
@@ -456,13 +441,18 @@ Windows 本地静态检查不等于 Linux 容器、真实 VPN Gate 隧道或证�
 
 国旗许可证见 [FLAG_ICONS_LICENSE](FLAG_ICONS_LICENSE)，插画与字标见 [ARTWORK.md](ARTWORK.md)。项目不代表与角色权利人存在官方合作或背书。
 
-## v0.2.6 变化
+## v0.2.7 变化
+
+- 原生与 Docker 统一分组终端菜单；Docker 安装宿主机 `miku` 快捷入口。
+- 支持选国家创建、查看出口 IP、选择槽位切换 IP、查看后台任务与订阅。
+- Docker 自动准备环境，默认安静进度；登录口令与实际前端地址在安装结束显示。
+- 软件包 / 官方核心缓存、下载重试、菜单改动复用核心层；`MIKU_VERBOSE=1` 可查看完整安装输出。
 
 - Docker 默认两个独立 Compose 项目：非特权 Nginx 静态前端 + Go 后端。浏览器通过前端同源访问登录、API 和订阅，不是开放任意跨域后台接口。
 - 后端负责认证、VPN、入口、节点与数据；前端仅提供静态文件和代理，重启 / 停止前端不会重启后端或节点。
 - 后端优先 8899、前端优先 8900，冲突自动避让，实际端口持久化；已健康运行的前端重复启动不会被自己的端口占用逼走。
 - 原生和仅后端模式继续支持内嵌页面。保留镜像构建指纹缓存、显式基础镜像刷新、quick/sub 和 v0.2.4 连接恢复策略。
-- 新增前端专用包，支持前端放另一台服务器；主程序和兼容助手从源码重建为 0.2.6，不复用输入包中的旧二进制。
+- 新增前端专用包，支持前端放另一台服务器；主程序和兼容助手从源码重建为 0.2.7，不复用输入包中的旧二进制。
 
 ## 💖 赞助商
 

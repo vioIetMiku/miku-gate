@@ -124,8 +124,21 @@ def verify_distribution(directory):
 def core_download(core,architecture):
     assets=json.loads(trusted(LIB/'CORE_ASSETS.json',0o600,16384));record=assets[core+'-'+architecture]
     address='https://github.com/'+record['repo']+'/releases/download/'+record['version']+'/'+record['name']
-    with urllib.request.urlopen(urllib.request.Request(address,headers={'User-Agent':'MikuFanoutInstaller'}),timeout=90) as response:
-        require(response.geturl().startswith('https://'),'核心下载必须HTTPS');raw=response.read(record['bytes']+1)
+    cache=private_dir(Path(os.environ.get('MIKU_CORE_CACHE','/var/cache/miku-gate/cores')))
+    cached=cache/record['sha256']
+    raw=trusted(cached,max_bytes=record['bytes']+1) if cached.exists() else b''
+    valid=lambda packet:len(packet)==record['bytes'] and hashlib.sha256(packet).hexdigest()==record['sha256']
+    if not valid(raw):
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(urllib.request.Request(address,headers={'User-Agent':'MikuGateInstaller'}),timeout=90) as response:
+                    require(response.geturl().startswith('https://'),'核心下载必须HTTPS');raw=response.read(record['bytes']+1)
+                require(valid(raw),'官方核心大小/SHA256校验失败')
+                atomic(cached,raw)
+                break
+            except (OSError,RuntimeError):
+                if attempt==2:raise
+                time.sleep(attempt+1)
     require(len(raw)==record['bytes'] and hashlib.sha256(raw).hexdigest()==record['sha256'],'官方核心大小/SHA256校验失败')
     if record['name'].endswith('.zip'):
         with zipfile.ZipFile(io.BytesIO(raw)) as archive:

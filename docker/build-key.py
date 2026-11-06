@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 RUNTIME = ('Dockerfile', '.dockerignore', 'CORE_ASSETS.json', 'LICENSE', 'FLAG_ICONS_LICENSE',
-           'scripts/common.py', 'scripts/quick.py', 'docker/container.py', 'docker/entrypoint.sh', 'docker/miku.sh')
+           'scripts/common.py', 'scripts/quick.py', 'scripts/console.py', 'docker/container.py', 'docker/entrypoint.sh', 'docker/miku.sh')
 
 def fingerprint(root, architecture, source):
     root = Path(root)

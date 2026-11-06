@@ -1,8 +1,13 @@
 name: Release
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,7 +38,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Check shell and Python syntax
         run: |
-          for script in install.sh install-online.sh install-docker.sh mikugate.sh scripts/miku.sh scripts/test-docker-smoke.sh docker/*.sh; do bash -n "$script"; done
+          for script in install.sh install-online.sh install-docker.sh mikugate.sh scripts/*.sh docker/*.sh; do bash -n "$script"; done
           python3 -m compileall -q scripts docker
       - name: Offline Go regression tests and vet
         run: |
@@ -46,7 +51,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends nginx
           cd scripts
-          sudo env MIKU_NGINX=/usr/sbin/nginx python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_ports test_docker test_frontend test_frontend_lifecycle test_build_key
+          sudo env MIKU_NGINX=/usr/sbin/nginx python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_ports test_docker test_frontend test_frontend_lifecycle test_build_key test_console
       - name: Check Go formatting
         run: test -z "$(gofmt -l src)"
       - uses: actions/setup-node@v4
@@ -89,6 +94,8 @@ jobs:
           # not create them as the ordinary GitHub runner user.
           backend_info=$(sudo bash install-docker.sh backend up)
           [[ "$backend_info" == *'复用本地镜像'* ]]
+          [[ "$backend_info" == *'访问口令：'* ]]
+          [[ "$backend_info" == *'快捷菜单'* ]]
           unset backend_info
           [[ "$(stat -c %u docker-data)" == 0 ]]
           [[ "$(stat -c %a docker-data)" == 700 ]]
@@ -109,6 +116,11 @@ jobs:
           grep -q 'static/login-2.js' "$RUNNER_TEMP/frontend-login.html"
           [[ "$(curl -s -o /dev/null -w '%{http_code}' "${frontend}api/jobs")" == 401 ]]
           password=$(sudo cat docker-data/password)
+          # Exercise the installed HOST shortcut, not just the container binary.
+          sudo miku info > "$RUNNER_TEMP/miku-cli-info.txt"
+          sudo miku > "$RUNNER_TEMP/miku-cli-menu.txt"
+          grep -q 'miku info' "$RUNNER_TEMP/miku-cli-menu.txt"
+          sudo python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]).read_text(); assert "访问口令：" in p; assert pathlib.Path(sys.argv[2]).read_text().strip() in p' "$RUNNER_TEMP/miku-cli-info.txt" docker-data/password
           printf '%s' "$password" | curl -fsS -c "$RUNNER_TEMP/frontend.cookies" --data-urlencode password@- "${frontend}login"
           unset password
           curl -fsS -b "$RUNNER_TEMP/frontend.cookies" "$frontend" -o "$RUNNER_TEMP/frontend-index.html"

@@ -19,14 +19,14 @@ UPSTREAM='d7ce5224caf3469b19876982abdf8d1be16c4a8b'
 
 def source_file(path):
     relative=path.relative_to(ROOT)
-    excluded=('.git','bin','dist','__pycache__','.runtime','tmph5eepphq','docker-data','docker-certs','docker-backups')
+    excluded=('.git','bin','dist','__pycache__','.runtime','.install-logs','tmph5eepphq','docker-data','docker-certs','docker-backups')
     return (path.is_file() and not any(part in excluded for part in relative.parts)
             and path.suffix not in ('.zip','.gz','.pyc')
             and relative.as_posix()!='BUILD.json'
             and not (path.name.startswith('.env') and path.name!='.env.example'))
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.6');parser.add_argument('--label',default='v0.2.6');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.2.7');parser.add_argument('--label',default='v0.2.7');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',args.version) or not re.fullmatch(r'[A-Za-z0-9_.-]+',args.label):raise ValueError('invalid version/label')
     args.output=args.output.resolve()
     args.output.mkdir(parents=True,exist_ok=True)
@@ -48,7 +48,7 @@ def main():
         stage=Path(temporary)/'miku-gate';(stage/'bin').mkdir(parents=True);(stage/'scripts').mkdir()
         for name in ('install.sh','install-online.sh','install-docker.sh','Dockerfile','compose.yaml','compose.frontend.yaml','.dockerignore','.env.example','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','FLAG_ICONS_LICENSE','CORE_ASSETS.json'):
             shutil.copy2(ROOT/name,stage/name)
-        for name in ('common.py','install.py','maintain.py','quick.py','miku.sh','frontend.py','export-frontend.py'):
+        for name in ('common.py','install.py','maintain.py','quick.py','miku.sh','frontend.py','export-frontend.py','console.py','docker_console.py','progress.py','setup-docker.sh'):
             shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
         (stage/'docs').mkdir()
         shutil.copyfile(ROOT/'docs/DEV_HISTORY.md',stage/'docs/DEV_HISTORY.md')

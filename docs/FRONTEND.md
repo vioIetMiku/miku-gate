@@ -1,6 +1,6 @@
-# Miku Gate v0.2.6 前后端分离使用说明
+# Miku Gate v0.2.7 前后端分离使用说明
 
-v0.2.6 Docker 部署默认采用两个独立 Compose 项目。前端以非特权 Nginx 容器提供 `frontend/public/`；Go 后端负责认证、API、VPN 与节点。浏览器只访问前端，登录、API、订阅在相同源下转发，前端不保存登录口令，也不挂载后端数据、私钥或 TUN。
+v0.2.7 Docker 部署默认采用两个独立 Compose 项目。前端以非特权 Nginx 容器提供 `frontend/public/`；Go 后端负责认证、API、VPN 与节点。浏览器只访问前端，登录、API、订阅在相同源下转发，前端不保存登录口令，也不挂载后端数据、私钥或 TUN。
 
 后端保留内嵌页面作为原生安装和仅后端部署的兼容入口。分离部署显示的页面来自独立文件，前端维护和发布不会覆盖为 Go 内嵌页面。
 
@@ -190,9 +190,9 @@ MIKU_NGINX=/绝对路径/nginx python3 -B -m unittest -v test_frontend
 
 本包的实际验证范围记录在 [VALIDATION.md](VALIDATION.md)。
 
-## v0.2.6 发布文件与升级补充
+## v0.2.7 发布文件与升级补充
 
-跨服务器的前端机可直接下载 `miku-gate-frontend-v0.2.6.tar.gz`，它只含公开前端、代理配置和管理脚本，不含后端程序、密码、证书私钥和 TUN 配置。先按 SHA256SUMS 校验，再解压并按照第 7 节配置。
+跨服务器的前端机可直接下载 `miku-gate-frontend-v0.2.7.tar.gz`，它只含公开前端、代理配置和管理脚本，不含后端程序、密码、证书私钥和 TUN 配置。先按 SHA256SUMS 校验，再解压并按照第 7 节配置。
 
 完整 VPS 包与完整源码 ZIP 仍提供双架构后端；本次发布会从源码重建，不复用输入 ZIP 的 v0.2.4 二进制。旧原生维护工具存在包内文件数量上限，升级用新包 `sudo bash install.sh --update`；Docker 用旧脚本先备份，再更新原项目目录，保留 .env 和数据，之后运行新脚本 update。
 

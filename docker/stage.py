@@ -10,6 +10,7 @@ FILES = (
     'install-docker.sh', 'CORE_ASSETS.json', 'LICENSE', 'FLAG_ICONS_LICENSE',
     'VERSION', 'go.mod', 'go.sum', 'BUILD.json', 'README.md', 'CHANGELOG.md',
     'scripts/common.py', 'scripts/quick.py', 'scripts/frontend.py', 'scripts/export-frontend.py',
+    'scripts/console.py', 'scripts/docker_console.py', 'scripts/progress.py', 'scripts/setup-docker.sh',
     'docker/container.py', 'docker/build-key.py', 'docker/entrypoint.sh', 'docker/miku.sh',
     'docs/DOCKER.md', 'docs/FRONTEND.md', 'docs/VALIDATION.md', 'bin/miku-linux-amd64', 'bin/miku-linux-arm64',
 )

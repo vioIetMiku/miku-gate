@@ -3,13 +3,15 @@ ARG MIKU_BINARY_SOURCE=prebuilt
 
 FROM debian:bookworm-slim AS runtime
 ENV DEBIAN_FRONTEND=noninteractive PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-RUN apt-get update \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
        bash ca-certificates certbot curl iproute2 iptables iputils-ping \
-       openvpn openssl procps python3 tar tini util-linux \
-    && rm -rf /var/lib/apt/lists/*
+       openvpn openssl procps python3 tar tini util-linux
 WORKDIR /usr/local/lib/miku
-COPY scripts/common.py scripts/quick.py CORE_ASSETS.json LICENSE FLAG_ICONS_LICENSE ./
+COPY scripts/common.py CORE_ASSETS.json LICENSE FLAG_ICONS_LICENSE ./
 COPY docker/container.py ./container.py
 COPY docker/miku.sh /usr/local/bin/miku
 COPY docker/entrypoint.sh /usr/local/bin/miku-entrypoint
@@ -17,7 +19,9 @@ RUN chmod 600 CORE_ASSETS.json \
     && chmod 755 /usr/local/bin/miku /usr/local/bin/miku-entrypoint
 
 # Seed pinned cores before the application binary: version-only updates reuse this layer.
-RUN python3 -B container.py seed-cores
+RUN --mount=type=cache,target=/opt/miku/core-cache,sharing=locked \
+    MIKU_CORE_CACHE=/opt/miku/core-cache python3 -B container.py seed-cores
+COPY scripts/quick.py scripts/console.py ./
 
 # Release ZIP/tar bundles already contain both architectures; no Go is needed.
 FROM runtime AS prebuilt

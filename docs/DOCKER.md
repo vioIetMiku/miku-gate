@@ -1,4 +1,4 @@
-# Docker 安装（v0.2.6）
+# Docker 安装（v0.2.7）
 
 当前默认独立前端 + 后端，端口冲突自动避让。完整同机 / 跨服务器 / HTTPS 操作以 [README](../README.md) 和 [前后端分离指南](FRONTEND.md) 为准。
 
@@ -51,7 +51,7 @@ bash install-docker.sh
 
 仅后端部署使用 `sudo bash install.sh --docker --backend-only`，或当前目录运行 `bash install-docker.sh backend up`。后端仍提供兼容页面；这不会停止已存在的前端。
 
-v0.2.6 正式 Release 已包含 Docker 与前后端分离文件；在线入口 `mikugate.sh --docker` 安装默认的同机分离部署。
+v0.2.7 正式 Release 已包含 Docker 与前后端分离文件；在线入口 `mikugate.sh --docker` 安装默认的同机分离部署。
 
 附件的完整安装包包含 amd64 / arm64 预编译主程序，Dockerfile 按目标架构验证 `BUILD.json` 的 SHA256 后选取，不需要在 VPS 编译 Go。纯 Git 源码目录缺少 `bin/` 时，安装脚本自动选择镜像内源码构建；完整源码 ZIP 或 Git 目录也可显式执行以下命令（仅含预编译文件的 VPS tar.gz 不支持源码构建）：
 

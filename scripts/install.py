@@ -152,6 +152,7 @@ def _install(directory,update=False,reinstall=False):
             print('原管理端口不可用或与现有面板预留端口重合，已改用空闲端口 '+str(value['port'])+'。')
         for source,name,mode in [('bin/miku-linux-'+architecture,'miku',0o755),('scripts/common.py','common.py',0o644),('scripts/maintain.py','maintain.py',0o644),('scripts/quick.py','quick.py',0o644),('scripts/install.py','install.py',0o644),('CORE_ASSETS.json','CORE_ASSETS.json',0o600),('LICENSE','LICENSE',0o644),('FLAG_ICONS_LICENSE','FLAG_ICONS_LICENSE',0o644)]:
             c.atomic(c.LIB/name,c.trusted(directory/source),mode)
+        c.atomic(c.LIB/'console.py',c.trusted(directory/'scripts/console.py'),0o644)
         c.atomic(c.MENU,c.trusted(directory/'scripts/miku.sh'),0o755)
         installed_files=True
         for name in ('basepath','password'):

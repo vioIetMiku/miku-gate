@@ -190,6 +190,13 @@ class DockerDataTests(unittest.TestCase):
         service.assert_not_called()
         command.assert_called_once_with(['--no-domain', '--background'])
 
+    def test_info_always_prints_saved_login_password_and_complete_path(self):
+        d.initialize()
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            d.main(['info'])
+        self.assertIn('访问口令：'+(self.data/'password').read_text().strip(),output.getvalue())
+        self.assertIn('/'+(self.data/'basepath').read_text().strip()+'/',output.getvalue())
+
 
 class DockerShellTests(unittest.TestCase):
     def setUp(self):
@@ -198,6 +205,8 @@ class DockerShellTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         shutil.copyfile(ROOT / 'install-docker.sh', self.root / 'install-docker.sh')
         shutil.copyfile(ROOT / 'compose.yaml', self.root / 'compose.yaml')
+        (self.root/'scripts').mkdir()
+        shutil.copyfile(ROOT/'scripts/progress.py',self.root/'scripts/progress.py')
         self.fake_bin = self.root / 'fake-bin'
         self.fake_bin.mkdir()
         fake = self.fake_bin / 'docker'

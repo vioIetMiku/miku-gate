@@ -18,7 +18,7 @@ case "$action" in
     echo '仅操作后端：bash install-docker.sh backend [up|start|restart|update|info|status|logs|stop|down]'
     echo '默认 up：复用或构建后端镜像并启动后端及独立前端，端口冲突自动避让。要求 Linux、Docker Engine、Compose v2、Python 3.10+ 和 TUN。'
     exit 0 ;;
-  up|build|info|quick|sub|password|status|logs|start|stop|restart|backup|update|down|frontend) ;;
+  up|build|info|quick|sub|password|status|logs|start|stop|restart|backup|update|down|frontend|menu|list|countries|swap|jobs|remove|ip|country) ;;
   *) echo "未知命令：$action" >&2; exit 2 ;;
 esac
 if [[ "$action" != quick && "$action" != frontend && $# -ne 0 ]]; then echo '此命令不接受额外参数' >&2; exit 2; fi
@@ -27,6 +27,7 @@ command -v python3 >/dev/null 2>&1 || { echo '请先安装 Python 3.10+。' >&2;
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else "需要 Python 3.10+")'
 command -v docker >/dev/null 2>&1 || { echo '请先安装 Docker Engine 和 Compose v2，见 docs/DOCKER.md。' >&2; exit 1; }
 docker compose version >/dev/null
+if [[ "$action" == menu ]]; then exec python3 -B "$MIKU_DOCKER_DIR/scripts/docker_console.py"; fi
 if [[ "$action" == frontend ]]; then
   exec python3 -B "$MIKU_DOCKER_DIR/scripts/frontend.py" "$@"
 fi
@@ -40,6 +41,7 @@ fi
 case "${MIKU_BINARY_SOURCE:-prebuilt}" in prebuilt|source) ;; *) echo 'MIKU_BINARY_SOURCE 只能是 prebuilt 或 source' >&2; exit 2 ;; esac
 compose=(docker compose --project-directory "$MIKU_DOCKER_DIR" -f "$MIKU_DOCKER_DIR/compose.yaml")
 "${compose[@]}" config --quiet
+progress() { local label="$1"; shift; python3 -B "$MIKU_DOCKER_DIR/scripts/progress.py" "$label" "$@"; }
 
 prepare_image() {
   local force="${1:-0}" cached='' arch=''
@@ -58,9 +60,9 @@ prepare_image() {
     fi
   fi
   if [[ "${MIKU_DOCKER_REFRESH:-0}" == 1 ]]; then
-    "${compose[@]}" build --pull --no-cache
+    progress '正在刷新并构建后端镜像' "${compose[@]}" build --pull --no-cache
   else
-    "${compose[@]}" build
+    progress '正在准备后端镜像（首次稍慢）' "${compose[@]}" build
   fi
 }
 
@@ -74,13 +76,13 @@ runtime_check() {
 
 show_info() {
   "${compose[@]}" exec -T miku python3 -B /usr/local/lib/miku/container.py healthcheck
-  "${compose[@]}" exec -T miku miku info
+  "${compose[@]}" exec -T miku /usr/local/bin/miku info
   if [[ "$scope" == all ]] && frontend_exists; then frontend info; fi
 }
 
 start_frontend() {
   if [[ "$scope" == all ]]; then
-    if ! frontend start; then
+    if ! progress '正在启动独立前端' python3 -B "$MIKU_DOCKER_DIR/scripts/frontend.py" start; then
       echo '后端已就绪，前端启动失败。查看 frontend logs，修正后运行 frontend start；可用 backend info 查看后端入口。' >&2
       return 1
     fi
@@ -91,14 +93,15 @@ case "$action" in
   up|update)
     runtime_check
     prepare_image
-    "${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 180
+    progress '正在启动后端' "${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 180
     start_frontend
-    show_info ;;
+    show_info
+    if [[ $EUID -eq 0 ]]; then python3 -B scripts/docker_console.py register; fi ;;
   build) prepare_image 1 ;;
   start)
     runtime_check
     prepare_image
-    "${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 180
+    progress '正在启动后端' "${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 180
     start_frontend
     show_info ;;
   restart)
@@ -115,9 +118,10 @@ case "$action" in
   stop|down)
     if [[ "$scope" == all ]] && frontend_exists; then frontend "$action"; fi
     "${compose[@]}" "$action" ;;
-  quick) "${compose[@]}" exec miku miku quick "$@" ;;
-  sub) "${compose[@]}" exec -T miku miku sub ;;
-  password) "${compose[@]}" exec miku miku password ;;
+  quick|password|list|countries|swap|jobs|remove|ip|country)
+    terminal=(-T); if [[ -t 0 && -t 1 ]]; then terminal=(); fi
+    "${compose[@]}" exec "${terminal[@]}" miku /usr/local/bin/miku "$action" "$@" ;;
+  sub) "${compose[@]}" exec -T miku /usr/local/bin/miku sub ;;
   backup)
     mkdir -p docker-backups
     was_running="$("${compose[@]}" ps --status running -q miku)"

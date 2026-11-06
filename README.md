@@ -1,4 +1,48 @@
-# Miku Gate
+<p align="center">
+  <img src="docs/assets/mikugate-logo.jpg" alt="MikuGate 标志：地球、环绕轨道与 M 形网络网关" width="180" height="180">
+</p>
+
+<h1 align="center">MikuGate</h1>
+
+<p align="center"><strong>一台 VPS，连接世界各地的 VPN Gate 出口。</strong></p>
+<p align="center">多出口管理 · 网络隔离 · 多格式订阅 · 原生一键安装 · Docker 前后端分离</p>
+
+<p align="center">
+  <a href="https://github.com/vioIetMiku/miku-gate/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/vioIetMiku/miku-gate/release.yml?style=flat&amp;logo=github&amp;label=CI" alt="Release 工作流状态"></a>
+  <a href="https://github.com/vioIetMiku/miku-gate/releases/latest"><img src="https://img.shields.io/github/v/release/vioIetMiku/miku-gate?style=flat&amp;logo=github&amp;color=14b8a6" alt="最新正式版本"></a>
+  <a href="https://github.com/vioIetMiku/miku-gate/stargazers"><img src="https://img.shields.io/github/stars/vioIetMiku/miku-gate?style=flat&amp;logo=github&amp;color=0ea5e9" alt="GitHub Stars"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/vioIetMiku/miku-gate?style=flat&amp;color=22c55e" alt="MIT 许可证"></a>
+</p>
+<p align="center">
+  <a href="#install-native"><img src="https://img.shields.io/badge/platform-Linux-f0b429?style=flat&amp;logo=linux&amp;logoColor=white" alt="支持 Linux"></a>
+  <a href="#install-docker"><img src="https://img.shields.io/badge/deploy-Docker-2496ed?style=flat&amp;logo=docker&amp;logoColor=white" alt="支持 Docker 部署"></a>
+  <img src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-0e7490?style=flat" alt="支持 amd64 与 arm64">
+</p>
+
+<p align="center">
+  <a href="#quick-start">快速开始</a> ·
+  <a href="#features">功能特点</a> ·
+  <a href="#install-docker">Docker 部署</a> ·
+  <a href="#install-remote">前后端分离</a> ·
+  <a href="docs/FRONTEND.md">使用指南</a> ·
+  <a href="https://github.com/vioIetMiku/miku-gate/releases/latest">下载发布</a>
+</p>
+
+MikuGate 是基于 VPN Gate 公共中继的自托管多出口管理工具：在自己的 Linux VPS 上按国家创建出口，通过网页面板或终端管理节点，并生成客户端可用的订阅。支持原生安装与 Docker 部署，也支持把前端和后端放在不同服务器。
+
+<a id="features"></a>
+
+## 功能特点
+
+| 功能 | 可以做什么 |
+| --- | --- |
+| 多国家出口 | 按国家批量创建、查看和管理 VPN Gate 出口 |
+| 网络隔离与重连 | 使用网络命名空间隔离出口，连接异常时尝试自动恢复 |
+| 面板与终端 | 使用网页面板，或通过 `miku`、`miku quick`、`miku sub` 管理与获取订阅 |
+| 多格式订阅 | 为支持的客户端生成订阅与节点链接 |
+| 两种部署方式 | 原生一键安装，或使用 Docker 运行独立前端与后端 |
+| 前后端分离 | 前端可以独立启停、更新，也能部署到另一台服务器 |
+| 自动端口 | Docker 部署遇到端口冲突时自动避让，实际地址以 `info` 输出为准 |
 
 ## VPN Gate 是什么？
 
@@ -12,12 +56,11 @@ VPN Gate 不属于 Miku Gate。节点数量、国家、在线时间随时变化�
 
 基线提交：`d7ce5224caf3469b19876982abdf8d1be16c4a8b`。原 MIT 许可证和作者署名保留，见 [LICENSE](LICENSE)、[上游说明](README.fanout.md) 与 [源码来源](PROVENANCE.md)。
 
-<p align="center"><img src="src/assets/miku-hero-v1.png" alt="Miku Gate 插画" width="260"></p>
-<h2 align="center">世界，等你连接。</h2>
-
 **代码版本：v0.2.6**，正式状态以 [Releases](https://github.com/vioIetMiku/miku-gate/releases/latest) 为准。支持 Linux amd64 / arm64；完整安装包已编译，VPS 无需安装 Go。
 
-## 先选一种安装方式，不要把下面的命令全部执行
+<a id="quick-start"></a>
+
+## 快速开始：选择一种安装方式
 
 **原来的原生一键安装完整保留，Docker 是新增选项，不是替代原生安装。**
 
@@ -29,9 +72,15 @@ VPN Gate 不属于 Miku Gate。节点数量、国家、在线时间随时变化�
 | 不想在线运行脚本，自己下载并上传安装文件 | [方式四：手动安装](#install-offline) | 取决于选择的模式 | 仍分别使用原生或 Docker 的管理命令 |
 
 
+<a id="install-native"></a>
+
 ## 方式一：原生一键安装（推荐）
 
 这条路线**不需要 Docker、Compose、Node.js，也不需要提前安装 Go**。程序安装到 VPS，由 systemd / OpenRC 管理；网页由后端内嵌提供。
+
+### 第 1 步：在 VPS 上运行安装命令
+
+通过 SSH 登录自己的 Linux VPS，在 **root 用户的 Bash 终端**中执行：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)
@@ -443,3 +492,15 @@ Windows 本地静态检查不等于 Linux 容器、真实 VPN Gate 隧道或证�
 </table>
 
 </div>
+
+## Star History
+
+<p align="center">
+  <a href="https://www.star-history.com/?repos=vioietmiku%2Fmiku-gate&amp;type=date&amp;legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=vioIetMiku/miku-gate&amp;type=Date&amp;theme=dark&amp;legend=top-left">
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=vioIetMiku/miku-gate&amp;type=Date&amp;legend=top-left">
+      <img alt="MikuGate GitHub Star 数随时间变化的折线图" src="https://api.star-history.com/svg?repos=vioIetMiku/miku-gate&amp;type=Date&amp;legend=top-left" width="800">
+    </picture>
+  </a>
+</p>

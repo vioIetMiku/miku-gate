@@ -7,3 +7,7 @@
 登录页使用完整插画，主界面使用同一素材及裁切头像；元素随移动端布局缩放。
 
 dev41 新增 src/assets/miku-mark.svg，由原生 SVG 路径构成 M 字标，用于浏览器图标；无第三方图标素材。
+
+## README 项目标志
+
+`docs/assets/mikugate-logo.jpg` 为项目维护者提供的 MikuGate 标志原图（JPG），用于 README 导航介绍。保留原始文件，不将其描述为 SVG 矢量素材。此标志独立于上面的应用插画与浏览器字标。

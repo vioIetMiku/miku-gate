@@ -153,13 +153,32 @@ miku swap      # 选择已有出口，切换同国家的其他节点
 miku sub       # 查看订阅与节点链接
 ```
 
-**main 分支菜单更新（未发布新 Release）：**第 1 项为“一键配置常用国家 ★”，第 2 项为“搭建新的入口节点”，第 8 项为“面板地址 / 登录口令 ★”。新建入口向导支持选择 sing-box（推荐）或 Xray、协议、端口，以及本机 / 已连通 VPN Gate 出口；成功后只输出新入口的单独链接。也可用 `miku new` 打开向导，用 `miku node-link 入口ID` 重新导出。
+**终端菜单：**第 1 项为“一键配置常用国家 ★”，第 2 项为“搭建新的入口节点”，第 8 项为“面板地址 / 登录口令 ★”。新建入口向导支持选择 sing-box（推荐）或 Xray、协议、端口，以及本机 / 已连通 VPN Gate 出口；成功后只输出新入口的单独链接。也可用 `miku new` 打开向导，用 `miku node-link 入口ID` 重新导出。
 
 默认协议为 **VLESS + TCP + REALITY + Vision**。REALITY 预设有 `www.amd.com`（三网推荐 / 默认）、`www.tesla.com`（香港 VPS 推荐）、`www.microsoft.com`、`www.apple.com`，也能自定义；最终以当前 VPS 到目标的实际 TLS 检查为准。TLS 协议使用面板已有的有效域名证书。XHTTP 仅在 Xray 菜单显示。核心由全部自建入口共用，切换已有核心前会提示确认。
 
-这批变更只推送源码到 main，v0.2.7 Release 附件保持不变。常规一键命令继续下载正式包；源代码部署或后续重新构建后可使用新向导。安装入口的艺术字已在 main 的 `mikugate.sh` 中提前显示。
+v0.2.7 安装包采用同版本维护更新，版本号与原标签保持不变；附件构建提交记录在 Release 说明及包内 `BUILD.json`。重新运行下方命令即可更新 Docker 程序和菜单，保留已有节点、口令、证书、`.env` 与备份，不需要卸载，也不需要删除镜像：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh) --docker
+```
+
+默认入口检测到已有 Docker 快捷命令时也会继续更新同一 Docker 目录；不会把 Docker 安装误当成原生安装。安装链路只显示一次艺术字，日常运行 `miku` 时显示菜单标题。
 
 菜单包含出口查看、选国家、切换 IP、一键配置、订阅、密码、服务启停、日志和备份。`miku quick` 仍保留默认的一键配置。若机器上已有其他原生 `miku` 命令，安装器会保留原命令，Docker 菜单用 `miku-docker`。
+
+### 卸载与保留数据恢复
+
+两种部署方式都可以在 `miku` 菜单选择 **18：卸载程序，保留数据**，或 **19：彻底卸载，删除全部数据**。也可以直接运行：
+
+```bash
+miku uninstall  # 输入 YES：删除当前实例的程序、服务/容器和快捷命令，保留数据
+miku purge      # 输入 DELETE：连同当前实例的节点、口令、证书和备份一并删除
+```
+
+原生数据保留在 `/var/lib/miku`，Docker 数据默认保留在 `/opt/miku-gate-docker` 下的 `docker-data`、`docker-certs`、`docker-backups`，以及 `.env`、前端运行配置。保留数据卸载后，重新执行**相同部署方式**的一键安装命令即可恢复原节点和口令。原生与 Docker 使用不同数据目录，不能通过改安装参数自动迁移。只想暂时停止服务请用 `miku stop`。
+
+彻底卸载仅处理当前 MikuGate 实例，不卸载 Docker Engine，不清理其他项目、共享镜像缓存或外部反向代理。若 `miku` 属于其他原生安装，Docker 卸载请用 `miku-docker uninstall` / `miku-docker purge`。
 
 浏览器打开 `miku info` 显示的**前端完整地址**，保留随机路径，使用输出的登录口令。端口占用时会自动避让，不要固定照抄 8899 / 8900。
 

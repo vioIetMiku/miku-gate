@@ -107,7 +107,12 @@ def _install(directory,update=False,reinstall=False):
     old_module,old=(None,None) if reinstall else c.old_maintenance()
     previous=c.installed() if (c.DATA/'install.json').exists() else None
     if previous:
-        c.require(hashlib.sha256(c.trusted(c.LIB/'miku',0o755)).hexdigest()==previous['binary_sha256'],'已安装程序摘要变化')
+        c.require(previous.get('product')=='miku-fanout' and previous.get('installation_mode')!='docker','数据不属于原生 Miku Gate 安装')
+        if (c.LIB/'miku').exists():
+            c.require(hashlib.sha256(c.trusted(c.LIB/'miku',0o755)).hexdigest()==previous['binary_sha256'],'已安装程序摘要变化')
+        else:
+            c.require(not c.LIB.exists() and not c.UNIT.exists() and not c.OPENRC.exists() and not c.MENU.exists(),'程序安装不完整；请先检查原安装')
+            print('检测到卸载后保留的数据，将恢复程序并保留节点、地址和口令。')
     else:
         c.require(not c.UNIT.exists() and not c.OPENRC.exists(),'已有同名服务，无法自动接管')
         c.require(old is not None or not c.MENU.exists(),'已有其他miku快捷命令')
@@ -132,7 +137,7 @@ def _install(directory,update=False,reinstall=False):
                 if path.exists():c.trusted(path);path.unlink()
             if (c.DATA/'bin').exists() and not any((c.DATA/'bin').iterdir()):(c.DATA/'bin').rmdir()
         raise
-    backup=None;record=None;was_active=c.active() if previous else False;installed_files=False
+    backup=None;record=None;was_active=c.active() if previous and (c.UNIT.exists() or c.OPENRC.exists()) else False;installed_files=False
     try:
         if previous:
             if was_active:c.service('stop')

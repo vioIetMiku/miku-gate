@@ -9,6 +9,11 @@ on:
       - '**/*.md'
       - 'docs/**'
   workflow_dispatch:
+    inputs:
+      refresh_v027:
+        description: Rebuild existing v0.2.7 assets after all checks (no new tag or release)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -51,7 +56,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends nginx
           cd scripts
-          sudo env MIKU_NGINX=/usr/sbin/nginx python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_ports test_docker test_frontend test_frontend_lifecycle test_build_key test_console test_inbound_wizard
+          sudo env MIKU_NGINX=/usr/sbin/nginx python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_ports test_docker test_frontend test_frontend_lifecycle test_build_key test_console test_inbound_wizard test_install_lifecycle
       - name: Check Go formatting
         run: test -z "$(gofmt -l src)"
       - uses: actions/setup-node@v4
@@ -84,7 +89,7 @@ jobs:
           [[ -c /dev/net/tun ]] || sudo modprobe tun
           docker compose config --quiet
           bash install-docker.sh build
-          trap 'docker compose logs --tail=80 miku; docker compose -f compose.frontend.yaml down; docker compose down; kill "$busy_ports_pid" 2>/dev/null || true' EXIT
+          trap 'if [[ -f compose.yaml ]]; then docker compose logs --tail=80 miku; docker compose -f compose.frontend.yaml down; docker compose down; fi; kill "$busy_ports_pid" 2>/dev/null || true' EXIT
           # Both default ports are intentionally busy: startup must auto-fallback.
           python3 -u -c 'import socket,time; holders=[]; [(holders.append(socket.socket()), holders[-1].bind(("0.0.0.0", port)), holders[-1].listen()) for port in (8899,8900)]; print("ports held",flush=True); time.sleep(900)' > "$RUNNER_TEMP/miku-busy-ports.log" 2>&1 &
           busy_ports_pid=$!
@@ -136,12 +141,98 @@ jobs:
           curl -fsS -b "$RUNNER_TEMP/frontend.cookies" "http://127.0.0.1:$backend_port/$base/api/jobs" -o /dev/null
           sudo python3 -B scripts/frontend.py start
           sudo python3 -B scripts/frontend.py info
+          # Exercise both HOST menu uninstall modes on this disposable instance,
+          # then restore from the same verified release bundle without new IDs.
+          project="$PWD"
+          sudo chown -R root:root "$project"
+          preserved=$(sudo sha256sum docker-data/password docker-data/basepath docker-data/settings.json)
+          printf 'YES\n' | sudo miku uninstall
+          [[ ! -e scripts/docker_console.py && ! -e bin/miku-linux-amd64 ]]
+          [[ ! -e /usr/local/bin/miku && ! -e /usr/local/bin/miku-docker ]]
+          [[ "$preserved" == "$(sudo sha256sum docker-data/password docker-data/basepath docker-data/settings.json)" ]]
+          sudo mkdir -m 700 "$RUNNER_TEMP/miku-restore"
+          sudo tar --no-same-owner -xzf "$GITHUB_WORKSPACE/dist/miku-gate-vps-v${{ steps.version.outputs.version }}.tar.gz" -C "$RUNNER_TEMP/miku-restore"
+          restored_info=$(sudo env MIKU_DOCKER_INSTALL_DIR="$project" bash "$RUNNER_TEMP/miku-restore/miku-gate/install.sh" --docker)
+          [[ "$restored_info" == *'访问口令：'* && "$restored_info" == *'快捷菜单：miku'* ]]
+          unset restored_info
+          [[ "$preserved" == "$(sudo sha256sum docker-data/password docker-data/basepath docker-data/settings.json)" ]]
+          docker compose exec -T miku miku status
+          printf 'DELETE\n' | sudo miku purge
+          [[ ! -e "$project" && ! -e /usr/local/bin/miku && ! -e /usr/local/bin/miku-docker ]]
+          cd "$GITHUB_WORKSPACE"
       - uses: actions/upload-artifact@v4
         with:
           name: miku-gate-release
           path: dist/*
           if-no-files-found: error
           retention-days: 14
+  refresh-v027:
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'push' && contains(github.event.head_commit.message, '[refresh-v0.2.7]')) || (github.event_name == 'workflow_dispatch' && inputs.refresh_v027))
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: miku-gate-release
+          path: dist
+      - name: Back up existing release attachments and provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$(cat VERSION)" == 0.2.7 ]]
+          [[ "$(gh release view v0.2.7 --json isDraft,isPrerelease --jq '[.isDraft,.isPrerelease]|all(. == false)')" == true ]]
+          [[ "$(gh api repos/$GITHUB_REPOSITORY/git/ref/tags/v0.2.7 --jq .object.sha)" == 4ec7100cfd56d9d98cbaa016696a109560d8a1ce ]]
+          [[ "$(gh api repos/$GITHUB_REPOSITORY/releases/latest --jq .tag_name)" == v0.2.7 ]]
+          mkdir previous
+          gh release download v0.2.7 --dir previous --pattern '*'
+          gh release view v0.2.7 --json body --jq .body > previous/release-notes.md
+          (cd previous && sha256sum -c SHA256SUMS)
+          (cd dist && sha256sum -c SHA256SUMS)
+          [[ "$(find dist -maxdepth 1 -type f | wc -l)" -eq 6 ]]
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v0.2.7-before-maintenance-${{ github.run_id }}
+          path: previous/*
+          retention-days: 30
+          if-no-files-found: error
+      - name: Refresh existing v0.2.7 assets and verify public downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          upload_set() {
+            local dir="$1" file
+            for file in "$dir"/*; do
+              case "${file##*/}" in SHA256SUMS|release-notes.md) continue ;; esac
+              gh release upload v0.2.7 "$file" --clobber
+            done
+            gh release upload v0.2.7 "$dir/SHA256SUMS" --clobber
+          }
+          restore_previous() {
+            trap - ERR
+            echo 'Refresh failed; restoring previous attachments.' >&2
+            upload_set previous
+            gh release edit v0.2.7 --notes-file previous/release-notes.md
+          }
+          trap restore_previous ERR
+          upload_set dist
+          mkdir verify
+          gh release download v0.2.7 --dir verify --pattern '*'
+          (cd verify && sha256sum -c SHA256SUMS)
+          [[ "$(find verify -maxdepth 1 -type f | wc -l)" -eq 6 ]]
+          cmp dist/SHA256SUMS verify/SHA256SUMS
+          mkdir unpacked
+          tar -xzf verify/miku-gate-vps-v0.2.7.tar.gz -C unpacked
+          python3 -c 'import json,os; assert json.load(open("unpacked/miku-gate/BUILD.json"))["source"] == os.environ["GITHUB_SHA"]'
+          cp scripts/release-notes.md maintenance-notes.md
+          printf '\n同版本安装器维护更新：`%s`。修复安装进度漂移、重复标题、Docker 更新及快捷命令冲突，加入保留数据卸载和彻底卸载。版本和原标签保持不变；当前附件由上述提交构建。\n' "$GITHUB_SHA" >> maintenance-notes.md
+          gh release edit v0.2.7 --notes-file maintenance-notes.md
+          trap - ERR
   publish:
     if: startsWith(github.ref, 'refs/tags/')
     needs: build

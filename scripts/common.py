@@ -231,9 +231,10 @@ def banner(animate=True):
         if tty and animate:time.sleep(.045)
     print('                    Miku Gate  /  你的连接，你的节奏\n')
 
-def purge_current():
+def purge_current(keep_data=False):
     """Remove only fixed Miku-owned destinations; callers hold the outer lock."""
-    destinations=[DATA,LIB,MENU,UNIT,OPENRC,UNIT.with_name('miku-certificate.service'),UNIT.with_name('miku-certificate.timer')]
+    destinations=[LIB,MENU,UNIT,OPENRC,UNIT.with_name('miku-certificate.service'),UNIT.with_name('miku-certificate.timer')]
+    if not keep_data:destinations.insert(0,DATA)
     for path in destinations:
         if not path.exists() and not path.is_symlink():continue
         info=path.lstat()
@@ -255,7 +256,7 @@ def purge_current():
         if path.is_dir():shutil.rmtree(path)
         elif path.exists():path.unlink()
     if systemd():run(['systemctl','daemon-reload'])
-    print('Miku Gate 已卸载，配置、节点、凭据和本服务备份已清除，可重新运行安装命令。')
+    print('Miku Gate 程序和服务已卸载。'+('数据保留在 '+str(DATA)+'；重新运行原生安装命令即可恢复。' if keep_data else '配置、节点、凭据和本服务备份已清除，可重新运行安装命令。'))
 
 def valid_domain(domain):
     return len(domain)<=253 and '.' in domain and all(re.fullmatch(r'[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?',label) for label in domain.split('.'))
@@ -322,7 +323,7 @@ def snapshot(label):
         for child in DATA.iterdir():
             if child.name in ('backups','bin','.maintenance.lock') or child.is_symlink():continue
             archive.add(child,arcname='data/'+child.name,recursive=True)
-        for name in ('miku','maintain.py','common.py','quick.py','install.py','CORE_ASSETS.json','FLAG_ICONS_LICENSE'):
+        for name in ('miku','maintain.py','common.py','quick.py','install.py','console.py','inbound_wizard.py','CORE_ASSETS.json','FLAG_ICONS_LICENSE'):
             file=LIB/name
             if file.exists():archive.add(file,arcname='lib/'+name)
         if MENU.exists():archive.add(MENU,arcname='menu/miku')

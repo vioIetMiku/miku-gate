@@ -48,7 +48,7 @@ def main():
         stage=Path(temporary)/'miku-gate';(stage/'bin').mkdir(parents=True);(stage/'scripts').mkdir()
         for name in ('install.sh','install-online.sh','install-docker.sh','Dockerfile','compose.yaml','compose.frontend.yaml','.dockerignore','.env.example','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','FLAG_ICONS_LICENSE','CORE_ASSETS.json'):
             shutil.copy2(ROOT/name,stage/name)
-        for name in ('common.py','install.py','maintain.py','quick.py','miku.sh','frontend.py','export-frontend.py','console.py','docker_console.py','progress.py','setup-docker.sh','inbound_wizard.py','banner.sh'):
+        for name in ('common.py','install.py','maintain.py','quick.py','miku.sh','frontend.py','export-frontend.py','console.py','docker_console.py','progress.py','setup-docker.sh','inbound_wizard.py','banner.sh','install_mode.py'):
             shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
         (stage/'docs').mkdir()
         shutil.copyfile(ROOT/'docs/DEV_HISTORY.md',stage/'docs/DEV_HISTORY.md')

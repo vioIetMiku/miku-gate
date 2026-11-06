@@ -6,6 +6,8 @@ import urllib.parse
 import common as c
 from quick import LocalPanel, quick, subscriptions
 
+EXIT_MENU = object()
+
 
 def clean(value):
     return re.sub(r'[\x00-\x1f\x7f-\x9f]', '', str(value))[:120]
@@ -14,7 +16,7 @@ def clean(value):
 def header(mode, status=''):
     color = sys.stdout.isatty() and not os.environ.get('NO_COLOR') and os.environ.get('TERM') != 'dumb'
     cyan, end = ('\033[38;5;43m', '\033[0m') if color else ('', '')
-    c.banner(animate=False)
+    if os.environ.pop('MIKU_INSTALL_BANNER_SHOWN','0')!='1':c.banner(animate=False)
     print(cyan + '╭' + '─' * 50 + '╮\n  MikuGate  ·  Terminal Manager\n╰' + '─' * 50 + '╯' + end)
     print('  模式：' + mode + ('  |  状态：' + status if status else ''))
 
@@ -119,14 +121,18 @@ def menu(mode, actions, status=lambda: ''):
  [12] 重启服务          [13] 停止服务
  [14] 查看日志          [15] 数据备份
  [16] 更多维护          [17] 查看后台任务
+【卸载】
+ [18] 卸载程序，保留数据
+ [19] 彻底卸载，删除全部数据
   [0] 退出
 ''')
-            choice = input('请选择 [0–17]：').strip()
+            choice = input('请选择 [0–19]：').strip()
             if choice in ('0', 'q', 'exit'): return
             shared = {'1': lambda: node_command('quick-menu'), '2': lambda: node_command('new'),
                       '3': swap, '4': provision, '5': tunnels, '6': remove, '7': subscriptions, '17': jobs}
             action = actions.get(choice) or shared.get(choice)
-            if action: action()
+            if action:
+                if action() is EXIT_MENU:return
             else: print('请输入菜单中的编号。')
         except (EOFError, KeyboardInterrupt):
             print('\n已退出菜单；后台服务继续运行。'); return

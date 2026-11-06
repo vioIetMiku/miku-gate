@@ -24,6 +24,18 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 MIKU_PACKAGE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$MIKU_PACKAGE_DIR/scripts/banner.sh"
+if [[ "${1:-}" != --docker ]]; then
+  existing_docker=$(python3 -B "$MIKU_PACKAGE_DIR/scripts/install_mode.py")
+  if [[ -n "$existing_docker" ]]; then
+    if [[ $# -gt 0 ]]; then
+      echo '检测到 Docker 安装。更新请使用原命令加 --docker；保留数据卸载请用 miku uninstall。Docker 与原生数据目录不同，切换部署方式需要另行迁移。' >&2
+      exit 2
+    fi
+    echo '检测到已有 Docker 安装，将保留数据并更新 Docker 程序。'
+    export MIKU_DOCKER_INSTALL_DIR="$existing_docker"
+    set -- --docker
+  fi
+fi
 if [[ "${1:-}" == --docker ]]; then
   shift
   python3 -B "$MIKU_PACKAGE_DIR/scripts/progress.py" '正在准备 Docker 运行环境' bash "$MIKU_PACKAGE_DIR/scripts/setup-docker.sh"

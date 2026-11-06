@@ -243,37 +243,44 @@ def logs():
 
 def uninstall():
     with c.maintenance_lock():
-        target=c.snapshot('before-uninstall');certificate_timer(False)
-        if c.active():c.service('stop')
-        if c.systemd():c.run(['systemctl','disable','miku.service'])
-        else:c.run(['rc-update','del','miku','default'])
-    print('已停止并取消开机启动；数据、程序和备份保留。重新启动：miku start\n备份：'+str(target))
+        c.purge_current(keep_data=True)
+
+def menu_uninstall():
+    print('将卸载原生 MikuGate 程序、服务与快捷命令；节点、口令、证书和备份保留在 '+str(c.DATA)+'。')
+    if input('输入 YES 确认保留数据卸载：').strip()=='YES':
+        from console import EXIT_MENU
+        uninstall()
+        return EXIT_MENU
 
 def purge():
     with c.maintenance_lock():c.purge_current()
 
 def menu_purge():
     print('将删除 Miku Gate 的配置、节点、凭据、程序和本服务备份。')
-    if input('输入 DELETE 确认清除：').strip()=='DELETE':purge()
+    if input('输入 DELETE 确认清除：').strip()=='DELETE':
+        from console import EXIT_MENU
+        purge()
+        return EXIT_MENU
 
 def more_menu():
     c.banner()
-    print('Miku Gate '+c.installed()['version']+'\n1 管理地址 / 查看口令\n2 修改口令\n3 域名：绑定 / 更换 / 解绑\n4 修复依赖与端口（含OpenVPN）\n5 启动\n6 停止\n7 重启\n8 日志\n9 修改管理端口 / 自动选择\n10 备份\n11 恢复切换前旧版\n12 停止并取消自启（保留数据）\n13 完整卸载并清除数据\n14 一键配置节点（日本5 / 韩国3 / 美国3）\n15 直接输出全部订阅 / 节点链接\n0 退出')
+    print('Miku Gate '+c.installed()['version']+'\n1 管理地址 / 查看口令\n2 修改口令\n3 域名：绑定 / 更换 / 解绑\n4 修复依赖与端口（含OpenVPN）\n5 启动\n6 停止\n7 重启\n8 日志\n9 修改管理端口 / 自动选择\n10 备份\n11 恢复切换前旧版\n12 卸载程序并保留数据\n13 完整卸载并清除数据\n14 一键配置节点（日本5 / 韩国3 / 美国3）\n15 直接输出全部订阅 / 节点链接\n0 退出')
     choice=input('选择：').strip()
-    commands={'1':c.info,'2':password,'3':domain,'4':repair,'5':lambda:(c.service('start'),c.wait_ready(),c.info()),'6':lambda:c.service('stop'),'7':restart,'8':logs,'9':port,'10':backup,'11':rollback,'12':uninstall,'13':menu_purge}
+    commands={'1':c.info,'2':password,'3':domain,'4':repair,'5':lambda:(c.service('start'),c.wait_ready(),c.info()),'6':lambda:c.service('stop'),'7':restart,'8':logs,'9':port,'10':backup,'11':rollback,'12':menu_uninstall,'13':menu_purge}
     if choice=='14':
         from quick import quick
         return quick()
     if choice=='15':
         from quick import subscriptions
         return subscriptions()
-    if choice in commands:commands[choice]()
+    if choice in commands:return commands[choice]()
 
 def menu():
     from console import menu as ui
     actions={'8':c.info,'9':password,'10':lambda:print('运行中' if c.active() else '已停止'),
              '11':lambda:(c.service('start'),c.wait_ready(),c.info()),'12':restart,
-             '13':lambda:c.service('stop'),'14':logs,'15':backup,'16':more_menu}
+             '13':lambda:c.service('stop'),'14':logs,'15':backup,'16':more_menu,
+             '18':menu_uninstall,'19':menu_purge}
     return ui('原生',actions,lambda:'运行中' if c.active() else '已停止')
 
 def main():
@@ -289,7 +296,8 @@ def main():
         from quick import subscriptions
         return subscriptions()
     commands={'menu':menu,'info':c.info,'status':lambda:print('运行中' if c.active() else '已停止'),'password':password,'passwd':password,'domain':domain,'port':port,'repair':repair,'backup':backup,'rollback':rollback,'logs':logs,'certificate-refresh':certificate_refresh,'certificate-prepare':certificate_prepare,'certificate-automation':certificate_timer,'start':lambda:(c.service('start'),c.wait_ready(),c.info()),'stop':lambda:c.service('stop'),'restart':restart,'uninstall':uninstall,'purge':purge}
-    if args==['uninstall','--purge']:return purge()
+    if args in (['purge'],['uninstall','--purge']):return menu_purge()
+    if args==['uninstall']:return menu_uninstall()
     if command=='update':c.require(len(args)==2,'用法：miku update /绝对路径/新版安装包.tar.gz');return update(args[1])
     c.require(command in commands and len(args)<=1,'可用命令：miku [quick|sub|info|password|domain|repair|start|stop|restart|logs|port|backup|rollback|update 安装包|uninstall|purge]');commands[command]()
 

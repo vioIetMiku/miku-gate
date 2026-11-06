@@ -120,7 +120,7 @@ def info():
     path = c.trusted(c.DATA / 'basepath', 0o600, 1024).decode().strip().strip('/')
     password = c.trusted(c.DATA / 'password', 0o600, 1024).decode().strip()
     print('管理地址：' + c.origin(value) + '/' + path + '/\n访问口令：' + password)
-    print('一键节点：docker compose exec miku miku quick\n全部订阅：docker compose exec miku miku sub')
+    print('快捷菜单：miku\n一键节点：miku quick\n新建入口：miku new\n全部订阅：miku sub\n地址和口令：miku info')
 
 
 def password():

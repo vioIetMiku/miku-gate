@@ -5,9 +5,7 @@
     <img src="docs/assets/mikugate-wordmark-light.svg" alt="MikuGate" width="62%">
   </picture>
 </p>
-
 <p align="center"><strong>一台 VPS，连接世界各地的出口。</strong></p>
-
 <p align="center">
   <a href="https://github.com/vioIetMiku/miku-gate/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/vioIetMiku/miku-gate/release.yml?style=flat-square&amp;logo=github&amp;label=CI" alt="Release 工作流状态"></a>
   <a href="https://github.com/vioIetMiku/miku-gate/releases/latest"><img src="https://img.shields.io/github/v/release/vioIetMiku/miku-gate?style=flat-square&amp;logo=github&amp;color=14b8a6" alt="最新正式版本"></a>

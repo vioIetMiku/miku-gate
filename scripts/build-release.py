@@ -13,6 +13,7 @@ import subprocess
 import tarfile
 import tempfile
 import zipfile
+from license_text import write_gpl
 
 ROOT=Path(__file__).resolve().parents[1]
 UPSTREAM='d7ce5224caf3469b19876982abdf8d1be16c4a8b'
@@ -22,7 +23,7 @@ def source_file(path):
     excluded=('.git','bin','dist','__pycache__','.runtime','.install-logs','tmph5eepphq','docker-data','docker-certs','docker-backups')
     return (path.is_file() and not any(part in excluded for part in relative.parts)
             and path.suffix not in ('.zip','.gz','.pyc')
-            and relative.as_posix()!='BUILD.json'
+            and relative.as_posix() not in ('BUILD.json','COPYING')
             and not (path.name.startswith('.env') and path.name!='.env.example'))
 
 def main():
@@ -46,9 +47,11 @@ def main():
         source='archive-sha256:'+digest.hexdigest()
     with tempfile.TemporaryDirectory(prefix='miku-release-',dir=args.output) as temporary:
         stage=Path(temporary)/'miku-gate';(stage/'bin').mkdir(parents=True);(stage/'scripts').mkdir()
-        for name in ('install.sh','install-online.sh','install-docker.sh','Dockerfile','compose.yaml','compose.frontend.yaml','.dockerignore','.env.example','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','COPYING','NOTICE','FLAG_ICONS_LICENSE','CORE_ASSETS.json'):
+        copying=write_gpl(Path(temporary)/'COPYING')
+        shutil.copyfile(copying,stage/'COPYING')
+        for name in ('install.sh','install-online.sh','install-docker.sh','Dockerfile','compose.yaml','compose.frontend.yaml','.dockerignore','.env.example','VERSION','CHANGELOG.md','README.md','README.fanout.md','PROVENANCE.md','ARTWORK.md','UI_DESIGN.md','LICENSE','NOTICE','FLAG_ICONS_LICENSE','CORE_ASSETS.json'):
             shutil.copy2(ROOT/name,stage/name)
-        for name in ('common.py','install.py','maintain.py','quick.py','miku.sh','frontend.py','export-frontend.py','console.py','docker_console.py','progress.py','setup-docker.sh','inbound_wizard.py','banner.sh','install_mode.py'):
+        for name in ('common.py','install.py','maintain.py','quick.py','miku.sh','frontend.py','export-frontend.py','console.py','docker_console.py','progress.py','setup-docker.sh','inbound_wizard.py','banner.sh','install_mode.py','license_text.py'):
             shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
         (stage/'docs').mkdir()
         shutil.copyfile(ROOT/'docs/DEV_HISTORY.md',stage/'docs/DEV_HISTORY.md')
@@ -140,7 +143,7 @@ __MIKU_ARCHIVE_BELOW__
         names=['compose.frontend.yaml','.env.example','VERSION','README.md','LICENSE','COPYING','NOTICE','FLAG_ICONS_LICENSE','ARTWORK.md','scripts/common.py','scripts/frontend.py','scripts/export-frontend.py','docs/FRONTEND.md','docs/DOCKER.md']
         names += [path.relative_to(ROOT).as_posix() for path in sorted((ROOT/'frontend').rglob('*')) if source_file(path)]
         for name in names:
-            raw=(ROOT/name).read_bytes();target_path=front/name;target_path.parent.mkdir(parents=True,exist_ok=True);target_path.write_bytes(raw)
+            raw=(copying if name=='COPYING' else ROOT/name).read_bytes();target_path=front/name;target_path.parent.mkdir(parents=True,exist_ok=True);target_path.write_bytes(raw)
             front_files[name]=hashlib.sha256(raw).hexdigest()
         front_meta={**meta,'distribution':'frontend','files':front_files}
         (front/'BUILD.json').write_text(json.dumps(front_meta,indent=2)+'\n',encoding='utf-8')
@@ -159,6 +162,7 @@ __MIKU_ARCHIVE_BELOW__
             if not source_file(path):continue
             destination=source_stage/relative;destination.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(path,destination)
             destination.chmod(0o755 if path.suffix=='.sh' else 0o644);source_files.append(relative.as_posix())
+        shutil.copyfile(copying,source_stage/'COPYING');source_files.append('COPYING')
         (source_stage/'bin').mkdir()
         for path in sorted((stage/'bin').iterdir()):
             shutil.copyfile(path,source_stage/'bin'/path.name);(source_stage/'bin'/path.name).chmod(0o755);source_files.append('bin/'+path.name)

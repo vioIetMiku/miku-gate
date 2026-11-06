@@ -1,7 +1,16 @@
-MikuGate
-Copyright (C) 2026 vioIetMiku
-
+GNU GPL v3 — License Notice
+MikuGate · Copyright (C) 2026 vioIetMiku
 SPDX-License-Identifier: GPL-3.0-only
-Licensed under GNU General Public License v3.0 only.
-Full license text: COPYING
-Third-party notices: NOTICE
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of version 3 of the GNU General Public License as
+published by the Free Software Foundation.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+This notice does not replace the full GNU GPL v3 terms, available at:
+https://www.gnu.org/licenses/gpl-3.0.html
+
+Third-party copyright and license notices: NOTICE and FLAG_ICONS_LICENSE.

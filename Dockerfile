@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
        bash ca-certificates certbot curl iproute2 iptables iputils-ping \
        openvpn openssl procps python3 tar tini util-linux
 WORKDIR /usr/local/lib/miku
-COPY scripts/common.py CORE_ASSETS.json LICENSE COPYING NOTICE FLAG_ICONS_LICENSE ./
+COPY scripts/common.py CORE_ASSETS.json LICENSE NOTICE FLAG_ICONS_LICENSE ./
 COPY docker/container.py ./container.py
 COPY docker/miku.sh /usr/local/bin/miku
 COPY docker/entrypoint.sh /usr/local/bin/miku-entrypoint
@@ -21,7 +21,8 @@ RUN chmod 600 CORE_ASSETS.json \
 # Seed pinned cores before the application binary: version-only updates reuse this layer.
 RUN --mount=type=cache,target=/opt/miku/core-cache,sharing=locked \
     MIKU_CORE_CACHE=/opt/miku/core-cache python3 -B container.py seed-cores
-COPY scripts/quick.py scripts/console.py scripts/inbound_wizard.py ./
+COPY scripts/quick.py scripts/console.py scripts/inbound_wizard.py scripts/license_text.py ./
+RUN python3 -B license_text.py COPYING
 
 # Release ZIP/tar bundles already contain both architectures; no Go is needed.
 FROM runtime AS prebuilt

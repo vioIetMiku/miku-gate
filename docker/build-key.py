@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-RUNTIME = ('Dockerfile', '.dockerignore', 'CORE_ASSETS.json', 'LICENSE', 'COPYING', 'NOTICE', 'FLAG_ICONS_LICENSE',
+RUNTIME = ('Dockerfile', '.dockerignore', 'CORE_ASSETS.json', 'LICENSE', 'NOTICE', 'FLAG_ICONS_LICENSE', 'scripts/license_text.py',
            'scripts/common.py', 'scripts/quick.py', 'scripts/console.py', 'scripts/inbound_wizard.py', 'docker/container.py', 'docker/entrypoint.sh', 'docker/miku.sh')
 
 def fingerprint(root, architecture, source):

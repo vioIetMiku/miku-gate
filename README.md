@@ -76,22 +76,9 @@ VPN Gate 不属于 Miku Gate。节点数量、国家、在线时间随时变化�
 
 <a id="install-native"></a>
 
-## 方式一：原生一键安装
+## 方式一：原生一键安装（推荐）
 
-### 1. 准备基础环境
-
-在要安装的 VPS 执行一次，安装 Bash、下载工具、证书、Python 和解压工具：
-
-```bash
-apt-get update
-apt-get install -y bash curl ca-certificates python3 tar kmod
-modprobe tun
-test -c /dev/net/tun && echo 'TUN 已就绪'
-```
-
-若 `/dev/net/tun` 仍不存在，需要在 VPS 服务商面板开启 TUN；安装命令无法替代宿主机提供这个设备。
-
-### 2. 运行原来的安装命令
+### 1. 运行安装命令
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)
@@ -99,7 +86,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mi
 
 安装器下载正式包、校验文件并准备运行依赖，随后启动系统服务。交互菜单中，输入 **1** 使用网页面板，输入 **2** 或直接回车进入终端一键配置。原生安装不需要 Docker。
 
-### 3. 打开面板，获取订阅
+### 2. 打开面板，获取订阅
 
 ```bash
 miku info   # 查看完整管理地址和登录口令

@@ -24,6 +24,10 @@ type normalizedSpec struct {
 // 这段逻辑对两种后端完全一致，所以从 Native.CreateInbound 里抽出来共用，
 // 免得 3x-ui 那边再写一份走样的校验。
 func normalizeInboundSpec(spec NewInboundSpec, used map[int]bool) (*normalizedSpec, error) {
+	return normalizeInboundSpecForCore(spec, used, "xray")
+}
+
+func normalizeInboundSpecForCore(spec NewInboundSpec, used map[int]bool, core string) (*normalizedSpec, error) {
 	proto := strings.ToLower(strings.TrimSpace(spec.Protocol))
 	if proto == "" {
 		proto = "vless"
@@ -45,9 +49,9 @@ func normalizeInboundSpec(spec NewInboundSpec, used map[int]bool) (*normalizedSp
 	if !nativeSecurities[security] {
 		return nil, fmt.Errorf("不支持的安全层 %q", spec.Security)
 	}
-	// REALITY 靠模仿 TLS 握手工作，套在 ws/grpc 这类已有自己头部的传输上没有意义，
-	// Xray 也不接受这种组合
-	if security == "reality" && network != "tcp" && network != "xhttp" && network != "grpc" {
+	// Xray accepts Reality with TCP/XHTTP/gRPC. sing-box additionally supports
+	// WebSocket over its Reality TLS implementation; do not offer it to Xray.
+	if security == "reality" && network != "tcp" && network != "xhttp" && network != "grpc" && !(core == "sing-box" && network == "ws") {
 		return nil, fmt.Errorf("REALITY 不支持 %s 传输", network)
 	}
 	// VMess 自带加密，但 TLS 在这里是为了流量伪装而不是加密强度，

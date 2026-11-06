@@ -56,7 +56,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends nginx
           cd scripts
-          sudo env MIKU_NGINX=/usr/sbin/nginx python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_ports test_docker test_frontend test_frontend_lifecycle test_build_key test_console test_inbound_wizard test_install_lifecycle
+          sudo env MIKU_NGINX=/usr/sbin/nginx python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_ports test_docker test_frontend test_frontend_lifecycle test_build_key test_console test_inbound_wizard test_install_lifecycle test_terminal_quick
       - name: Check Go formatting
         run: test -z "$(gofmt -l src)"
       - uses: actions/setup-node@v4
@@ -69,6 +69,7 @@ jobs:
           MIKU_JSDOM_MODULE="$RUNNER_TEMP/miku-ui/node_modules/jsdom" node scripts/test-ui.cjs "$RUNNER_TEMP/miku-ui-fixture/index.html"
           python3 -B scripts/export-frontend.py
           MIKU_JSDOM_MODULE="$RUNNER_TEMP/miku-ui/node_modules/jsdom" node scripts/test-ui.cjs frontend/public/index.html
+          MIKU_TERMINAL_CORE_FIXTURE="$RUNNER_TEMP/miku-protocol-fixtures" go test ./src -run '^TestTerminalProtocolFixtures$' -count=1
       - name: Build both architectures from source
         run: python3 scripts/build-release.py --version '${{ steps.version.outputs.version }}' --label 'v${{ steps.version.outputs.version }}' --output dist
       - name: Verify release archives and embedded version
@@ -106,6 +107,10 @@ jobs:
           [[ "$(stat -c %u docker-data)" == 0 ]]
           [[ "$(stat -c %a docker-data)" == 700 ]]
           docker compose exec -T miku miku status
+          protocol_container=$(docker compose ps -q miku)
+          docker cp "$GITHUB_WORKSPACE/scripts/test-core-protocols.py" "$protocol_container:/tmp/test-core-protocols.py"
+          docker cp "$RUNNER_TEMP/miku-protocol-fixtures" "$protocol_container:/tmp/miku-protocol-fixtures"
+          docker compose exec -T miku python3 -B /tmp/test-core-protocols.py /var/lib/miku/bin/sing-box /tmp/miku-protocol-fixtures
           before=$(docker compose exec -T miku sha256sum /var/lib/miku/password /var/lib/miku/basepath)
           docker compose stop miku
           docker compose up -d --force-recreate --wait --wait-timeout 180

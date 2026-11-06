@@ -564,7 +564,7 @@ func (n *Native) CreateInbound(spec NewInboundSpec, tunnels []*Tunnel) (*Created
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	ns, err := normalizeInboundSpec(spec, n.store.usedPorts())
+	ns, err := normalizeInboundSpecForCore(spec, n.store.usedPorts(), n.proc.kind())
 	if err != nil {
 		return nil, err
 	}

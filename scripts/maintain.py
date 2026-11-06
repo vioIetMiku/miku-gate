@@ -268,8 +268,8 @@ def more_menu():
     choice=input('选择：').strip()
     commands={'1':c.info,'2':password,'3':domain,'4':repair,'5':lambda:(c.service('start'),c.wait_ready(),c.info()),'6':lambda:c.service('stop'),'7':restart,'8':logs,'9':port,'10':backup,'11':rollback,'12':menu_uninstall,'13':menu_purge}
     if choice=='14':
-        from quick import quick
-        return quick()
+        from quick import terminal_quick
+        return terminal_quick()
     if choice=='15':
         from quick import subscriptions
         return subscriptions()

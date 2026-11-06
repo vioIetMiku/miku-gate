@@ -199,6 +199,7 @@ func main() {
 	certificateRegistry = domains
 	mux.HandleFunc("/api/quick-setup", apiQuickSetup(mgr, domains))
 	mux.HandleFunc("/api/quick-setup/stop", apiQuickSetupStop(mgr))
+	mux.HandleFunc("/api/quick-setup/terminal", apiTerminalQuick(mgr, domains))
 	// 设置面板：改密码 / 改路径 / 改端口 / 改本地监听。
 	mux.HandleFunc("/api/settings", apiSettings(auth, srv))
 	mux.HandleFunc("/api/sources/add", apiSourceAdd(mgr))

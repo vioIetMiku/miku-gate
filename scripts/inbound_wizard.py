@@ -19,6 +19,16 @@ XRAY_PROTOCOLS = (
     ('VLESS + XHTTP + REALITY（Xray）', 'vless', 'xhttp', 'reality', False),
     ('VLESS + XHTTP + TLS（Xray）', 'vless', 'xhttp', 'tls', False),
 )
+SINGBOX_PROTOCOLS = (
+    ('VLESS + WebSocket + REALITY（sing-box）', 'vless', 'ws', 'reality', False),
+    ('VMess + WebSocket + REALITY（sing-box）', 'vmess', 'ws', 'reality', False),
+    ('Trojan + TCP + REALITY（sing-box）', 'trojan', 'tcp', 'reality', False),
+)
+
+
+def protocols_for(core):
+    if core=='sing-box':return PROTOCOLS[:2]+SINGBOX_PROTOCOLS+PROTOCOLS[5:]+PROTOCOLS[2:5]
+    return PROTOCOLS+XRAY_PROTOCOLS
 REALITY_DOMAINS = (
     ('www.amd.com', '三网推荐 / 默认'),
     ('www.tesla.com', '香港 VPS 推荐'),
@@ -55,6 +65,12 @@ def tls_certificate(panel):
     return pick(choices,'选择已有 TLS 域名证书')
 
 
+def validate_links(links):
+    for link in links:
+        c.require(isinstance(link,str) and len(link)<=16384 and not re.search(r'[\x00-\x20\x7f-\x9f]',link)
+                  and link.startswith(('vless://','vmess://','trojan://')),'后端返回的节点链接格式异常')
+
+
 def node_links(inbound_id, panel=None):
     text=str(inbound_id)
     c.require(text.isascii() and text.isdigit() and int(text)>0,'用法：miku node-link 正整数ID')
@@ -62,9 +78,7 @@ def node_links(inbound_id, panel=None):
     packet=panel.request('GET','api/xui/links?'+urllib.parse.urlencode({'ids':text}))
     links=packet.get('links') or []
     c.require(links,'此入口尚无启用的客户端链接，请在面板查看该入口')
-    for link in links:
-        c.require(isinstance(link,str) and len(link)<=16384 and not re.search(r'[\x00-\x20\x7f-\x9f]',link)
-                  and link.startswith(('vless://','vmess://','trojan://')),'后端返回的节点链接格式异常')
+    validate_links(links)
     print('\n这个节点的单独链接（包含凭据，请自行保管）：')
     for link in links:print(link)
     return links
@@ -90,13 +104,8 @@ def apply_core(panel,state,core):
 
 
 def quick_menu(panel=None):
-    panel=panel or LocalPanel(timeout=60)
-    choice=choose_core(panel)
-    if choice is None:return
-    state,core=choice
-    if not apply_core(panel,state,core):return
-    from quick import quick
-    return quick(background=True,panel=panel)
+    from quick import terminal_quick
+    return terminal_quick(panel=panel)
 
 
 def create(panel=None):
@@ -104,7 +113,7 @@ def create(panel=None):
     choice=choose_core(panel)
     if choice is None:return
     state,core=choice
-    protocols=PROTOCOLS+(XRAY_PROTOCOLS if core=='native' else ())
+    protocols=protocols_for(core)
     selected=pick([(p,p[0]) for p in protocols],'选择节点协议')
     if selected is None:return
     label,protocol,network,security,vision=selected
@@ -123,31 +132,15 @@ def create(panel=None):
     remark=input('节点备注 [Miku 新入口]：').strip() or 'Miku 新入口'
     c.require(len(remark)<=80 and not re.search(r'[\x00-\x1f\x7f-\x9f]',remark),'备注需不超过80字，且不含控制字符')
     spec['remark']=remark
-    routes=[('direct','本 VPS 直接出口')]
-    for tunnel in panel.request('GET','api/tunnels') or []:
-        if tunnel.get('status')=='up':
-            node=tunnel.get('node') or {}
-            routes.append((tunnel,'VPN Gate '+clean(node.get('country') or node.get('country_code',''))+' / '+clean(tunnel.get('exit_ip') or '已连通')))
-    route=pick(routes,'选择这个入口的流量出口')
-    if route is None:return
     if not apply_core(panel,state,core):return
     print('正在创建 '+label+'，请稍候…',flush=True)
     created=panel.request('POST','api/panel/inbound/new?'+urllib.parse.urlencode(spec))
     inbound_id=created['id']
     print('入口已创建：ID '+str(inbound_id)+' / 端口 '+str(created['port']))
-    if route!='direct':
-        try:
-            entries=panel.request('GET','api/xui/inbounds') or []
-            entry=next(item for item in entries if item['id']==inbound_id)
-            query=urllib.parse.urlencode({'tag':entry['tag'],'host':route['node']['hostname']})
-            panel.request('POST','api/xui/bind?'+query)
-        except Exception:
-            # Do not leave a direct egress listener after a requested VPN binding failed.
-            try:panel.request('POST','api/xui/delete?'+urllib.parse.urlencode({'ids':inbound_id}))
-            except Exception:raise RuntimeError('出口绑定失败且入口清理未完成，请在面板停用入口 ID '+str(inbound_id))
-            raise RuntimeError('出口绑定失败，已移除本次新建入口；原有节点未删除')
     try:return node_links(inbound_id,panel)
     except Exception as error:
         print('入口已保留，暂未导出链接：'+clean(error))
         print('重新导出：miku node-link '+str(inbound_id))
-    finally:print('请在安全组与防火墙放行入口端口 '+str(created['port'])+'。')
+    finally:
+        print('请去面板“出口与节点 → 新建出口”创建出口，并选择这个入口。当前入口使用本 VPS 直接出口。')
+        print('请在安全组与防火墙放行入口端口 '+str(created['port'])+'。')

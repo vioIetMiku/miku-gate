@@ -201,6 +201,9 @@ def main():
         use_quick=answer=='3'
     if use_quick:
         sys.path.insert(0,str(c.LIB))
+        if args.domain is None:
+            from quick import terminal_quick
+            return terminal_quick(background=args.background)
         from quick import quick
         quick('' if args.no_domain else args.domain,args.background)
 

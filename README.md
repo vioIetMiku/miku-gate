@@ -153,9 +153,13 @@ miku swap      # 选择已有出口，切换同国家的其他节点
 miku sub       # 查看订阅与节点链接
 ```
 
-**终端菜单：**第 1 项为“一键配置常用国家 ★”，第 2 项为“搭建新的入口节点”，第 8 项为“面板地址 / 登录口令 ★”。新建入口向导支持选择 sing-box（推荐）或 Xray、协议、端口，以及本机 / 已连通 VPN Gate 出口；成功后只输出新入口的单独链接。也可用 `miku new` 打开向导，用 `miku node-link 入口ID` 重新导出。
+**终端菜单：**第 1 项单独一行显示“一键配置常用国家 ★（5 个日本、3 个韩国、3 个美国）”，固定使用 **VLESS + TCP + REALITY + Vision**，无需再选择核心、域名或协议。第一次搭建会等待节点就绪并输出这批节点的分享链接，按 Ctrl+C 可先返回，后台继续补齐。已经搭建完成的 11 个节点会直接复用，重复选择或服务重启后不再新建一批；暂时离线的节点保留原链接并显示当前连通数量。需要更多节点请去面板“出口与节点 → 新建出口”添加。
+
+第 2 项为“搭建新的入口节点”，第 8 项为“面板地址 / 登录口令 ★”。新建入口向导支持选择 sing-box（推荐）或 Xray、协议、端口与伪装域名；成功后只输出新入口的单独链接，不再询问流量出口，也不输出五种订阅地址。此时入口使用本 VPS 直接出口，需要 VPN Gate 落地时再去面板“新建出口”并选择这个入口。也可用 `miku new` 打开向导，用 `miku node-link 入口ID` 重新导出。
 
 默认协议为 **VLESS + TCP + REALITY + Vision**。REALITY 预设有 `www.amd.com`（三网推荐 / 默认）、`www.tesla.com`（香港 VPS 推荐）、`www.microsoft.com`、`www.apple.com`，也能自定义；最终以当前 VPS 到目标的实际 TLS 检查为准。TLS 协议使用面板已有的有效域名证书。XHTTP 仅在 Xray 菜单显示。核心由全部自建入口共用，切换已有核心前会提示确认。
+
+选择 **sing-box** 时，协议 3 / 4 / 5 分别是 **VLESS + WebSocket + REALITY**、**VMess + WebSocket + REALITY**、**Trojan + TCP + REALITY**，原有 TLS 版本保留在列表后面。选择 **Xray** 时，3 / 4 / 5 仍为 TLS 版本，不显示这些 sing-box 专属选项。WebSocket + REALITY 的客户端同样需要支持该组合，建议使用 sing-box；Xray 的 WebSocket 不支持 REALITY，参见[官方传输兼容表](https://xtls.github.io/en/config/transport.html)。
 
 v0.2.7 安装包采用同版本维护更新，版本号与原标签保持不变；附件构建提交记录在 Release 说明及包内 `BUILD.json`。重新运行下方命令即可更新 Docker 程序和菜单，保留已有节点、口令、证书、`.env` 与备份，不需要卸载，也不需要删除镜像：
 

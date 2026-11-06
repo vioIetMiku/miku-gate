@@ -138,14 +138,52 @@ def stop(panel=None):
 
 
 def command(args):
-    parser = argparse.ArgumentParser(prog='miku quick', description='一键配置日本 5 / 韩国 3 / 美国 3，并输出订阅')
+    parser = argparse.ArgumentParser(prog='miku quick', description='一键配置日本 5 / 韩国 3 / 美国 3，固定 Reality 并输出节点链接')
     domain = parser.add_mutually_exclusive_group()
     domain.add_argument('--domain')
     domain.add_argument('--no-domain', action='store_true')
-    parser.add_argument('--background', action='store_true', help='立即输出订阅，后台继续补齐')
+    parser.add_argument('--background', action='store_true', help='立即输出已有节点，后台继续补齐')
     parser.add_argument('--stop', action='store_true', help='停止后台补齐，保留已有节点和订阅')
     options = parser.parse_args(args)
     if options.stop:
         c.require(options.domain is None and not options.no_domain and not options.background, '--stop 请单独使用')
         return stop()
-    return quick('' if options.no_domain else options.domain, options.background)
+    if options.domain is None:return terminal_quick(background=options.background)
+    return quick(options.domain, options.background)
+
+
+def terminal_quick(panel=None, background=False):
+    """Fixed Reality family; reuse persisted nodes, export no subscription URLs."""
+    if panel is None:
+        if not c.active():c.service('start')
+        c.wait_ready()
+        panel=LocalPanel(timeout=60)
+    state=panel.request('POST','api/quick-setup/terminal')
+    job_id=state.get('job')
+    reused=state.get('complete',False)
+    print('使用已搭建的一键节点。' if reused else '正在搭建日本 5、韩国 3、美国 3 个节点：VLESS + TCP + REALITY + Vision。',flush=True)
+    if not reused:print('按 Ctrl+C 可返回，后台继续补齐；再次选择此项可查看已有节点。',flush=True)
+    last=None
+    try:
+        while not state.get('complete'):
+            state=panel.request('GET','api/quick-setup/terminal')
+            if state.get('complete') or background or state.get('status')!='running':break
+            current=(state.get('assigned',0),state.get('ready',0))
+            if current!=last:
+                print(f'已搭建 {current[0]}/11，当前连通 {current[1]} 个。',flush=True);last=current
+            time.sleep(1.5)
+    except KeyboardInterrupt:
+        state=panel.request('GET','api/quick-setup/terminal')
+    links=state.get('links') or []
+    c.require(len(links)<=11,'一键节点返回数量异常')
+    from inbound_wizard import validate_links
+    validate_links(links)
+    print(f'\n一键节点链接：{len(links)}/11（当前连通 {state.get("ready",0)} 个）：',flush=True)
+    for link in links:print(link,flush=True)
+    if not state.get('complete'):
+        print('尚未补齐；后台运行中的任务会继续尝试，再次选择此项可查看已有结果。',flush=True)
+        if state.get('status')=='failed' and state.get('detail'):
+            from console import clean
+            print('配置未完成：'+clean(state['detail']),flush=True)
+    print('需要更多节点，请去面板“出口与节点 → 新建出口”添加。',flush=True)
+    return job_id

@@ -14,7 +14,8 @@ def clean(value):
 def header(mode, status=''):
     color = sys.stdout.isatty() and not os.environ.get('NO_COLOR') and os.environ.get('TERM') != 'dumb'
     cyan, end = ('\033[38;5;43m', '\033[0m') if color else ('', '')
-    print(cyan + '\n  M i k u G a t e   /   Terminal Manager\n' + '─' * 52 + end)
+    c.banner(animate=False)
+    print(cyan + '╭' + '─' * 50 + '╮\n  MikuGate  ·  Terminal Manager\n╰' + '─' * 50 + '╯' + end)
     print('  模式：' + mode + ('  |  状态：' + status if status else ''))
 
 

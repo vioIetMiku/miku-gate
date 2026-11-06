@@ -207,6 +207,7 @@ class DockerShellTests(unittest.TestCase):
         shutil.copyfile(ROOT / 'compose.yaml', self.root / 'compose.yaml')
         (self.root/'scripts').mkdir()
         shutil.copyfile(ROOT/'scripts/progress.py',self.root/'scripts/progress.py')
+        (self.root/'scripts/docker_console.py').write_text('# fixture: do not install host shortcuts\n')
         self.fake_bin = self.root / 'fake-bin'
         self.fake_bin.mkdir()
         fake = self.fake_bin / 'docker'
@@ -263,7 +264,7 @@ if 'run' in args and os.environ.get('DOCKER_FIXTURE_BACKUP_FAIL') == '1':
     def test_stop_manages_both_services_while_backend_scope_is_independent(self):
         (self.root / 'frontend/.runtime').mkdir(parents=True)
         (self.root / 'frontend/.runtime/state.json').write_text('{}')
-        (self.root / 'scripts').mkdir()
+        (self.root / 'scripts').mkdir(exist_ok=True)
         (self.root / 'scripts/frontend.py').write_text(
             'import json, os, sys\n'
             'with open(os.environ["DOCKER_FIXTURE_LOG"], "a") as f: f.write(json.dumps(["frontend", *sys.argv[1:]]) + "\\n")\n')
@@ -280,7 +281,7 @@ if 'run' in args and os.environ.get('DOCKER_FIXTURE_BACKUP_FAIL') == '1':
     def test_default_up_starts_frontend_after_backend_but_backend_scope_does_not(self):
         script = self.root / 'install-docker.sh'
         script.write_text(script.read_text().replace('[[ -c /dev/net/tun ]]', 'true'))
-        (self.root / 'scripts').mkdir()
+        (self.root / 'scripts').mkdir(exist_ok=True)
         (self.root / 'scripts/frontend.py').write_text(
             'import json, os, sys\n'
             'with open(os.environ["DOCKER_FIXTURE_LOG"], "a") as f: f.write(json.dumps(["frontend", *sys.argv[1:]]) + "\\n")\n')

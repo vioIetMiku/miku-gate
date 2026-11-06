@@ -38,7 +38,14 @@ def menu():
                     '12':lambda:execute(['restart']), '13':lambda:execute(['stop']),
                     '14':lambda:execute(['logs']), '15':lambda:execute(['backup']),
                     '16':more})
-    ui('Docker', actions)
+    version=(ROOT/'VERSION').read_text().strip()
+    ui('Docker / v'+version, actions, status)
+
+
+def status():
+    result=subprocess.run(['docker','compose','--project-directory',str(ROOT),'-f',str(ROOT/'compose.yaml'),
+                           'ps','--status','running','-q','miku'],capture_output=True,timeout=8)
+    return '运行中' if result.returncode==0 and result.stdout.strip() else '未运行'
 
 
 def more():

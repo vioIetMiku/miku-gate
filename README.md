@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/assets/mikugate-logo.jpg" alt="MikuGate 图标" width="17%">
+  <img src="docs/assets/mikugate-logo.jpg" alt="MikuGate 图标" width="20%">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/mikugate-wordmark-dark.svg">
-    <img src="docs/assets/mikugate-wordmark-light.svg" alt="MikuGate" width="62%">
+    <img src="docs/assets/mikugate-wordmark-light.svg" alt="MikuGate" width="55%">
   </picture>
 </p>
 <p align="center"><strong>一台 VPS，连接世界各地的出口。</strong></p>

@@ -4,6 +4,8 @@ v0.2.6 Docker 部署默认采用两个独立 Compose 项目。前端以非特权
 
 后端保留内嵌页面作为原生安装和仅后端部署的兼容入口。分离部署显示的页面来自独立文件，前端维护和发布不会覆盖为 Go 内嵌页面。
 
+首次安装请从 [README 同机三步安装](../README.md#install-docker) 或 [跨机 A/B 步骤](../README.md#install-remote)开始：环境安装命令、附件下载、配置生成和自动 HTTPS 均已写齐。本页用于查询运行原理、变量与维护细节。
+
 ## 1. 在同一台 VPS 安装
 
 要求 Linux amd64 / arm64、rootful Docker Engine、Compose v2、Python 3.10+ 和 TUN。完整说明见 [DOCKER.md](DOCKER.md)。
@@ -83,6 +85,8 @@ sudo bash install-docker.sh sub
 前端只接受配置的浏览器 Origin，不接受任意来源。通过另一 IP / 域名登录返回 403 时，确认访问源与 `MIKU_FRONTEND_ORIGIN` 一致后重新生成配置。Origin 不能包含 `/abc123` 等路径。
 
 ## 5. 配置 HTTPS
+
+首次配置可直接使用 [README 的 Caddy 容器命令](../README.md#frontend-https)，自动申请和续期前端证书，无需事先安装 Nginx 或准备证书文件。以下为已有 Nginx / Caddy 的手动反代参考。
 
 前端容器提供 HTTP。由已有 Nginx / Caddy 终止 HTTPS，并将**完整请求路径**转发给前端，不删除随机路径：
 

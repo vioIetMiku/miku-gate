@@ -9,6 +9,10 @@ Docker 默认启动独立 Nginx 前端与 Go 后端，前端和后端端口冲�
 
 此目录新增 Docker 部署方式，原来的 systemd / OpenRC 安装流程继续保留。Docker 不需要在宿主机安装 Go、OpenVPN 或 systemd 服务；运行依赖位于镜像中。
 
+## 首次安装入口
+
+新服务器直接按 [README 三步安装](../README.md#install-docker)操作，其中已给出 Debian / Ubuntu 的 Docker Engine、Compose v2、Python 和 TUN 环境命令。[跨服务器步骤](../README.md#install-remote)按 A 后端 / B 前端分开，包含下载、校验、两个地址输入与自动 HTTPS。下面保留配置和维护参考。
+
 ## 环境要求
 
 - Linux amd64 / arm64 VPS，安装 [Docker Engine](https://docs.docker.com/engine/install/) 和 [Docker Compose v2 插件](https://docs.docker.com/compose/install/linux/)，构建使用 BuildKit。
@@ -47,7 +51,7 @@ bash install-docker.sh
 
 仅后端部署使用 `sudo bash install.sh --docker --backend-only`，或当前目录运行 `bash install-docker.sh backend up`。后端仍提供兼容页面；这不会停止已存在的前端。
 
-此 Docker 补充为本地改进，尚未发布远程 Release；当前应使用随包文件，不能假定远程 Latest 已包含 `--docker`。
+v0.2.6 正式 Release 已包含 Docker 与前后端分离文件；在线入口 `mikugate.sh --docker` 安装默认的同机分离部署。
 
 附件的完整安装包包含 amd64 / arm64 预编译主程序，Dockerfile 按目标架构验证 `BUILD.json` 的 SHA256 后选取，不需要在 VPS 编译 Go。纯 Git 源码目录缺少 `bin/` 时，安装脚本自动选择镜像内源码构建；完整源码 ZIP 或 Git 目录也可显式执行以下命令（仅含预编译文件的 VPS tar.gz 不支持源码构建）：
 

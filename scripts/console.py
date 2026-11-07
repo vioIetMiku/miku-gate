@@ -1,12 +1,66 @@
 """Shared native/container terminal UI using the authenticated local API."""
 import os
 import re
+import shutil
 import sys
+import unicodedata
 import urllib.parse
 import common as c
 from quick import LocalPanel, quick, subscriptions
 
 EXIT_MENU = object()
+COLORS = {'cyan':'\033[1;36m', 'number':'\033[1;92m', 'gold':'\033[1;93m',
+          'red':'\033[1;91m', 'green':'\033[1;92m', 'muted':'\033[90m'}
+
+
+def paint(value, color):
+    if not sys.stdout.isatty() or os.environ.get('NO_COLOR') or os.environ.get('TERM')=='dumb':return str(value)
+    return COLORS[color]+str(value)+'\033[0m'
+
+
+def display_width(value):
+    plain=re.sub(r'\x1b\[[0-9;]*m','',value)
+    return sum(0 if unicodedata.combining(char) else 2 if unicodedata.east_asian_width(char) in ('W','F') else 1 for char in plain)
+
+
+def option(number, label, color=None):
+    token='['+str(number)+']'
+    text=clean(label)
+    text=paint(text,color) if color else text.replace('★',paint('★','gold'))
+    return '  '+paint(token,color or 'number')+' '*(5-len(token))+text
+
+
+def section(title, rows):
+    print('\n'+paint('【'+title+'】','cyan'))
+    wide=shutil.get_terminal_size(fallback=(80,24)).columns>=76
+    for row in rows:
+        items=[option(*item) for item in row]
+        if wide and len(items)==2:
+            print(items[0]+' '*max(4,34-display_width(items[0]))+items[1])
+        else:
+            for item in items:print(item)
+
+
+def menu_options():
+    section('出口与 IP',[
+        ((1,'一键配置常用国家 ★（5 个日本、3 个韩国、3 个美国）'),),
+        ((2,'搭建新的入口节点'),),
+        ((3,'切换出口 IP'),(4,'选择国家创建出口')),
+        ((5,'查看出口 / IP'),(6,'停止指定出口'))])
+    section('订阅与面板',[
+        ((7,'查看全部订阅'),(8,'面板地址 / 登录口令 ★')),
+        ((9,'修改登录口令'),)])
+    section('服务管理',[
+        ((10,'查看运行状态'),(11,'启动服务')),
+        ((12,'重启服务'),(13,'停止服务')),
+        ((14,'查看日志'),(15,'数据备份')),
+        ((16,'更多维护'),(17,'查看后台任务'))])
+    section('卸载',[
+        ((18,'卸载程序，保留数据','gold'),),
+        ((19,'彻底卸载，删除全部数据','red'),)])
+    width=max(12,min(70,shutil.get_terminal_size(fallback=(80,24)).columns-2))
+    print('\n'+paint('─'*width,'muted'))
+    print(option(0,'退出','muted')+'\n')
 
 
 def clean(value):
@@ -14,20 +68,19 @@ def clean(value):
 
 
 def header(mode, status=''):
-    color = sys.stdout.isatty() and not os.environ.get('NO_COLOR') and os.environ.get('TERM') != 'dumb'
-    cyan, end = ('\033[38;5;43m', '\033[0m') if color else ('', '')
     if os.environ.pop('MIKU_INSTALL_BANNER_SHOWN','0')!='1':c.banner(animate=False)
-    print(cyan + '╭' + '─' * 50 + '╮\n  MikuGate  ·  Terminal Manager\n╰' + '─' * 50 + '╯' + end)
-    print('  模式：' + mode + ('  |  状态：' + status if status else ''))
+    print(paint('╭'+'─'*50+'╮\n  MikuGate  ·  Terminal Manager\n╰'+'─'*50+'╯','cyan'))
+    state=paint(clean(status),'green' if status=='运行中' else 'gold' if status.startswith('待检查') else 'red')
+    print('  '+paint('模式：','muted')+clean(mode)+('  '+paint('|  状态：','muted')+state if status else ''))
 
 
 def choose(items, title):
     if not items:
         print('暂无可选项目。'); return None
-    print('\n' + title)
+    print('\n' + paint('【'+title+'】','cyan'))
     for i, (_, label) in enumerate(items, 1):
-        print(f'  [{i:2}] {clean(label)}')
-    value = input('输入编号，0 返回：').strip()
+        print(option(i,label))
+    value = input(paint('输入编号，0 返回：','cyan')).strip()
     if value in ('', '0'): return None
     c.require(value.isascii() and value.isdigit() and 1 <= int(value) <= len(items), '请选择列表中的编号')
     return items[int(value)-1][0]
@@ -108,26 +161,8 @@ def menu(mode, actions, status=lambda: ''):
             try: state = status()
             except Exception: state = '待检查（可用菜单启动 / 查看日志）'
             header(mode, state)
-            print('''
-【出口与 IP】
-  [1] 一键配置常用国家 ★（5 个日本、3 个韩国、3 个美国）
-  [2] 搭建新的入口节点
-  [3] 切换出口 IP        [4] 选择国家创建出口
-  [5] 查看出口 / IP      [6] 停止指定出口
-【订阅与面板】
-  [7] 查看全部订阅       [8] 面板地址 / 登录口令 ★
-  [9] 修改登录口令
-【服务管理】
- [10] 查看运行状态      [11] 启动服务
- [12] 重启服务          [13] 停止服务
- [14] 查看日志          [15] 数据备份
- [16] 更多维护          [17] 查看后台任务
-【卸载】
- [18] 卸载程序，保留数据
- [19] 彻底卸载，删除全部数据
-  [0] 退出
-''')
-            choice = input('请选择 [0–19]：').strip()
+            menu_options()
+            choice = input(paint('请选择 [0–19]：','cyan')).strip()
             if choice in ('0', 'q', 'exit'): return
             shared = {'1': lambda: node_command('quick-menu'), '2': lambda: node_command('new'),
                       '3': swap, '4': provision, '5': tunnels, '6': remove, '7': subscriptions, '17': jobs}

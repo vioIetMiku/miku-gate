@@ -2,7 +2,7 @@
 import re
 import urllib.parse
 import common as c
-from console import clean
+from console import clean, paint, option
 from quick import LocalPanel
 
 
@@ -38,9 +38,9 @@ REALITY_DOMAINS = (
 
 
 def pick(items, title, default=1):
-    print('\n' + title)
-    for i, (_, label) in enumerate(items, 1):print(f'  [{i}] {clean(label)}')
-    answer=input(f'选择 [{default}]，0 返回：').strip() or str(default)
+    print('\n' + paint('【'+title+'】','cyan'))
+    for i, (_, label) in enumerate(items, 1):print(option(i,label))
+    answer=input(paint(f'选择 [{default}]，0 返回：','cyan')).strip() or str(default)
     if answer=='0':return None
     c.require(answer.isascii() and answer.isdigit() and 1<=int(answer)<=len(items),'请选择列表中的编号')
     return items[int(answer)-1][0]

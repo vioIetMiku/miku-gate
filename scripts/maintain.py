@@ -263,9 +263,18 @@ def menu_purge():
         return EXIT_MENU
 
 def more_menu():
+    from console import section, option, paint
     c.banner()
-    print('Miku Gate '+c.installed()['version']+'\n1 管理地址 / 查看口令\n2 修改口令\n3 域名：绑定 / 更换 / 解绑\n4 修复依赖与端口（含OpenVPN）\n5 启动\n6 停止\n7 重启\n8 日志\n9 修改管理端口 / 自动选择\n10 备份\n11 恢复切换前旧版\n12 卸载程序并保留数据\n13 完整卸载并清除数据\n14 一键配置节点（日本5 / 韩国3 / 美国3）\n15 直接输出全部订阅 / 节点链接\n0 退出')
-    choice=input('选择：').strip()
+    print(paint('MikuGate '+c.installed()['version'],'cyan'))
+    section('面板与网络',[((1,'管理地址 / 查看口令'),(2,'修改口令')),
+                           ((3,'域名：绑定 / 更换 / 解绑'),),((4,'修复依赖与端口（含 OpenVPN）'),)])
+    section('服务管理',[((5,'启动服务'),(6,'停止服务')),((7,'重启服务'),(8,'查看日志'))])
+    section('维护与数据',[((9,'修改管理端口 / 自动选择'),(10,'数据备份')),
+                         ((11,'恢复切换前旧版'),),((12,'卸载程序并保留数据','gold'),),
+                         ((13,'完整卸载并清除数据','red'),),
+                         ((14,'一键配置节点（日本5 / 韩国3 / 美国3）'),),((15,'输出全部订阅 / 节点链接'),)])
+    print(option(0,'返回','muted'))
+    choice=input(paint('选择：','cyan')).strip()
     commands={'1':c.info,'2':password,'3':domain,'4':repair,'5':lambda:(c.service('start'),c.wait_ready(),c.info()),'6':lambda:c.service('stop'),'7':restart,'8':logs,'9':port,'10':backup,'11':rollback,'12':menu_uninstall,'13':menu_purge}
     if choice=='14':
         from quick import terminal_quick

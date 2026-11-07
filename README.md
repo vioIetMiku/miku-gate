@@ -144,6 +144,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mi
 
 ### 3. 输入 miku 打开菜单
 
+菜单采用青色分组标题、黄绿色编号和金色星标；保留数据卸载为金色，彻底卸载为红色。窄屏自动改为单列，原生和 Docker 共用同一套样式。
+
 安装成功时直接显示 **前端完整地址、后端地址、登录口令**。以后在 VPS 的任意目录输入：
 
 ```bash

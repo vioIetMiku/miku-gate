@@ -109,8 +109,10 @@ def status():
 
 
 def more():
-    print('\n1 前端重启  2 前端地址  3 前端日志  4 后端信息  0 返回')
-    choice=input('选择：').strip()
+    from console import section, option, paint
+    section('更多维护',[((1,'前端重启'),(2,'前端地址')),((3,'前端日志'),(4,'后端信息'))])
+    print(option(0,'返回','muted'))
+    choice=input(paint('选择：','cyan')).strip()
     commands={'1':['frontend','restart'],'2':['frontend','info'],'3':['frontend','logs'],'4':['backend','info']}
     if choice in commands:execute(commands[choice])
 

@@ -1,4 +1,4 @@
-"""Quiet long-running operations; private full log, periodic progress, real exit code."""
+"""Quiet operations; bounded private log, periodic progress and real exit code."""
 import os
 from pathlib import Path
 import subprocess
@@ -27,7 +27,7 @@ def run(label, command):
     fd, name = tempfile.mkstemp(prefix='install-', suffix='.log', dir=directory)
     started = time.monotonic()
     line(label + '，请稍候…')
-    with os.fdopen(fd, 'wb') as log:
+    with os.fdopen(fd, 'wb', buffering=0) as log:
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    start_new_session=True)
         tail=[b''];log_error=[]

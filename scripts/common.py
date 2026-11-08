@@ -19,6 +19,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 import zipfile
 
@@ -140,6 +141,21 @@ def verify_distribution(directory):
         require(file_sha256(directory/name)==expected,'安装包校验失败：'+name)
     return directory,meta
 
+def core_asset_api(record):
+    """Resolve the same pinned public asset through GitHub's official API."""
+    base='https://api.github.com/repos/'+record['repo']
+    endpoint=base+'/releases/tags/'+urllib.parse.quote(record['version'],safe='')
+    headers={'User-Agent':'MikuGateInstaller','Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}
+    with urllib.request.urlopen(urllib.request.Request(endpoint,headers=headers),timeout=30) as response:
+        require(response.geturl().startswith('https://'),'核心元数据必须HTTPS');raw=response.read((4<<20)+1)
+    require(len(raw)<=4<<20,'核心元数据超限');release=json.loads(raw)
+    assets=[item for item in release.get('assets',[]) if item.get('name')==record['name'] and item.get('size')==record['bytes'] and item.get('state')=='uploaded']
+    require(release.get('tag_name')==record['version'] and len(assets)==1,'官方核心附件元数据不匹配')
+    url=assets[0].get('url','')
+    require(re.fullmatch(re.escape(base)+'/releases/assets/[0-9]+',url),'官方核心API地址异常')
+    return url
+
+
 def core_download(core,architecture):
     assets=json.loads(trusted(LIB/'CORE_ASSETS.json',0o600,16384));record=assets[core+'-'+architecture]
     address='https://github.com/'+record['repo']+'/releases/download/'+record['version']+'/'+record['name']
@@ -152,11 +168,14 @@ def core_download(core,architecture):
             fd,name=tempfile.mkstemp(prefix='.download-',dir=cache)
             try:
                 digest=hashlib.sha256();size=0
-                with os.fdopen(fd,'wb') as output,urllib.request.urlopen(urllib.request.Request(address,headers={'User-Agent':'MikuGateInstaller'}),timeout=90) as response:
-                    require(response.geturl().startswith('https://'),'核心下载必须HTTPS')
-                    while chunk:=response.read(min(1<<20,record['bytes']-size+1)):
-                        size+=len(chunk);require(size<=record['bytes'],'官方核心大小异常')
-                        output.write(chunk);digest.update(chunk)
+                with os.fdopen(fd,'wb') as output:
+                    url=address if attempt==0 else (address+'?download=1' if attempt==1 else core_asset_api(record))
+                    headers={'User-Agent':'MikuGateInstaller','Accept':'application/octet-stream','X-GitHub-Api-Version':'2022-11-28'}
+                    with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=90) as response:
+                        require(response.geturl().startswith('https://'),'核心下载必须HTTPS')
+                        while chunk:=response.read(min(1<<20,record['bytes']-size+1)):
+                            size+=len(chunk);require(size<=record['bytes'],'官方核心大小异常')
+                            output.write(chunk);digest.update(chunk)
                 require(size==record['bytes'] and digest.hexdigest()==record['sha256'],'官方核心大小/SHA256校验失败')
                 if cached.exists():trusted_info(cached)
                 os.replace(name,cached)

@@ -396,7 +396,7 @@ python3 -B scripts/frontend.py restart
 
 ### 安装速度与常见问题
 
-完整 Release 包已有 amd64 / arm64 程序，VPS 不需要编译 Go。首次 Docker 安装仍要下载依赖和镜像；以后构建输入未变时复用镜像。仅需更新网页时只重启前端，避免重建后端。主动刷新后端基础镜像及依赖可用 `MIKU_DOCKER_REFRESH=1 bash install-docker.sh update`。
+完整 Release 包已有 amd64 / arm64 程序，VPS 不需要编译 Go。首次 Docker 安装仍要下载依赖和镜像；以后构建输入未变时复用镜像。官方核心直链失败时自动重试并切换 GitHub 官方 API 通道，仍校验固定文件大小和 SHA256。仅需更新网页时只重启前端，避免重建后端。主动刷新后端基础镜像及依赖可用 `MIKU_DOCKER_REFRESH=1 bash install-docker.sh update`。
 
 安装包与核心采用分块下载、校验及解压，解压后先删除临时压缩包，再启动安装，降低安装时的内存和磁盘峰值。全新原生安装失败会回滚本次新建的程序与数据目录；已有安装、保留的数据和备份不会因此自动删除。卸载删除了当前终端所在目录时，再次运行安装命令也会自动切换到有效目录。
 

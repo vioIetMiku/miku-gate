@@ -17,6 +17,18 @@ import common as c
 
 
 class ConsoleTests(unittest.TestCase):
+    def test_core_fallback_resolves_only_matching_official_asset(self):
+        record={'repo':'XTLS/Xray-core','version':'v1.2.3','name':'core.zip','bytes':42}
+        def response(url):
+            raw=json.dumps({'tag_name':'v1.2.3','assets':[{'name':'core.zip','size':42,'state':'uploaded','url':url}]}).encode()
+            stream=io.BytesIO(raw);stream.geturl=lambda:'https://api.github.com/repos/XTLS/Xray-core/releases/tags/v1.2.3';return stream
+        official='https://api.github.com/repos/XTLS/Xray-core/releases/assets/123'
+        with patch('urllib.request.urlopen',return_value=response(official)) as fetch:
+            self.assertEqual(c.core_asset_api(record),official)
+            self.assertEqual(fetch.call_args.args[0].get_header('Accept'),'application/vnd.github+json')
+        for invalid in ('http://api.github.com/repos/XTLS/Xray-core/releases/assets/123','https://untrusted.example/core.zip','https://api.github.com/repos/other/repo/releases/assets/123'):
+            with patch('urllib.request.urlopen',return_value=response(invalid)),self.assertRaisesRegex(RuntimeError,'API地址异常'):c.core_asset_api(record)
+
     def test_native_install_default_runs_fixed_quick_setup(self):
         import install
         import maintain
@@ -102,6 +114,18 @@ class ConsoleTests(unittest.TestCase):
                 self.assertEqual(first,second);self.assertEqual(download.call_count,1)
                 (cache/digest).write_bytes(b'x'*len(raw))
                 c.core_download('xray','amd64');self.assertEqual(download.call_count,2)
+                self.assertEqual((data/'bin/xray').read_bytes(),b'\x7fELFfixture')
+            (cache/digest).write_bytes(b'x'*len(raw))
+            api='https://api.github.com/repos/XTLS/Xray-core/releases/assets/123'
+            metadata={'tag_name':'fixture','assets':[{'name':'fixture.zip','size':len(raw),'state':'uploaded','url':api}]}
+            def fallback(request,**kwargs):
+                if request.full_url.startswith('https://github.com/'):raise OSError('gateway unavailable')
+                content=raw if request.full_url==api else json.dumps(metadata).encode()
+                stream=io.BytesIO(content);stream.geturl=lambda:request.full_url;return stream
+            with patch.object(c,'DATA',data),patch.object(c,'LIB',lib),patch.dict(os.environ,{'MIKU_CORE_CACHE':str(cache)}),patch('urllib.request.urlopen',side_effect=fallback) as download,patch('time.sleep'):
+                self.assertEqual(c.core_download('xray','amd64'),first)
+                self.assertEqual(download.call_count,4)
+                self.assertEqual(download.call_args.args[0].full_url,api)
                 self.assertEqual((data/'bin/xray').read_bytes(),b'\x7fELFfixture')
 
 

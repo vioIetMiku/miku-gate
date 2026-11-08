@@ -54,7 +54,7 @@ LABEL io.github.mikugate.build-key=$MIKU_BUILD_KEY
 COPY --from=selected /out/miku ./miku
 # Pinned cores are already in the runtime image and copied to data only when absent.
 STOPSIGNAL SIGTERM
-HEALTHCHECK --interval=10s --timeout=10s --start-period=45s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 \
     CMD ["python3", "-B", "/usr/local/lib/miku/container.py", "healthcheck"]
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/miku-entrypoint"]
 CMD ["serve"]

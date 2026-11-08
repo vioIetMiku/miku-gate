@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Local prebuilt installer. Old Miku installations are paired-backed-up first."""
 import argparse
+import contextlib
+import errno
 import hashlib
 import json
+import io
 import os
 from pathlib import Path
 import secrets
@@ -101,7 +104,7 @@ def migrate(module,state):
     print('旧版配套备份：'+record['backup']['file']+'\n恢复旧版：miku rollback')
     return record
 
-def _install(directory,update=False,reinstall=False):
+def _install_impl(directory,update=False,reinstall=False):
     c.root();directory,meta=c.verify_distribution(directory);architecture=c.arch()
     c.require(c.systemd() or shutil.which('rc-service',path=c.ENV['PATH']),'需要systemd或OpenRC')
     old_module,old=(None,None) if reinstall else c.old_maintenance()
@@ -182,7 +185,21 @@ def _install(directory,update=False,reinstall=False):
             receipt=record or (json.loads(c.trusted(c.DATA/'legacy-switch.json',0o600)) if (c.DATA/'legacy-switch.json').exists() else None)
             if receipt:restore_old(old_module,receipt);print('切换失败，旧版配套数据和服务已恢复。',file=sys.stderr)
         raise
-    print('\n安装完成：Miku Gate '+meta['version']);c.info()
+    return meta['version']
+
+
+def _install(directory,update=False,reinstall=False):
+    c.root();directory,_=c.verify_distribution(directory)
+    fresh=not Path('/etc/miku-gate/install-state.json').exists() and all(not path.exists() and not path.is_symlink() for path in (c.DATA,c.LIB,c.MENU,c.UNIT,c.OPENRC))
+    try:version=_install_impl(directory,update,reinstall)
+    except BaseException:
+        if fresh:
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):c.purge_current()
+                print('本次新装未完成，已回滚本次创建的目录；可直接重试，原有其他服务未删除。',file=sys.stderr)
+            except Exception as error:print('新装残留未自动清理：'+str(error),file=sys.stderr)
+        raise
+    print('\n安装完成：Miku Gate '+version);c.info()
     print('面板增删节点、切换出口、修改域名；终端一键搭建：miku quick；查看全部订阅：miku sub。')
 
 def main():
@@ -193,8 +210,8 @@ def main():
     if install(args.directory,args.update,args.reinstall) is False:return
     use_quick=args.quick or args.domain is not None or args.no_domain
     if not args.panel and not use_quick and not args.update and os.isatty(0):
-        print('\n1 使用网页面板\n2 打开 miku 终端菜单（选国家 / 切换 IP，默认）\n3 默认国家一键配置')
-        answer=input('使用方式 [2]：').strip() or '2';c.require(answer in ('1','2','3'),'请选择 1、2 或 3')
+        print('\n1 使用网页面板\n2 打开 miku 终端菜单（选国家 / 切换 IP）\n3 默认国家一键配置（默认：日本5 / 韩国3 / 美国3）')
+        answer=input('使用方式 [3]：').strip() or '3';c.require(answer in ('1','2','3'),'请选择 1、2 或 3')
         if answer=='2':
             from maintain import menu
             return menu()
@@ -228,4 +245,7 @@ def install(directory,update=False,reinstall=False):
 
 if __name__=='__main__':
     try:main()
-    except (Exception,KeyboardInterrupt) as exc:print('安装未完成：'+str(exc),file=sys.stderr);sys.exit(1)
+    except (Exception,KeyboardInterrupt) as exc:
+        message='安装未完成：'+str(exc)
+        if isinstance(exc,OSError) and exc.errno in (errno.ENOSPC,errno.EDQUOT):message='磁盘空间或 inode 已满；请用 df -h 和 df -i 检查，释放空间后重试。'
+        print(message,file=sys.stderr);sys.exit(1)

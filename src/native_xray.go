@@ -310,8 +310,9 @@ func (p *xrayProc) restart(cfgPath string) error {
 	}
 
 	cmd := exec.Command(p.bin, "run", "-c", cfgPath)
-	cmd.Stdout = f
-	cmd.Stderr = f
+	logOutput := &boundedLogWriter{file: f}
+	cmd.Stdout = logOutput
+	cmd.Stderr = logOutput
 	// 必须从母机的网络命名空间拉起：直接 Start 有概率把 Xray 拉进某条隧道，
 	// 那样入站端口只在隧道内部监听，母机上看不到，客户端全连不上
 	// 而进程、配置、日志三处都显示正常（见 netnsguard.go）

@@ -83,13 +83,13 @@ VPN Gate 不属于 Miku Gate。节点数量、国家、在线时间随时变化�
 bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)
 ```
 
-安装器下载正式包、校验文件并准备运行依赖，随后启动系统服务。输入 **1** 使用网页面板，输入 **2** 或直接回车打开终端菜单（选国家 / 切换 IP），输入 **3** 执行默认国家一键配置。原生安装不需要 Docker。
+安装器下载正式包、校验文件并准备运行依赖，随后启动系统服务。**直接回车默认选 3**，配置日本 5、韩国 3、美国 3 个 VLESS + TCP + REALITY + Vision 节点；已完成时复用原来的 11 个节点并显示链接。输入 **1** 使用网页面板，输入 **2** 打开终端菜单（选国家 / 切换 IP）。原生安装不需要 Docker。
 
 ### 2. 打开面板，获取订阅
 
 ```bash
 miku info   # 查看完整管理地址和登录口令
-miku quick  # 按提示创建节点；没有节点域名可以直接回车
+miku quick  # 固定配置日本5 / 韩国3 / 美国3；已完成时显示原节点链接
 miku sub    # 查看当前可用订阅和节点链接
 ```
 
@@ -398,6 +398,26 @@ python3 -B scripts/frontend.py restart
 
 完整 Release 包已有 amd64 / arm64 程序，VPS 不需要编译 Go。首次 Docker 安装仍要下载依赖和镜像；以后构建输入未变时复用镜像。仅需更新网页时只重启前端，避免重建后端。主动刷新后端基础镜像及依赖可用 `MIKU_DOCKER_REFRESH=1 bash install-docker.sh update`。
 
+安装包与核心采用分块下载、校验及解压，解压后先删除临时压缩包，再启动安装，降低安装时的内存和磁盘峰值。全新原生安装失败会回滚本次新建的程序与数据目录；已有安装、保留的数据和备份不会因此自动删除。卸载删除了当前终端所在目录时，再次运行安装命令也会自动切换到有效目录。
+
+**`No space left on device` 表示磁盘空间或 inode 已满。** 先执行下面两条命令，查看根分区、`/tmp` 和 Docker 数据分区的可用情况；磁盘已满仍需释放空间，再重试安装。
+
+```bash
+df -h / /tmp /var/lib
+df -i / /tmp /var/lib
+```
+
+如果只有 `/tmp` 空间不足，而 `/var/tmp` 所在分区空间充足，可以改用它保存本次临时安装文件：
+
+```bash
+df -h /var/tmp
+export TMPDIR=/var/tmp
+bash <(curl -fsSL https://raw.githubusercontent.com/vioIetMiku/miku-gate/main/mikugate.sh)
+unset TMPDIR
+```
+
+Docker 安装在上面安装命令末尾加 `--docker`；改变 TMPDIR 不会迁移 `/var/lib/docker` 中的镜像。可用 `docker system df` 查看镜像、容器和构建缓存的占用。后台核心日志每个最多 2 MiB，安装日志最多 2 MiB；Docker 前后端日志各为 5 MiB × 2，Docker 自身健康检查每 30 秒一次。节点越多，OpenVPN 连接和核心仍会占用相应内存，可停止不需要的出口。
+
 | 遇到的问题 | 直接检查 |
 | --- | --- |
 | 根目录 404 | 使用 `info` 的完整随机路径地址 |
@@ -458,6 +478,8 @@ Windows 本地静态检查不等于 Linux 容器、真实 VPN Gate 隧道或证�
 - 原生与 Docker 统一分组终端菜单；Docker 安装宿主机 `miku` 快捷入口。
 - 支持选国家创建、查看出口 IP、选择槽位切换 IP、查看后台任务与订阅。
 - Docker 自动准备环境，默认安静进度；登录口令与实际前端地址在安装结束显示。
+- 原生安装完成默认选择第 3 项（日本5 / 韩国3 / 美国3）；流式安装减少内存和磁盘峰值，空间或 inode 不足时明确提示，全新原生安装失败自动回滚。
+- 核心和安装日志限制为 2 MiB，Docker 日志缩为每服务 5 MiB × 2；容器健康检查改为每 30 秒，减少空闲检测进程。
 - 软件包 / 官方核心缓存、下载重试、菜单改动复用核心层；`MIKU_VERBOSE=1` 可查看完整安装输出。
 
 - Docker 默认两个独立 Compose 项目：非特权 Nginx 静态前端 + Go 后端。浏览器通过前端同源访问登录、API 和订阅，不是开放任意跨域后台接口。

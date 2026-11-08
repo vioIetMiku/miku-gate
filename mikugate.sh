@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Miku Gate short installer entry point.
 set -euo pipefail
+# Uninstall may have removed the invoking shell's working directory.
+pwd -P >/dev/null 2>&1 || cd /
 if [[ "${1:-}" != --help && "${1:-}" != -h ]]; then
 # MikuGate installer wordmark; sourced by local installers.
 if [[ "${MIKU_INSTALL_BANNER_SHOWN:-0}" != 1 ]]; then

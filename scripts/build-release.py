@@ -131,6 +131,7 @@ line=$(awk '/^__MIKU_ARCHIVE_BELOW__$/ {print NR + 1; exit}' "$0")
 tail -n +"$line" "$0" > "$MIKU_TEMP/bundle.tar.gz"
 printf '%s  %s\\n' '__SHA256__' "$MIKU_TEMP/bundle.tar.gz" | sha256sum -c - >/dev/null
 tar --no-same-owner -xzf "$MIKU_TEMP/bundle.tar.gz" -C "$MIKU_TEMP"
+rm -f -- "$MIKU_TEMP/bundle.tar.gz"
 bash "$MIKU_TEMP/miku-gate/install.sh" "$@"
 exit 0
 __MIKU_ARCHIVE_BELOW__

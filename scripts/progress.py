@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 
@@ -27,22 +28,39 @@ def run(label, command):
     started = time.monotonic()
     line(label + '，请稍候…')
     with os.fdopen(fd, 'wb') as log:
-        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    start_new_session=True)
+        tail=[b''];log_error=[]
+        def drain():
+            with process.stdout as source:
+                while chunk:=source.read(65536):
+                    tail[0]=(tail[0]+chunk)[-4096:]
+                    if log_error:continue
+                    try:
+                        if log.tell()+len(chunk)>2<<20:log.seek(0);log.truncate()
+                        log.write(chunk)
+                    except OSError as error:log_error.append(error)
+        reader=threading.Thread(target=drain,daemon=True);reader.start()
         try:
             while process.poll() is None:
                 try: process.wait(timeout=15)
                 except subprocess.TimeoutExpired:
                     line(f'正在进行，已用 {int(time.monotonic()-started)} 秒…')
         except KeyboardInterrupt:
-            process.terminate(); process.wait()
+            process.terminate()
+            try:process.wait(timeout=10)
+            except subprocess.TimeoutExpired:process.kill();process.wait()
+            reader.join(timeout=10)
             line('已中止；日志：' + name, sys.stderr)
             return 130
+        reader.join()
     if process.returncode:
-        line(label + '失败；完整日志：' + name, sys.stderr)
+        line(label + '失败；最近日志（最多 2 MiB）：' + name, sys.stderr)
         # Build/setup logs only; info/password commands are never passed here.
-        print(Path(name).read_bytes()[-4096:].decode(errors='replace'), file=sys.stderr)
+        print(tail[0].decode(errors='replace'), file=sys.stderr)
+        if b'No space left on device' in tail[0] or log_error:line('请检查 df -h 和 df -i，磁盘空间或 inode 可能已满。',sys.stderr)
     else:
+        Path(name).unlink(missing_ok=True)
         line(label + '完成。')
     return process.returncode
 

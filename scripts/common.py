@@ -1,6 +1,7 @@
 """Fixed paths and install/maintenance helpers for the Miku fanout edition."""
 import base64
 import contextlib
+import errno
 import hashlib
 import ipaddress
 import importlib.util
@@ -43,11 +44,29 @@ def root():
     require(os.uname().sysname=='Linux','当前安装面向Linux VPS')
     os.umask(0o077)
 
-def trusted(path,mode=None,max_bytes=160<<20):
+def trusted_info(path,mode=None,max_bytes=160<<20):
     path=Path(path);info=path.lstat()
     require(path.resolve(strict=True)==path and stat.S_ISREG(info.st_mode) and info.st_uid==0 and not info.st_mode&0o022 and info.st_nlink==1 and info.st_size<=max_bytes,'文件归属/路径异常：'+str(path))
     if mode is not None:require(stat.S_IMODE(info.st_mode)==mode,'文件权限异常：'+str(path))
-    return path.read_bytes()
+    return info
+
+def trusted(path,mode=None,max_bytes=160<<20):
+    trusted_info(path,mode,max_bytes)
+    return Path(path).read_bytes()
+
+def file_sha256(path,mode=None,max_bytes=160<<20):
+    trusted_info(path,mode,max_bytes)
+    digest=hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        while chunk:=stream.read(1<<20):digest.update(chunk)
+    return digest.hexdigest()
+
+def require_space(path,size):
+    path=Path(path)
+    while not path.exists():path=path.parent
+    require(shutil.disk_usage(path).free>=size+(16<<20),'磁盘空间不足：'+str(path)+'；请检查 df -h，释放空间后重试')
+    info=os.statvfs(path)
+    require(not info.f_files or info.f_favail>=32,'磁盘 inode 不足：'+str(path)+'；请检查 df -i')
 
 def private_dir(path):
     path=Path(path)
@@ -118,7 +137,7 @@ def verify_distribution(directory):
     files=meta.get('files',{});require(isinstance(files,dict) and 5<=len(files)<=4096,'安装包清单无效')
     for name,expected in files.items():
         require(re.fullmatch(r'[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*',name) and '..' not in name.split('/'),'安装包路径无效')
-        raw=trusted(directory/name);require(hashlib.sha256(raw).hexdigest()==expected,'安装包校验失败：'+name)
+        require(file_sha256(directory/name)==expected,'安装包校验失败：'+name)
     return directory,meta
 
 def core_download(core,architecture):
@@ -126,34 +145,63 @@ def core_download(core,architecture):
     address='https://github.com/'+record['repo']+'/releases/download/'+record['version']+'/'+record['name']
     cache=private_dir(Path(os.environ.get('MIKU_CORE_CACHE','/var/cache/miku-gate/cores')))
     cached=cache/record['sha256']
-    raw=trusted(cached,max_bytes=record['bytes']+1) if cached.exists() else b''
-    valid=lambda packet:len(packet)==record['bytes'] and hashlib.sha256(packet).hexdigest()==record['sha256']
-    if not valid(raw):
+    valid=cached.exists() and trusted_info(cached,max_bytes=record['bytes']+1).st_size==record['bytes'] and file_sha256(cached,max_bytes=record['bytes']+1)==record['sha256']
+    if not valid:
+        require_space(cache,record['bytes'])
         for attempt in range(3):
+            fd,name=tempfile.mkstemp(prefix='.download-',dir=cache)
             try:
-                with urllib.request.urlopen(urllib.request.Request(address,headers={'User-Agent':'MikuGateInstaller'}),timeout=90) as response:
-                    require(response.geturl().startswith('https://'),'核心下载必须HTTPS');raw=response.read(record['bytes']+1)
-                require(valid(raw),'官方核心大小/SHA256校验失败')
-                atomic(cached,raw)
+                digest=hashlib.sha256();size=0
+                with os.fdopen(fd,'wb') as output,urllib.request.urlopen(urllib.request.Request(address,headers={'User-Agent':'MikuGateInstaller'}),timeout=90) as response:
+                    require(response.geturl().startswith('https://'),'核心下载必须HTTPS')
+                    while chunk:=response.read(min(1<<20,record['bytes']-size+1)):
+                        size+=len(chunk);require(size<=record['bytes'],'官方核心大小异常')
+                        output.write(chunk);digest.update(chunk)
+                require(size==record['bytes'] and digest.hexdigest()==record['sha256'],'官方核心大小/SHA256校验失败')
+                if cached.exists():trusted_info(cached)
+                os.replace(name,cached)
                 break
-            except (OSError,RuntimeError):
+            except (OSError,RuntimeError) as error:
+                if isinstance(error,OSError) and error.errno in (errno.ENOSPC,errno.EDQUOT):raise RuntimeError('磁盘空间或 inode 已满：'+str(cache)+'；请检查 df -h 和 df -i') from error
                 if attempt==2:raise
                 time.sleep(attempt+1)
-    require(len(raw)==record['bytes'] and hashlib.sha256(raw).hexdigest()==record['sha256'],'官方核心大小/SHA256校验失败')
+            finally:
+                if os.path.exists(name):os.unlink(name)
+    # Only stale archives from this application's cache are eligible for removal.
+    keep={item['sha256'] for item in assets.values()}
+    for path in (cache.iterdir() if cache==Path('/var/cache/miku-gate/cores') else ()):
+        if re.fullmatch('[0-9a-f]{64}',path.name) and path.name not in keep:
+            try:
+                if time.time()-path.lstat().st_mtime>7*86400:trusted_info(path);path.unlink()
+            except (OSError,RuntimeError):pass
     if record['name'].endswith('.zip'):
-        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-            item=archive.getinfo(record['member']);require(item.file_size<=128<<20,'核心解压超限');binary=archive.read(item)
+        archive=zipfile.ZipFile(cached)
     else:
-        with tarfile.open(fileobj=io.BytesIO(raw),mode='r:gz') as archive:
-            item=archive.getmember(record['member']);require(item.isfile() and item.size<=128<<20,'核心成员无效');binary=archive.extractfile(item).read()
-    require(binary.startswith(b'\x7fELF'),'核心不是Linux ELF');atomic(DATA/'bin'/core,binary,0o755)
-    return hashlib.sha256(binary).hexdigest()
+        archive=tarfile.open(cached,mode='r:gz')
+    with archive:
+        if isinstance(archive,zipfile.ZipFile):item=archive.getinfo(record['member']);size=item.file_size
+        else:item=archive.getmember(record['member']);require(item.isfile(),'核心成员无效');size=item.size
+        require(size<=128<<20,'核心解压超限');require_space(DATA/'bin',size)
+        fd,name=tempfile.mkstemp(prefix='.core-',dir=DATA/'bin')
+        try:
+            digest=hashlib.sha256();written=0
+            with os.fdopen(fd,'wb') as output,(archive.open(item) if isinstance(archive,zipfile.ZipFile) else archive.extractfile(item)) as source:
+                while chunk:=source.read(1<<20):
+                    if not written:require(chunk.startswith(b'\x7fELF'),'核心不是Linux ELF')
+                    written+=len(chunk);require(written<=size,'核心解压超限');output.write(chunk);digest.update(chunk)
+                require(written==size and written>4,'核心解压不完整');os.fchmod(output.fileno(),0o755)
+            target=DATA/'bin'/core
+            if target.exists():trusted_info(target)
+            os.replace(name,target)
+            return digest.hexdigest()
+        finally:
+            if os.path.exists(name):os.unlink(name)
 
 def ensure_cores(old=None):
     private_dir(DATA/'bin');architecture=arch()
     def prepare(core):
         path=DATA/'bin'/core
-        if path.exists():trusted(path,0o755);return
+        if path.exists():trusted_info(path,0o755);return
         previous=Path('/usr/local/lib/miku-gate')/core
         records={r['core']:r for r in (old or {}).get('core_sources',[])}
         if core in records and previous.exists():

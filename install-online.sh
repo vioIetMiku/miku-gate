@@ -10,6 +10,8 @@ fi
 [[ "$(uname -s)" == Linux ]] || { echo '仅支持 Linux VPS。' >&2; exit 1; }
 [[ $EUID -eq 0 ]] || { echo '请以 root 运行；私有仓库请保留 GITHUB_TOKEN 环境变量。' >&2; exit 1; }
 [[ "$(uname -m)" == x86_64 || "$(uname -m)" == aarch64 || "$(uname -m)" == arm64 ]] || { echo '仅支持 amd64 / arm64。' >&2; exit 1; }
+pwd -P >/dev/null 2>&1 || cd /
+umask 077
 if ! command -v python3 >/dev/null 2>&1; then
   python_log=$(mktemp "${TMPDIR:-/tmp}/mikugate-python.XXXXXXXX")
   chmod 600 "$python_log"
@@ -31,6 +33,8 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 python3 - "$@" <<'MIKU_PYTHON'
 import argparse
+import contextlib
+import errno
 import hashlib
 import http.client
 import json
@@ -51,6 +55,46 @@ API = 'https://api.github.com/repos/vioIetMiku/miku-gate'
 MAX_ARCHIVE = 160 << 20
 MAX_UNPACKED = 320 << 20
 
+def space_message(path):
+    return '磁盘空间或 inode 已满：' + str(path) + '。请运行 df -h 和 df -i 检查；可清理系统缓存或选择空间充足的 TMPDIR 后重试。现有节点和数据未主动删除。'
+
+def require_space(path, size, count=1):
+    if shutil.disk_usage(path).free < size + (16 << 20):
+        raise RuntimeError(space_message(path))
+    if hasattr(os, 'statvfs'):
+        info=os.statvfs(path)
+        if info.f_files and info.f_favail < count + 32:raise RuntimeError(space_message(path))
+
+def request(url, binary=False):
+    if urllib.parse.urlsplit(url).scheme != 'https':raise RuntimeError('只允许 HTTPS 下载')
+    headers={'User-Agent':'MikuGateInstaller/0.2.7','Accept':'application/octet-stream' if binary else 'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}
+    token=os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN')
+    if token and urllib.parse.urlsplit(url).hostname=='api.github.com':headers['Authorization']='Bearer '+token
+    return urllib.request.Request(url,headers=headers)
+
+def download(url, destination, limit):
+    opener=urllib.request.build_opener(SafeRedirect())
+    for attempt in range(3):
+        try:
+            digest=hashlib.sha256();size=0
+            with opener.open(request(url,True),timeout=120) as response, destination.open('xb') as output:
+                destination.chmod(0o600)
+                while True:
+                    chunk=response.read(min(1<<20,limit-size+1))
+                    if not chunk:break
+                    size+=len(chunk)
+                    if size>limit:raise RuntimeError('下载文件超出大小限制')
+                    output.write(chunk);digest.update(chunk)
+            return digest.hexdigest()
+        except (OSError,http.client.HTTPException) as error:
+            destination.unlink(missing_ok=True)
+            if isinstance(error,OSError) and error.errno in (errno.ENOSPC,errno.EDQUOT):raise RuntimeError(space_message(destination.parent)) from error
+            if attempt==2:raise
+            time.sleep(attempt+1)
+        except BaseException:
+            destination.unlink(missing_ok=True)
+            raise
+
 class SafeRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, response, code, message, headers, url):
         if urllib.parse.urlsplit(url).scheme != 'https':
@@ -61,16 +105,10 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
         return redirected
 
 def fetch(url, limit, binary=False):
-    if urllib.parse.urlsplit(url).scheme != 'https':
-        raise RuntimeError('只允许 HTTPS 下载')
-    headers = {'User-Agent': 'MikuGateInstaller/0.2.7', 'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}
-    token = os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN')
-    if token and urllib.parse.urlsplit(url).hostname == 'api.github.com':
-        headers['Authorization'] = 'Bearer ' + token
     opener = urllib.request.build_opener(SafeRedirect())
     for attempt in range(3):
         try:
-            with opener.open(urllib.request.Request(url, headers=headers), timeout=120) as response:
+            with opener.open(request(url,binary), timeout=120) as response:
                 raw = response.read(limit + 1)
             break
         except (OSError, http.client.HTTPException):
@@ -112,7 +150,7 @@ def expected_checksum(raw, name):
         raise RuntimeError('找不到唯一的安装包 SHA256')
     return matches[0]
 
-def unpack(package, destination, version):
+def unpack(package, destination, version, validate_only=False):
     with tarfile.open(package, 'r:gz') as archive:
         entries = archive.getmembers()
         if not 5 <= len(entries) <= 4097:
@@ -133,6 +171,7 @@ def unpack(package, destination, version):
             total += entry.size
         if total > MAX_UNPACKED or prefix + 'BUILD.json' not in names:
             raise RuntimeError('安装包超限或没有构建清单')
+        if not validate_only:require_space(destination.parent,total,len(entries)*2)
         manifest_entry = archive.getmember(prefix + 'BUILD.json')
         if manifest_entry.size > 256 << 10:
             raise RuntimeError('构建清单过大')
@@ -146,14 +185,16 @@ def unpack(package, destination, version):
             raise RuntimeError('安装包缺少必要程序')
         for entry in entries:
             name = entry.name.removeprefix(prefix)
-            raw = archive.extractfile(entry).read()
-            if name != 'BUILD.json' and hashlib.sha256(raw).hexdigest() != files[name]:
-                raise RuntimeError('文件 SHA256 校验失败：' + name)
             target = destination.joinpath(*PurePosixPath(entry.name).parts)
-            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            with target.open('xb') as stream:
-                stream.write(raw)
-            target.chmod(entry.mode)
+            if not validate_only:target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            digest=hashlib.sha256()
+            with archive.extractfile(entry) as source, (contextlib.nullcontext() if validate_only else target.open('xb')) as stream:
+                while chunk:=source.read(1<<20):
+                    if stream:stream.write(chunk)
+                    digest.update(chunk)
+            if name != 'BUILD.json' and digest.hexdigest() != files[name]:
+                raise RuntimeError('文件 SHA256 校验失败：' + name)
+            if not validate_only:target.chmod(entry.mode)
     return destination / bundle_root
 
 def main():
@@ -181,23 +222,24 @@ def main():
     name = 'miku-gate-vps-' + version + '.tar.gz'
     expected = expected_checksum(fetch(asset(release, 'SHA256SUMS'), 64 << 10, True), name)
     print('正在下载 Miku Gate ' + version + ' …', flush=True)
-    raw = fetch(asset(release, name), MAX_ARCHIVE, True)
-    if hashlib.sha256(raw).hexdigest() != expected:
-        raise RuntimeError('安装包 SHA256 不匹配，停止安装')
     with tempfile.TemporaryDirectory(prefix='miku-release-') as temporary:
         root = Path(temporary)
+        size=next((entry.get('size',0) for entry in release.get('assets',[]) if entry.get('name')==name),0)
+        require_space(root,size)
         package = root / name
-        package.write_bytes(raw)
-        package.chmod(0o600)
-        directory = unpack(package, root / 'verified', version)
+        if download(asset(release,name),package,MAX_ARCHIVE)!=expected:
+            raise RuntimeError('安装包 SHA256 不匹配，停止安装')
         if args.download_only:
+            unpack(package,root/'verified',version,validate_only=True)
             args.download_only.mkdir(mode=0o700, parents=True, exist_ok=True)
             output = args.download_only / name
-            with output.open('xb') as stream:
-                stream.write(raw)
+            require_space(args.download_only,package.stat().st_size)
+            with package.open('rb') as source,output.open('xb') as stream:shutil.copyfileobj(source,stream,1<<20)
             output.chmod(0o600)
             print('已校验并保存：' + str(output.resolve()))
             return
+        directory = unpack(package, root / 'verified', version)
+        package.unlink()
         environment = {key: value for key, value in os.environ.items() if key not in ('GITHUB_TOKEN', 'GH_TOKEN')}
         # Python source is supplied by a heredoc; reconnect installer input to the TTY.
         try:
@@ -205,7 +247,7 @@ def main():
         except OSError:
             tty = None
         try:
-            subprocess.run(['bash', str(directory / 'install.sh'), *install_args], env=environment, stdin=tty or subprocess.DEVNULL, check=True)
+            subprocess.run(['bash', str(directory / 'install.sh'), *install_args], cwd=directory, env=environment, stdin=tty or subprocess.DEVNULL, check=True)
         finally:
             if tty:
                 tty.close()
@@ -215,6 +257,9 @@ if __name__ == '__main__':
         main()
     except urllib.error.HTTPError as error:
         print('下载失败（HTTP %s）。私有仓库需要可读取仓库 Contents 的 GITHUB_TOKEN；同时检查版本、网络及 GitHub API 额度。' % error.code, file=sys.stderr)
+        sys.exit(1)
+    except OSError as error:
+        print(space_message(error.filename or tempfile.gettempdir()) if error.errno in (errno.ENOSPC,errno.EDQUOT) else '安装未完成：'+str(error),file=sys.stderr)
         sys.exit(1)
     except (Exception, KeyboardInterrupt) as error:
         print('安装未完成：' + str(error), file=sys.stderr)

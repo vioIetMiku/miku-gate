@@ -23,6 +23,7 @@ if ! command -v python3 >/dev/null 2>&1; then
   rm -f -- "$python_log"
 fi
 MIKU_PACKAGE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+cd -- "$MIKU_PACKAGE_DIR"
 source "$MIKU_PACKAGE_DIR/scripts/banner.sh"
 if [[ "${1:-}" != --docker ]]; then
   existing_docker=$(python3 -B "$MIKU_PACKAGE_DIR/scripts/install_mode.py")

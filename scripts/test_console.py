@@ -17,11 +17,17 @@ import common as c
 
 
 class ConsoleTests(unittest.TestCase):
-    def test_native_install_default_opens_menu_without_creating_default_nodes(self):
+    def test_native_install_default_runs_fixed_quick_setup(self):
         import install
         import maintain
-        with patch.object(sys,'argv',['install.py']),patch.object(install,'install',return_value=True),patch('os.isatty',return_value=True),patch('builtins.input',return_value=''),patch.object(maintain,'menu') as menu,patch('quick.quick') as quick,contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(sys,'argv',['install.py']),patch.object(install,'install',return_value=True),patch('os.isatty',return_value=True),patch('builtins.input',return_value=''),patch.object(maintain,'menu') as menu,patch('quick.terminal_quick') as quick,contextlib.redirect_stdout(io.StringIO()):
             install.main()
+        quick.assert_called_once_with(background=False);menu.assert_not_called()
+
+    def test_explicit_second_option_still_opens_menu(self):
+        import install
+        import maintain
+        with patch.object(sys,'argv',['install.py']),patch.object(install,'install',return_value=True),patch('os.isatty',return_value=True),patch('builtins.input',return_value='2'),patch.object(maintain,'menu') as menu,patch('quick.terminal_quick') as quick,contextlib.redirect_stdout(io.StringIO()):install.main()
         menu.assert_called_once();quick.assert_not_called()
 
     def test_country_input_builds_real_api_request_and_no_shell_command(self):
@@ -68,6 +74,16 @@ class ConsoleTests(unittest.TestCase):
             self.assertEqual(code,23);self.assertIn('bad build',err.getvalue())
             for log in Path(temporary).rglob('*.log'):
                 self.assertEqual(log.stat().st_mode&0o777,0o600)
+
+    @unittest.skipUnless(os.name=='posix','Private installation log on Linux')
+    def test_noisy_install_failure_keeps_bounded_log_and_latest_error(self):
+        command=[sys.executable,'-c','import sys;sys.stdout.buffer.write(b"x"*(5<<20)+b"\\nFINAL-ERROR\\n");sys.exit(7)']
+        with tempfile.TemporaryDirectory() as temporary,patch('tempfile.gettempdir',return_value=temporary),contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(progress.run('正在安装',command),7)
+            self.assertIn('FINAL-ERROR',err.getvalue())
+            logs=list(Path(temporary).rglob('*.log'));self.assertEqual(len(logs),1)
+            self.assertLessEqual(logs[0].stat().st_size,2<<20)
+            self.assertIn(b'FINAL-ERROR',logs[0].read_bytes())
 
     @unittest.skipUnless(os.name=='posix','Linux ownership and atomic file modes')
     def test_core_cache_avoids_redownload_and_rejects_corruption(self):

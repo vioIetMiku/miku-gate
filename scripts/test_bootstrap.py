@@ -22,15 +22,43 @@ class BootstrapTests(unittest.TestCase):
     def test_docker_option_is_forwarded_to_the_verified_installer(self):
         raw = b'fixture-release'
         checksum = hashlib.sha256(raw).hexdigest()
+        def download(url,path,limit):path.write_bytes(raw);return checksum
         with patch.object(b.sys, 'argv', ['install-online.sh', '--docker']), \
              patch.object(b, 'stable_release', return_value={'tag_name': 'v0.2.6'}), \
              patch.object(b, 'asset', side_effect=lambda release, name: name), \
              patch.object(b, 'fetch', side_effect=lambda name, *args: ((checksum + '  miku-gate-vps-v0.2.6.tar.gz\n').encode() if name == 'SHA256SUMS' else raw)), \
+             patch.object(b,'download',side_effect=download), \
              patch.object(b, 'unpack', return_value=Path('/fixture/verified/miku-gate')), \
              patch.object(b.subprocess, 'run') as run, contextlib.redirect_stdout(io.StringIO()):
             b.main()
         self.assertEqual(run.call_args.args[0], ['bash', str(Path('/fixture/verified/miku-gate/install.sh')), '--docker'])
         self.assertNotIn('GITHUB_TOKEN', run.call_args.kwargs['env'])
+        self.assertEqual(run.call_args.kwargs['cwd'],Path('/fixture/verified/miku-gate'))
+
+    def test_streaming_download_uses_bounded_chunks_and_private_file(self):
+        raw=b'payload'*(400000)
+        class Response(io.BytesIO):
+            def read(self,size=-1):
+                if not 0<size<=1<<20:raise AssertionError('download buffered the whole archive')
+                return super().read(size)
+        with tempfile.TemporaryDirectory() as tmp,patch.object(b.urllib.request,'build_opener') as opener:
+            opener.return_value.open.return_value=Response(raw)
+            target=Path(tmp)/'archive'
+            self.assertEqual(b.download(b.API+'/asset',target,len(raw)),hashlib.sha256(raw).hexdigest())
+            self.assertEqual(target.read_bytes(),raw)
+
+    def test_low_space_and_exhausted_inodes_have_clear_diagnostics(self):
+        with tempfile.TemporaryDirectory() as tmp,patch.object(b.shutil,'disk_usage',return_value=types.SimpleNamespace(free=0)):
+            with self.assertRaisesRegex(RuntimeError,'df -h 和 df -i'):b.require_space(Path(tmp),1024)
+        with tempfile.TemporaryDirectory() as tmp,patch.object(b.shutil,'disk_usage',return_value=types.SimpleNamespace(free=1<<40)),patch.object(b.os,'statvfs',return_value=types.SimpleNamespace(f_files=100,f_favail=0),create=True):
+            with self.assertRaisesRegex(RuntimeError,'inode'):b.require_space(Path(tmp),1024)
+
+    def test_download_only_validates_every_file_without_extracting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);package=self.package(root)
+            b.unpack(package,root/'verified','v0.2.6',validate_only=True)
+            self.assertFalse((root/'verified').exists())
+            with self.assertRaises(RuntimeError):b.unpack(self.package(root,corrupt=True),root/'verified','v0.2.6',validate_only=True)
 
     def test_docker_rejects_native_quick_flags_before_downloading(self):
         for flags in (['--quick'], ['--no-domain'], ['--background']):

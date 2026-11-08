@@ -1,5 +1,6 @@
 """Installer regressions: TTY rendering, owned launchers and both uninstall modes."""
 import contextlib
+import errno
 import hashlib
 import io
 import json
@@ -36,6 +37,37 @@ class InstallLifecycleTests(unittest.TestCase):
             target=project/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(('fixture:'+name).encode())
         commands=self.root/'commands';commands.mkdir()
         return project,commands
+
+    def test_failed_first_install_rolls_back_and_retry_needs_no_reinstall(self):
+        paths={'DATA':self.root/'data','LIB':self.root/'lib','MENU':self.root/'miku','UNIT':self.root/'miku.service','OPENRC':self.root/'openrc'}
+        bundle=self.root/'bundle';(bundle/'bin').mkdir(parents=True);(bundle/'scripts').mkdir()
+        arch=c.arch();binary='bin/miku-linux-'+arch
+        names=[binary,'bin/miku-export-linux-'+arch,'CORE_ASSETS.json','LICENSE','COPYING','NOTICE','FLAG_ICONS_LICENSE',
+               *('scripts/'+name for name in ('common.py','maintain.py','quick.py','install.py','console.py','inbound_wizard.py','miku.sh'))]
+        for name in names:c.atomic(bundle/name,b'fixture-runtime',0o755 if name.startswith('bin/') else 0o644)
+        meta={'version':'0.2.7','files':{binary:hashlib.sha256(b'fixture-runtime').hexdigest()}}
+        with contextlib.ExitStack() as stack:
+            for key,value in paths.items():stack.enter_context(patch.object(c,key,value))
+            for key in ('root','dependencies','ensure_cores','run','service','wait_ready','info'):stack.enter_context(patch.object(c,key))
+            stack.enter_context(patch.object(c,'systemd',return_value=True));stack.enter_context(patch.object(c,'active',return_value=False))
+            stack.enter_context(patch.object(c,'old_maintenance',return_value=(None,None)))
+            stack.enter_context(patch.object(c,'choose_port',return_value=19090))
+            stack.enter_context(patch.object(c,'verify_distribution',return_value=(bundle,meta)))
+            stack.enter_context(patch.object(c,'public_ip',side_effect=[OSError(errno.ENOSPC,'No space left on device'),'192.0.2.1']))
+            with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(OSError):install._install(bundle)
+                self.assertTrue(all(not path.exists() for path in paths.values()))
+                install._install(bundle)
+            self.assertTrue((paths['DATA']/'install.json').exists());self.assertTrue(paths['MENU'].exists())
+
+    def test_short_entry_survives_a_deleted_invoking_directory(self):
+        fake=self.root/'fake-bin';fake.mkdir()
+        installer=self.root/'downloaded.sh';installer.write_text('pwd -P >/dev/null\n')
+        curl=fake/'curl';curl.write_text('#!/bin/sh\nwhile [ "$#" -gt 0 ]; do if [ "$1" = -o ]; then cp "$MIKU_FAKE_INSTALLER" "$2"; exit; fi; shift; done\n');curl.chmod(0o755)
+        removed=self.root/'removed';removed.mkdir()
+        command='cd '+shlex.quote(str(removed))+'; rmdir '+shlex.quote(str(removed))+'; exec bash '+shlex.quote(str(ROOT/'mikugate.sh'))
+        result=subprocess.run(['bash','-c',command],env={**os.environ,'PATH':str(fake)+os.pathsep+os.environ['PATH'],'MIKU_FAKE_INSTALLER':str(installer)},capture_output=True,text=True,timeout=15)
+        self.assertEqual(result.returncode,0,result.stderr)
 
     def test_default_reinstall_recognizes_owned_docker_shortcut(self):
         project,commands=self.docker_fixture()

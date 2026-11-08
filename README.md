@@ -6,7 +6,7 @@
   </picture>
 </p>
 <p align="center">
-  <a href="https://github.com/vioIetMiku/miku-gate/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/vioIetMiku/miku-gate/release.yml?style=flat-square&amp;logo=github&amp;label=CI" alt="Release 工作流状态"></a>
+  <a href="https://github.com/vioIetMiku/miku-gate/actions/workflows/release.yml"><img src="https://github.com/vioIetMiku/miku-gate/actions/workflows/release.yml/badge.svg?branch=main&amp;event=push" alt="CI 工作流状态"></a>
   <a href="https://github.com/vioIetMiku/miku-gate/releases/latest"><img src="https://img.shields.io/github/v/release/vioIetMiku/miku-gate?style=flat-square&amp;logo=github&amp;color=14b8a6" alt="最新正式版本"></a>
   <a href="https://github.com/vioIetMiku/miku-gate/stargazers"><img src="https://img.shields.io/github/stars/vioIetMiku/miku-gate?style=flat-square&amp;logo=github&amp;color=0ea5e9" alt="GitHub Stars"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-22c55e?style=flat-square" alt="GNU GPL v3 许可证"></a>
